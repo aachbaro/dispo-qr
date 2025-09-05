@@ -1,6 +1,6 @@
 <template>
   <section>
-    <h1 class="text-3xl font-bold underline">Dispo Adam</h1>
+    <h1 class="text-3xl font-bold underline">Dispo Adam test</h1>
   </section>
 </template>
 
