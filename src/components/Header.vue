@@ -1,0 +1,38 @@
+<template>
+  <!-- fixed sur desktop, fond blanc + fine bordure -->
+  <header class="static lg:top-0 lg:left-0 lg:w-full z-50 bg-white">
+    <div class="w-full flex justify-between items-center p-4">
+      <h1 class="text-2xl font-bold">Adam - Disponibilitées</h1>
+      <div class="flex gap-4">
+        <button @click="onContact" class="btn-primary">contact</button>
+        <button @click="onLoginClicked" class="btn-primary">login</button>
+      </div>
+    </div>
+  </header>
+</template>
+
+<script setup>
+import { ref } from "vue";
+const isOpen = ref(false);
+const toggleMenu = () => (isOpen.value = !isOpen.value);
+const closeMenu = () => (isOpen.value = false);
+
+function onContact() {
+  console.log("➡️ 'Me contacter' cliqué");
+}
+function onLoginClicked() {
+  console.log("➡️ 'Vous êtes moi ?' cliqué");
+}
+</script>
+
+<style scoped>
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+</style>

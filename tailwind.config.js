@@ -1,8 +1,11 @@
 // tailwind.config.js
-module.exports = {
-  content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx}"],
+export default {
+  content: ["./index.html", "./src/**/*.{vue,js,ts,jsx,tsx,html,css}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Inter", "ui-sans-serif", "system-ui"],
+      },
       screens: {
         landscape: { raw: "(orientation: landscape)" },
       },
