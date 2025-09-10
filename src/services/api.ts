@@ -12,7 +12,7 @@ export type Slot = {
 const API_BASE = ""; // relatif = même domaine (Vercel)
 
 // --- Helpers ---
-function getAuthHeaders() {
+function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem("adminToken");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -22,8 +22,8 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...getAuthHeaders(),
-      ...options.headers,
+      ...(getAuthHeaders() ?? {}),
+      ...(options.headers as Record<string, string>),
     },
   });
 
