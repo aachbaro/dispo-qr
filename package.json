@@ -12,6 +12,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.1",
     "dayjs": "^1.11.18",
+    "jsonwebtoken": "^9.0.2",
     "vue": "^3.5.18"
   },
   "devDependencies": {

@@ -80,6 +80,7 @@
           v-for="(heure, hIndex) in heures"
           :key="hIndex"
           class="border-b flex items-center justify-center text-xs text-gray-400"
+          @click="onCaseClick(jour, heure)"
         >
           {{ heure }}
         </div>
@@ -108,11 +109,12 @@ const jours = computed(() => {
   const lundi = new Date(semaineActive.value);
   const noms = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(lundi);
-    d.setDate(lundi.getDate() + i);
+    const d = new Date(lundi.getTime());
+    d.setDate(d.getDate() + i);
     return {
       nom: noms[i],
       date: d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" }),
+      fullDate: d.toLocaleDateString("fr-CA"),
     };
   });
 });
@@ -145,4 +147,13 @@ const heures = [
   "01:00",
   "02:00",
 ];
+
+function onCaseClick(jour, heure) {
+  const selection = {
+    date: jour.fullDate,
+    heure,
+  };
+  console.log("⏰ Case cliquée :", selection);
+  // Tu peux aussi push dans un array si tu veux enregistrer plusieurs clics
+}
 </script>

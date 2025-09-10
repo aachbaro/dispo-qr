@@ -5,7 +5,7 @@
       <h1 class="text-2xl font-bold">Adam - Disponibilitées</h1>
       <div class="flex gap-4">
         <button @click="onContact" class="btn-primary">contact</button>
-        <button @click="onLoginClicked" class="btn-primary">login</button>
+        <LoginModal />
       </div>
     </div>
   </header>
@@ -13,6 +13,8 @@
 
 <script setup>
 import { ref } from "vue";
+import LoginModal from "./LoginModal.vue";
+
 const isOpen = ref(false);
 const toggleMenu = () => (isOpen.value = !isOpen.value);
 const closeMenu = () => (isOpen.value = false);
