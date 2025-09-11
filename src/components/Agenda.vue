@@ -79,18 +79,47 @@
         <div
           v-for="(heure, hIndex) in heures"
           :key="hIndex"
-          class="border-b flex items-center justify-center text-xs text-gray-400"
-          @click="onCaseClick(jour, heure)"
+          class="border-b flex items-center justify-center text-xs text-gray-400 cursor-pointer"
+          :class="{
+            'bg-red-300 ': isSelected(jour.fullDate, heure),
+            'text-gray-400 hover:bg-blue-50': !isSelected(jour.fullDate, heure),
+          }"
+          @mousedown="startSelection(jour.fullDate, heure)"
+          @mouseover="extendSelection(jour.fullDate, heure)"
+          @mouseup="endSelection"
         >
           {{ heure }}
         </div>
       </div>
     </div>
+    <!-- ✅ Popup -->
+    <SelectionPopup
+      v-if="currentSelection"
+      v-model:open="showPopup"
+      :initial-date="currentSelection.date"
+      :initial-start="currentSelection.start"
+      :initial-end="currentSelection.end"
+      @confirm="handleConfirm"
+      @cancel="handleCancel"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from "vue";
+import SelectionPopup from "./SelectionPopup.vue";
+
+const isDragging = ref(false);
+const selectionStart = ref(null);
+const selectionEnd = ref(null);
+const selectedSlots = ref([]);
+
+// admin check
+const isAdmin = ref(!!localStorage.getItem("adminToken"));
+
+// popup control
+const showPopup = ref(false);
+const currentSelection = ref(null);
 
 // Obtenir le lundi de la semaine actuelle
 function getLundi(date = new Date()) {
@@ -143,17 +172,87 @@ const heures = [
     { length: 17 },
     (_, i) => `${String(i + 7).padStart(2, "0")}:00`
   ),
-  "00:00",
-  "01:00",
-  "02:00",
 ];
 
-function onCaseClick(jour, heure) {
-  const selection = {
-    date: jour.fullDate,
-    heure,
-  };
-  console.log("⏰ Case cliquée :", selection);
-  // Tu peux aussi push dans un array si tu veux enregistrer plusieurs clics
+function startSelection(date, heure) {
+  isDragging.value = true;
+  selectionStart.value = { date, heure };
+  selectionEnd.value = { date, heure };
+}
+
+function extendSelection(date, heure) {
+  if (isDragging.value && selectionStart.value?.date === date) {
+    selectionEnd.value = { date, heure };
+  }
+}
+
+function endSelection() {
+  if (isDragging.value && selectionStart.value && selectionEnd.value) {
+    const slots = buildSelectionRange(selectionStart.value, selectionEnd.value);
+    const startHour = slots[0].heure;
+    const endHour = slots[slots.length - 1].heure;
+    const date = selectionStart.value.date;
+
+    if (isAdmin.value) {
+      // 👉 ouvrir popup avec la sélection
+      currentSelection.value = { date, start: startHour, end: endHour };
+      showPopup.value = true;
+    } else {
+      console.log(`📅 Sélection faite : ${date} de ${startHour} à ${endHour}`);
+      selectedSlots.value.push({ date, start: startHour, end: endHour });
+    }
+  }
+
+  isDragging.value = false;
+  selectionStart.value = null;
+  selectionEnd.value = null;
+}
+
+// handlers du popup
+function handleConfirm(payload) {
+  console.log("✅ Confirmé :", payload);
+  selectedSlots.value.push(payload);
+  showPopup.value = false;
+}
+
+function handleCancel() {
+  console.log("❌ Annulé");
+  showPopup.value = false;
+}
+
+function buildSelectionRange(start, end) {
+  const heuresList = [
+    ...Array.from(
+      { length: 17 },
+      (_, i) => `${String(i + 7).padStart(2, "0")}:00`
+    ),
+    "00:00",
+    "01:00",
+    "02:00",
+  ];
+  const startIndex = heuresList.indexOf(start.heure);
+  const endIndex = heuresList.indexOf(end.heure);
+  const [min, max] = [
+    Math.min(startIndex, endIndex),
+    Math.max(startIndex, endIndex),
+  ];
+
+  return heuresList.slice(min, max + 1).map((h) => ({
+    date: start.date,
+    heure: h,
+  }));
+}
+
+function isSelected(date, heure) {
+  // pendant le drag : highlight provisoire
+  if (isDragging.value && selectionStart.value?.date === date) {
+    const tempSlots = buildSelectionRange(
+      selectionStart.value,
+      selectionEnd.value || selectionStart.value
+    );
+    return tempSlots.some((s) => s.date === date && s.heure === heure);
+  }
+  // après validation
+  return selectedSlots.value.some((s) => s.date === date && s.heure === heure);
 }
 </script>

@@ -4,7 +4,7 @@
     <button v-if="!isAdmin" @click="open = true" class="btn-primary">
       login
     </button>
-    <button v-else @click="logoutUser" class="btn-primary">Logout</button>
+    <button v-else @click="logoutUser" class="btn-primary">logout</button>
 
     <!-- Modal -->
     <div
