@@ -1,5 +1,4 @@
-// api/slots.ts
-
+// api/slots/[id].ts
 import { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
@@ -23,33 +22,30 @@ function verifyAdmin(req: VercelRequest): boolean {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method === "GET") {
-    const { data, error } = await supabase
-      .from("slots")
-      .select("*")
-      .order("start", { ascending: true });
+  const { id } = req.query;
+  if (!id) return res.status(400).json({ error: "Missing slot id" });
 
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json({ slots: data });
+  if (!verifyAdmin(req)) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  if (req.method === "POST") {
-    if (!verifyAdmin(req)) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    const { start, end, title } = req.body;
-    if (!start || !end || !title) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
+  if (req.method === "PATCH") {
+    const updates = req.body;
     const { data, error } = await supabase
       .from("slots")
-      .insert([{ start, end, title }])
+      .update(updates)
+      .eq("id", id)
       .select();
 
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ slot: data[0] });
+  }
+
+  if (req.method === "DELETE") {
+    const { error } = await supabase.from("slots").delete().eq("id", id);
+
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ success: true });
   }
 
   return res.status(405).json({ error: "Method Not Allowed" });

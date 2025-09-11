@@ -75,7 +75,8 @@
       </div>
 
       <!-- Lignes horaires -->
-      <div class="flex-1 grid grid-rows-21">
+      <div class="flex-1 grid grid-rows-21 relative">
+        <!-- cases horaires -->
         <div
           v-for="(heure, hIndex) in heures"
           :key="hIndex"
@@ -89,6 +90,29 @@
           @mouseup="endSelection"
         >
           {{ heure }}
+        </div>
+
+        <!-- Slots venant de la DB -->
+        <div
+          v-for="slot in daySlots(jour.fullDate)"
+          :key="slot.id"
+          class="absolute left-1 right-1 bg-red-500 text-white rounded p-1 text-xs shadow flex flex-col"
+          :style="slotStyle(slot)"
+        >
+          <div class="flex justify-between items-center">
+            <span class="font-semibold">{{ slot.title }}</span>
+            <div v-if="isAdmin" class="flex gap-1">
+              <button @click="editSlot(slot)" class="hover:text-yellow-300">
+                ✏️
+              </button>
+              <button @click="removeSlot(slot.id)" class="hover:text-gray-300">
+                ❌
+              </button>
+            </div>
+          </div>
+          <span class="text-[10px]">
+            {{ formatHour(slot.start) }} - {{ formatHour(slot.end) }}
+          </span>
         </div>
       </div>
     </div>
@@ -106,8 +130,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import SelectionPopup from "./SelectionPopup.vue";
+import { getSlots, deleteSlot } from "../services/api";
 
 const isDragging = ref(false);
 const selectionStart = ref(null);
@@ -120,6 +145,17 @@ const isAdmin = ref(!!localStorage.getItem("adminToken"));
 // popup control
 const showPopup = ref(false);
 const currentSelection = ref(null);
+
+const slots = ref([]);
+
+onMounted(async () => {
+  try {
+    const { slots: data } = await getSlots();
+    slots.value = data;
+  } catch (err) {
+    console.error("Erreur récupération slots:", err);
+  }
+});
 
 // Obtenir le lundi de la semaine actuelle
 function getLundi(date = new Date()) {
@@ -254,5 +290,47 @@ function isSelected(date, heure) {
   }
   // après validation
   return selectedSlots.value.some((s) => s.date === date && s.heure === heure);
+}
+
+function daySlots(date) {
+  return slots.value.filter((s) => s.start.split("T")[0] === date);
+}
+
+function slotStyle(slot) {
+  const start = new Date(slot.start);
+  const end = new Date(slot.end);
+
+  const startHour = start.getHours() + start.getMinutes() / 60;
+  const endHour = end.getHours() + end.getMinutes() / 60;
+
+  // agenda va de 07:00 à 24:00 → soit 17h
+  const totalHours = 17;
+  const hourHeight = 100 / totalHours;
+
+  return {
+    top: `${(startHour - 7) * hourHeight}%`,
+    height: `${(endHour - startHour) * hourHeight}%`,
+  };
+}
+
+function formatHour(dateString) {
+  return new Date(dateString).toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+async function removeSlot(id) {
+  try {
+    await deleteSlot(id);
+    slots.value = slots.value.filter((s) => s.id !== id);
+  } catch (err) {
+    console.error("Erreur suppression slot:", err);
+  }
+}
+
+function editSlot(slot) {
+  // TODO: ouvrir SelectionPopup pré-rempli avec slot
+  console.log("Éditer slot:", slot);
 }
 </script>
