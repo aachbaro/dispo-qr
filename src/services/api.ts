@@ -1,12 +1,10 @@
 // src/services/api.ts
 export type Slot = {
-  id: string;
-  start_at: string;
-  end_at: string;
-  status: "free" | "blocked" | "booked";
-  note?: string;
+  id: number;
+  start: string; // timestamp ISO
+  end: string; // timestamp ISO
+  title: string;
   created_at: string;
-  updated_at: string;
 };
 
 const API_BASE = ""; // relatif = même domaine (Vercel)
@@ -49,32 +47,30 @@ export function logout() {
 }
 
 // --- Slots ---
-export async function getSlots(params?: {
-  from?: string;
-  to?: string;
-  status?: string;
-}) {
+// GET: récupérer la liste des créneaux
+export async function getSlots(params?: { from?: string; to?: string }) {
   const qs = new URLSearchParams(params as Record<string, string>).toString();
   return request<{ slots: Slot[] }>(`/api/slots${qs ? `?${qs}` : ""}`);
 }
 
-export async function createSlot(
-  slot: Pick<Slot, "start_at" | "end_at" | "status" | "note">
-) {
+// POST: créer un créneau
+export async function createSlot(slot: Pick<Slot, "start" | "end" | "title">) {
   return request<{ slot: Slot }>("/api/slots", {
     method: "POST",
     body: JSON.stringify(slot),
   });
 }
 
-export async function updateSlot(id: string, updates: Partial<Slot>) {
+// PATCH: modifier un créneau existant
+export async function updateSlot(id: number, updates: Partial<Slot>) {
   return request<{ slot: Slot }>(`/api/slots/${id}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
   });
 }
 
-export async function deleteSlot(id: string) {
+// DELETE: supprimer un créneau
+export async function deleteSlot(id: number) {
   return request<{ success: boolean }>(`/api/slots/${id}`, {
     method: "DELETE",
   });

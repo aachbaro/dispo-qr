@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Générer un JWT valide 1h
   const token = jwt.sign(
     { role: "admin" },
-    process.env.JWT_SECRET!, // ⚠️ ajoute aussi JWT_SECRET dans .env
+    process.env.JWT_SECRET!,
     { expiresIn: "1h" }
   );
 
