@@ -1,10 +1,19 @@
 <template>
-  <div>
-    <div
-      class="flex items-center justify-end gap-4 p-4 bg-white shadow rounded-md"
-    >
+  <!-- Barre d'actions -->
+  <div
+    class="flex items-center justify-between gap-4 p-4 bg-white shadow rounded-md"
+  >
+    <!-- Indicateur de semaine -->
+    <div class="text-sm text-gray-700 font-medium">
+      {{ semaineLabel }}
+    </div>
+
+    <div class="flex items-center gap-4">
       <!-- Loupe -->
-      <button class="p-2 rounded-full hover:bg-gray-100 transition">
+      <button
+        class="p-2 rounded-full hover:bg-gray-100 transition"
+        aria-label="search"
+      >
         <svg
           class="w-5 h-5 text-gray-600"
           fill="none"
@@ -25,6 +34,7 @@
           class="p-2 rounded-full hover:bg-gray-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
           @click="semainePrecedente"
           :disabled="estSemaineCourante"
+          aria-label="Semaine précédente"
         >
           <svg
             class="w-5 h-5 text-gray-600"
@@ -42,6 +52,7 @@
         <button
           class="p-2 rounded-full hover:bg-gray-100 transition"
           @click="semaineSuivante"
+          aria-label="Semaine suivante"
         >
           <svg
             class="w-5 h-5 text-gray-600"
@@ -60,11 +71,25 @@
   </div>
   <!-- Chaque jour (colonne) -->
   <div class="flex w-full h-full overflow-x-auto snap-x snap-mandatory">
+    <!-- Colonne heures -->
+    <div
+      class="w-14 flex-shrink-0 flex flex-col border-r border-gray-200 text-xs text-gray-500"
+    >
+      <div class="h-12"></div>
+      <!-- espace pour l’entête -->
+      <div
+        v-for="(heure, hIndex) in heures"
+        :key="'hour-' + hIndex"
+        class="flex-1 flex items-start justify-end pr-1"
+      >
+        {{ heure }}
+      </div>
+    </div>
     <!-- Colonnes jours -->
     <div
       v-for="(jour, index) in jours"
       :key="index"
-      class="w-[calc(100%/7)] h-full flex-shrink-0 snap-center border-r border-gray-200 flex flex-col"
+      class="flex-1 h-full flex-shrink-0 snap-center border-r border-gray-200 flex flex-col"
     >
       <!-- En-tête jour -->
       <div
@@ -76,7 +101,6 @@
 
       <!-- Lignes horaires -->
       <div class="flex-1 grid grid-rows-21 relative">
-        <!-- cases horaires -->
         <div
           v-for="(heure, hIndex) in heures"
           :key="hIndex"
@@ -88,9 +112,7 @@
           @mousedown="startSelection(jour.fullDate, heure)"
           @mouseover="extendSelection(jour.fullDate, heure)"
           @mouseup="endSelection"
-        >
-          {{ heure }}
-        </div>
+        ></div>
 
         <!-- Slots venant de la DB -->
         <div
@@ -148,6 +170,9 @@ const currentSelection = ref(null);
 
 const slots = ref([]);
 
+const semaineCourante = getLundi();
+const semaineActive = ref(new Date(semaineCourante)); // Date modifiable par les flèches
+
 onMounted(async () => {
   try {
     const { slots: data } = await getSlots();
@@ -166,9 +191,6 @@ function getLundi(date = new Date()) {
   d.setHours(0, 0, 0, 0);
   return d;
 }
-
-const semaineCourante = getLundi();
-const semaineActive = ref(new Date(semaineCourante)); // Date modifiable par les flèches
 
 const jours = computed(() => {
   const lundi = new Date(semaineActive.value);
@@ -209,6 +231,24 @@ const heures = [
     (_, i) => `${String(i + 7).padStart(2, "0")}:00`
   ),
 ];
+
+// util simple pour cloner une date
+function clone(d) {
+  return new Date(d.getTime());
+}
+
+// format JJ/MM
+function fmtJJMM(d) {
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+}
+
+// début et fin de semaine basée sur semaineActive (qui est déjà un lundi)
+const semaineLabel = computed(() => {
+  const start = clone(semaineActive.value); // lundi
+  const end = clone(semaineActive.value);
+  end.setDate(end.getDate() + 6); // dimanche
+  return `${fmtJJMM(start)} - ${fmtJJMM(end)}`;
+});
 
 function startSelection(date, heure) {
   isDragging.value = true;
