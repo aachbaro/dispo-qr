@@ -26,7 +26,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { from, to } = req.query as { from?: string; to?: string };
 
     const select = "id,title,start,end,created_at";
-    console.log("start");
     if (from && to) {
       // Overlap: end > from AND start < to
       const { data, error } = await supabase
