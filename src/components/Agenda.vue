@@ -198,7 +198,6 @@ const semaineCourante = getLundi();
 const semaineActive = ref(new Date(semaineCourante)); // Date modifiable par les flèches
 
 onMounted(async () => {
-  console.log("start");
   try {
     fetchCurrentWeek();
   } catch (err) {
