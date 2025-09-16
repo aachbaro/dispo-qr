@@ -31,23 +31,34 @@
 
     <div class="flex items-center gap-4">
       <!-- Loupe -->
-      <button
-        class="p-2 rounded-full hover:bg-gray-100 transition"
-        aria-label="search"
-      >
-        <svg
-          class="w-5 h-5 text-gray-600"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+      <div class="relative">
+        <button
+          class="p-2 rounded-full hover:bg-gray-100 transition"
+          aria-label="search"
+          @click="showDatePicker = !showDatePicker"
         >
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-      </button>
+          <svg
+            class="w-5 h-5 text-gray-600"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+
+        <!-- Sélecteur de date -->
+        <input
+          v-if="showDatePicker"
+          type="date"
+          class="absolute top-10 right-0 border rounded p-1 bg-white shadow"
+          @change="onDatePicked"
+        />
+      </div>
 
       <!-- Flèches -->
       <div class="flex gap-2">
@@ -182,6 +193,8 @@ const isDragging = ref(false);
 const selectionStart = ref(null);
 const selectionEnd = ref(null);
 const selectedSlots = ref([]);
+
+const showDatePicker = ref(false);
 
 // admin check
 // const isAdmin = ref(!!localStorage.getItem("adminToken"));
@@ -517,5 +530,16 @@ async function fetchCurrentWeek() {
   } finally {
     loadingSlots.value = false;
   }
+}
+
+function onDatePicked(event) {
+  const picked = new Date(event.target.value);
+  if (isNaN(picked)) return;
+
+  // on calcule le lundi de la semaine choisie
+  const lundi = getLundi(picked);
+  semaineActive.value = lundi;
+
+  showDatePicker.value = false; // refermer le picker
 }
 </script>

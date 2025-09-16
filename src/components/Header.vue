@@ -9,21 +9,31 @@
       </div>
     </div>
   </header>
+  <!-- ✅ Popup contact -->
+  <ContactModal
+    :open="contactOpen"
+    @close="contactOpen = false"
+    phone="+33 7 83 06 54 99"
+    email="adam.achbarou@gmail.com"
+  />
 </template>
 
 <script setup>
 import { ref } from "vue";
 import LoginModal from "./LoginModal.vue";
+import ContactModal from "./ContactModal.vue";
 
+const contactOpen = ref(false);
 const isOpen = ref(false);
 const toggleMenu = () => (isOpen.value = !isOpen.value);
 const closeMenu = () => (isOpen.value = false);
 
-function onContact() {
-  console.log("➡️ 'Me contacter' cliqué");
-}
 function onLoginClicked() {
   console.log("➡️ 'Vous êtes moi ?' cliqué");
+}
+
+function onContact() {
+  contactOpen.value = true;
 }
 </script>
 
