@@ -8,8 +8,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { password } = req.body || {};
-  console.log("ENV ADMIN_SECRET:", process.env.ADMIN_SECRET);
-  console.log("Received password:", password);
   if (!password) return res.status(400).json({ error: "Password required" });
 
   if (password !== process.env.ADMIN_SECRET) {
@@ -17,11 +15,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Générer un JWT valide 1h
-  const token = jwt.sign(
-    { role: "admin" },
-    process.env.JWT_SECRET!,
-    { expiresIn: "1h" }
-  );
+  const token = jwt.sign({ role: "admin" }, process.env.JWT_SECRET!, {
+    expiresIn: "1h",
+  });
 
   return res.status(200).json({ token });
 }

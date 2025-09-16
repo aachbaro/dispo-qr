@@ -38,19 +38,21 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { login, logout } from "../services/api";
+import useAdmin from "../composables/useAdmin";
 
 const open = ref(false);
 const password = ref("");
 const error = ref("");
 const loading = ref(false);
-const isAdmin = ref<boolean>(!!localStorage.getItem("adminToken"));
+
+const { isAdmin, setAdmin } = useAdmin();
 
 async function handleLogin() {
   loading.value = true;
   error.value = "";
   try {
     await login(password.value);
-    isAdmin.value = true;
+    setAdmin(true);
     closeModal();
   } catch (e: any) {
     error.value = e.message;
@@ -61,7 +63,7 @@ async function handleLogin() {
 
 function logoutUser() {
   logout();
-  isAdmin.value = false;
+  setAdmin(false);
 }
 
 function closeModal() {

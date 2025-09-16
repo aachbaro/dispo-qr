@@ -48,9 +48,14 @@ export function logout() {
 
 // --- Slots ---
 // GET: récupérer la liste des créneaux
-export async function getSlots(params?: { from?: string; to?: string }) {
-  const qs = new URLSearchParams(params as Record<string, string>).toString();
-  return request<{ slots: Slot[] }>(`/api/slots${qs ? `?${qs}` : ""}`);
+export async function getSlots(params?: { from: string; to: string }) {
+  const qs =
+    params?.from && params?.to
+      ? `?from=${encodeURIComponent(params.from)}&to=${encodeURIComponent(
+          params.to
+        )}`
+      : "";
+  return request<{ slots: Slot[] }>(`/api/slots${qs}`);
 }
 
 // POST: créer un créneau

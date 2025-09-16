@@ -1,12 +1,33 @@
 <template>
   <!-- Barre d'actions -->
-  <div
-    class="flex items-center justify-between gap-4 p-4 bg-white shadow rounded-md"
-  >
-    <!-- Indicateur de semaine -->
-    <div class="text-sm text-gray-700 font-medium">
-      {{ semaineLabel }}
+  <div class="flex items-center justify-between gap-4 p-4 bg-white border-none">
+    <!-- Bouton + -->
+    <div class="flex items-center">
+      <button
+        v-if="isAdmin"
+        @click="addSlot"
+        class="p-2 rounded-full hover:bg-gray-100 transition"
+        aria-label="Ajouter un slot"
+      >
+        <svg
+          class="w-6 h-6 text-gray-600"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
     </div>
+
+    <!-- Indicateur de semaine (centré) -->
+    <h2 class="text-lg text-gray-700 font-medium text-center flex-1">
+      {{ semaineLabel }}
+    </h2>
 
     <div class="flex items-center gap-4">
       <!-- Loupe -->
@@ -117,7 +138,7 @@
         <!-- Slots venant de la DB -->
         <div
           v-for="slot in daySlots(jour.fullDate)"
-          :key="slot.id"
+          :key="slot.id + '-' + slot.start"
           class="absolute left-1 right-1 bg-red-500 text-white rounded p-1 text-xs shadow flex flex-col"
           :style="slotStyle(slot)"
         >
@@ -145,16 +166,17 @@
       :initial-date="currentSelection.date"
       :initial-start="currentSelection.start"
       :initial-end="currentSelection.end"
-      @confirm="handleConfirm"
+      @created="handleSlotCreated"
       @cancel="handleCancel"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import SelectionPopup from "./SelectionPopup.vue";
 import { getSlots, deleteSlot } from "../services/api";
+import useAdmin from "../composables/useAdmin";
 
 const isDragging = ref(false);
 const selectionStart = ref(null);
@@ -162,25 +184,29 @@ const selectionEnd = ref(null);
 const selectedSlots = ref([]);
 
 // admin check
-const isAdmin = ref(!!localStorage.getItem("adminToken"));
+// const isAdmin = ref(!!localStorage.getItem("adminToken"));
+const { isAdmin } = useAdmin();
 
 // popup control
 const showPopup = ref(false);
 const currentSelection = ref(null);
 
 const slots = ref([]);
+const loadingSlots = ref(false);
 
 const semaineCourante = getLundi();
 const semaineActive = ref(new Date(semaineCourante)); // Date modifiable par les flèches
 
 onMounted(async () => {
+  console.log("start");
   try {
-    const { slots: data } = await getSlots();
-    slots.value = data;
+    fetchCurrentWeek();
   } catch (err) {
     console.error("Erreur récupération slots:", err);
   }
 });
+
+watch(semaineActive, fetchCurrentWeek);
 
 // Obtenir le lundi de la semaine actuelle
 function getLundi(date = new Date()) {
@@ -333,23 +359,43 @@ function isSelected(date, heure) {
 }
 
 function daySlots(date) {
-  return slots.value.filter((s) => s.start.split("T")[0] === date);
+  const all = [];
+  for (const s of slots.value) {
+    all.push(...splitSlotByDay(s));
+  }
+  return all.filter((p) => p.day === date);
 }
 
 function slotStyle(slot) {
   const start = new Date(slot.start);
   const end = new Date(slot.end);
 
-  const startHour = start.getHours() + start.getMinutes() / 60;
-  const endHour = end.getHours() + end.getMinutes() / 60;
+  // Ancre du jour affiché : de 07:00 à 24:00
+  const dayStart = new Date(start);
+  dayStart.setHours(7, 0, 0, 0);
+  const dayEnd = new Date(start);
+  dayEnd.setHours(24, 0, 0, 0);
 
-  // agenda va de 07:00 à 24:00 → soit 17h
-  const totalHours = 17;
-  const hourHeight = 100 / totalHours;
+  // On borne le segment à la fenêtre visible
+  const s = new Date(Math.max(start, dayStart));
+  const e = new Date(Math.min(end, dayEnd));
+
+  const totalMin = (dayEnd - dayStart) / 60000; // 17h = 1020 min
+  const topMin = Math.max(0, (s - dayStart) / 60000);
+  const endMin = Math.max(0, (e - dayStart) / 60000);
+  const heightMin = Math.max(0, endMin - topMin);
+
+  // Si le segment ne recouvre rien dans la fenêtre, on ne l'affiche pas
+  if (heightMin <= 0) {
+    return { display: "none" };
+  }
+
+  const topPct = (topMin / totalMin) * 100;
+  const heightPct = (heightMin / totalMin) * 100;
 
   return {
-    top: `${(startHour - 7) * hourHeight}%`,
-    height: `${(endHour - startHour) * hourHeight}%`,
+    top: `${topPct}%`,
+    height: `${heightPct}%`,
   };
 }
 
@@ -361,6 +407,7 @@ function formatHour(dateString) {
 }
 
 async function removeSlot(id) {
+  if (!isAdmin.value) return; // 🔒
   try {
     await deleteSlot(id);
     slots.value = slots.value.filter((s) => s.id !== id);
@@ -370,7 +417,108 @@ async function removeSlot(id) {
 }
 
 function editSlot(slot) {
-  // TODO: ouvrir SelectionPopup pré-rempli avec slot
+  if (!isAdmin.value) return; // 🔒
+  // TODO: ouvrir SelectionPopup pré-remplie
   console.log("Éditer slot:", slot);
+}
+
+function splitSlotByDay(slot) {
+  const start = new Date(slot.start);
+  const end = new Date(slot.end);
+
+  const parts = [];
+  // Curseur au début du jour (00:00) du start
+  let dayCursor = new Date(start);
+  dayCursor.setHours(0, 0, 0, 0);
+
+  // On avance jour par jour jusqu'à couvrir [start, end)
+  while (dayCursor < end) {
+    const nextDay = new Date(dayCursor);
+    nextDay.setDate(nextDay.getDate() + 1);
+    nextDay.setHours(0, 0, 0, 0);
+
+    // Segment borné au jour en cours
+    const segStart = new Date(Math.max(start, dayCursor));
+    const segEnd = new Date(Math.min(end, nextDay));
+
+    // On ignore les segments vides (ex : 00:00 → 00:00)
+    if (segEnd > segStart) {
+      parts.push({
+        ...slot,
+        start: toLocalIso(segStart),
+        end: toLocalIso(segEnd),
+        day: ymdLocal(segStart), // jour de rendu
+      });
+    }
+
+    dayCursor = nextDay;
+  }
+
+  return parts;
+}
+
+function addSlot() {
+  if (!isAdmin.value) return; // 🔒
+  const today = new Date();
+  const date = today.toLocaleDateString("fr-CA");
+  const currentHour = today.getHours();
+  const start = `${String(currentHour).padStart(2, "0")}:00`;
+  const end = `${String(currentHour + 1).padStart(2, "0")}:00`;
+  currentSelection.value = { date, start, end };
+  showPopup.value = true;
+}
+
+function toLocalIso(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const da = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  // Pas de "Z" → interprété en heure locale
+  return `${y}-${m}-${da}T${hh}:${mm}:${ss}`;
+}
+
+function ymdLocal(d) {
+  // "fr-CA" donne YYYY-MM-DD en local
+  return d.toLocaleDateString("fr-CA");
+}
+
+function handleSlotCreated(slot) {
+  // Injection immédiate dans la source de vérité
+  // (assure un nouveau rendu sans recharger)
+  slots.value.push(slot);
+
+  // Optionnel : refermer le popup si besoin
+  showPopup.value = false;
+  currentSelection.value = null;
+}
+
+// -------------------------------------
+// Helpers semaine → bornes [from, to)
+function weekBounds(lundiLikeDate) {
+  const start = new Date(lundiLikeDate);
+  start.setHours(0, 0, 0, 0); // lundi 00:00 local
+  const to = new Date(start);
+  to.setDate(to.getDate() + 7); // lundi suivant 00:00
+  return { from: start.toISOString(), to: to.toISOString() };
+}
+// -------------------------------------
+
+async function fetchCurrentWeek() {
+  loadingSlots.value = true;
+  try {
+    const { from, to } = weekBounds(semaineActive.value);
+    console.log("1");
+    // get slots est au taquet lent ici --v
+    const { slots: data } = await getSlots({ from, to });
+
+    slots.value = data;
+    console.log("end");
+  } catch (err) {
+    console.error("Erreur récupération slots:", err);
+  } finally {
+    loadingSlots.value = false;
+  }
 }
 </script>
