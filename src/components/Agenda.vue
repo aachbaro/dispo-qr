@@ -139,7 +139,7 @@
         <div
           v-for="slot in daySlots(jour.fullDate)"
           :key="slot.id + '-' + slot.start"
-          class="absolute left-1 right-1 bg-red-500 text-white rounded p-1 text-xs shadow flex flex-col"
+          class="absolute left-1 right-1 bg-red-800 text-white rounded p-1 text-xs shadow flex flex-col"
           :style="slotStyle(slot)"
         >
           <div class="flex justify-between items-center">
