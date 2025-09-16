@@ -509,12 +509,10 @@ async function fetchCurrentWeek() {
   loadingSlots.value = true;
   try {
     const { from, to } = weekBounds(semaineActive.value);
-    console.log("1");
     // get slots est au taquet lent ici --v
     const { slots: data } = await getSlots({ from, to });
 
     slots.value = data;
-    console.log("end");
   } catch (err) {
     console.error("Erreur récupération slots:", err);
   } finally {
