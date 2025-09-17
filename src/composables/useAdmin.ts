@@ -15,9 +15,9 @@ if (typeof window !== "undefined") {
 
 function setAdmin(val: boolean) {
   isAdmin.value = val;
-  if (typeof window !== "undefined") {
-    if (val) localStorage.setItem("adminToken", "1");
-    else localStorage.removeItem("adminToken");
+  if (!val && typeof window !== "undefined") {
+    // logout → supprimer le token
+    localStorage.removeItem("adminToken");
   }
 }
 
@@ -25,5 +25,4 @@ export default function useAdmin() {
   return { isAdmin, setAdmin };
 }
 
-// (optionnel) exports nommés si tu en as besoin ailleurs
 export { isAdmin, setAdmin };

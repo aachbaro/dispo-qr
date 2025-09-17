@@ -181,11 +181,21 @@
       @cancel="handleCancel"
     />
   </div>
+  <ClientPopup
+    v-if="!isAdmin && currentSelection"
+    :open="showPopup"
+    :initial-date="currentSelection.date"
+    :initial-start="currentSelection.start"
+    :initial-end="currentSelection.end"
+    @created="handleClientMission"
+    @close="showPopup = false"
+  />
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import SelectionPopup from "./SelectionPopup.vue";
+import ClientPopup from "./ClientPopup.vue";
 import { getSlots, deleteSlot } from "../services/api";
 import useAdmin from "../composables/useAdmin";
 
@@ -307,14 +317,8 @@ function endSelection() {
     const endHour = slots[slots.length - 1].heure;
     const date = selectionStart.value.date;
 
-    if (isAdmin.value) {
-      // 👉 ouvrir popup avec la sélection
-      currentSelection.value = { date, start: startHour, end: endHour };
-      showPopup.value = true;
-    } else {
-      console.log(`📅 Sélection faite : ${date} de ${startHour} à ${endHour}`);
-      selectedSlots.value.push({ date, start: startHour, end: endHour });
-    }
+    currentSelection.value = { date, start: startHour, end: endHour };
+    showPopup.value = true;
   }
 
   isDragging.value = false;
@@ -541,5 +545,11 @@ function onDatePicked(event) {
   semaineActive.value = lundi;
 
   showDatePicker.value = false; // refermer le picker
+}
+
+function handleClientMission(mission) {
+  console.log("✅ Mission créée côté client :", mission);
+  // ici tu peux par ex. mettre à jour une liste locale,
+  // afficher un message de succès, ou déclencher un mail de notif
 }
 </script>
