@@ -7,17 +7,28 @@
 // Payload qu’un client peut envoyer en créant une mission
 export interface MissionPayload {
   etablissement: string;
-  contact: string;
+  etablissement_address?: string;
+  contact_name?: string;
+  contact_email: string;
+  contact_phone: string;
   instructions?: string;
   mode: "freelance" | "salarié";
   date_slot: string; // format ISO (datetime-local)
+  end_slot: string; // format ISO (datetime-local)
 }
 
 // Mission complète telle qu’elle est stockée en base
 export interface Mission extends MissionPayload {
   id: number;
   created_at: string;
-  status: "proposé" | "validé" | "paiement_en_attente" | "payé" | "terminé";
+  status:
+    | "proposé"
+    | "validé"
+    | "réalisé"
+    | "paiement_en_attente"
+    | "payé"
+    | "terminé"
+    | "refusé";
   devis_url?: string;
   facture_url?: string;
   payment_link?: string;
@@ -35,7 +46,12 @@ export type MissionUpdate = Partial<MissionPayload> & {
  * Services API
  */
 
-// ➕ Créer une mission (coté client)
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem("adminToken");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+// ➕ Créer une mission (côté client)
 export async function createMission(
   payload: MissionPayload
 ): Promise<{ mission: Mission }> {
@@ -50,7 +66,7 @@ export async function createMission(
   return res.json();
 }
 
-// 📜 Lister toutes les missions (admin ou client selon usage)
+// 📜 Lister toutes les missions
 export async function listMissions(): Promise<{ missions: Mission[] }> {
   const res = await fetch("/api/missions");
   if (!res.ok) throw new Error("❌ Erreur récupération missions");
@@ -65,7 +81,10 @@ export async function updateMission(
 ): Promise<{ mission: Mission }> {
   const res = await fetch(`/api/missions/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
     body: JSON.stringify(updates),
   });
 

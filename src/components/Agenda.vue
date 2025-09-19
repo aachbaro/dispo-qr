@@ -1,172 +1,182 @@
 <template>
   <!-- Barre d'actions -->
-  <div class="flex items-center justify-between gap-4 p-4 bg-white border-none">
-    <!-- Bouton + -->
-    <div class="flex items-center">
-      <button
-        v-if="isAdmin"
-        @click="addSlot"
-        class="p-2 rounded-full hover:bg-gray-100 transition"
-        aria-label="Ajouter un slot"
-      >
-        <svg
-          class="w-6 h-6 text-gray-600"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          viewBox="0 0 24 24"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </button>
-    </div>
-
-    <!-- Indicateur de semaine (centré) -->
-    <h2 class="text-lg text-gray-700 font-medium text-center flex-1">
-      {{ semaineLabel }}
-    </h2>
-
-    <div class="flex items-center gap-4">
-      <!-- Loupe -->
-      <div class="relative">
-        <button
-          class="p-2 rounded-full hover:bg-gray-100 transition"
-          aria-label="search"
-          @click="showDatePicker = !showDatePicker"
-        >
-          <svg
-            class="w-5 h-5 text-gray-600"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </button>
-
-        <!-- Sélecteur de date -->
-        <input
-          v-if="showDatePicker"
-          type="date"
-          class="absolute top-10 right-0 border rounded p-1 bg-white shadow"
-          @change="onDatePicked"
-        />
-      </div>
-
-      <!-- Flèches -->
-      <div class="flex gap-2">
-        <button
-          class="p-2 rounded-full hover:bg-gray-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
-          @click="semainePrecedente"
-          :disabled="estSemaineCourante"
-          aria-label="Semaine précédente"
-        >
-          <svg
-            class="w-5 h-5 text-gray-600"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
-
-        <button
-          class="p-2 rounded-full hover:bg-gray-100 transition"
-          @click="semaineSuivante"
-          aria-label="Semaine suivante"
-        >
-          <svg
-            class="w-5 h-5 text-gray-600"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  </div>
-  <!-- Chaque jour (colonne) -->
-  <div class="flex w-full h-full overflow-x-auto snap-x snap-mandatory">
-    <!-- Colonne heures -->
+  <div class="flex flex-col h-full w-full border border-black pb-6 p-3 rounded-lg pr-10">
     <div
-      class="w-14 flex-shrink-0 flex flex-col border-r border-gray-200 text-xs text-gray-500"
+      class="flex items-center justify-between gap-4 p-4 bg-white border-none"
     >
-      <div class="h-12"></div>
-      <!-- espace pour l’entête -->
-      <div
-        v-for="(heure, hIndex) in heures"
-        :key="'hour-' + hIndex"
-        class="flex-1 flex items-start justify-end pr-1"
-      >
-        {{ heure }}
-      </div>
-    </div>
-    <!-- Colonnes jours -->
-    <div
-      v-for="(jour, index) in jours"
-      :key="index"
-      class="flex-1 h-full flex-shrink-0 snap-center border-r border-gray-200 flex flex-col"
-    >
-      <!-- En-tête jour -->
-      <div
-        class="h-12 flex flex-col items-center justify-center bg-gray-100 border-b shrink-0"
-      >
-        <span class="text-sm font-medium">{{ jour.nom }}</span>
-        <span class="text-xs text-gray-500">{{ jour.date }}</span>
+      <!-- Bouton + -->
+      <div class="flex items-center">
+        <button
+          v-if="isAdmin"
+          @click="addSlot"
+          class="p-2 rounded-full hover:bg-gray-100 transition"
+          aria-label="Ajouter un slot"
+        >
+          <svg
+            class="w-6 h-6 text-gray-600"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
 
-      <!-- Lignes horaires -->
-      <div class="flex-1 grid grid-rows-21 relative">
+      <!-- Indicateur de semaine (centré) -->
+      <h2 class="text-lg text-gray-700 font-medium text-center flex-1">
+        {{ semaineLabel }}
+      </h2>
+
+      <div class="flex items-center gap-4">
+        <!-- Loupe -->
+        <div class="relative">
+          <button
+            class="p-2 rounded-full hover:bg-gray-100 transition"
+            aria-label="search"
+            @click="showDatePicker = !showDatePicker"
+          >
+            <svg
+              class="w-5 h-5 text-gray-600"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+
+          <!-- Sélecteur de date -->
+          <input
+            v-if="showDatePicker"
+            type="date"
+            class="absolute top-10 right-0 border rounded p-1 bg-white shadow"
+            @change="onDatePicked"
+          />
+        </div>
+
+        <!-- Flèches -->
+        <div class="flex gap-2">
+          <button
+            class="p-2 rounded-full hover:bg-gray-100 transition disabled:opacity-30 disabled:cursor-not-allowed"
+            @click="semainePrecedente"
+            :disabled="estSemaineCourante"
+            aria-label="Semaine précédente"
+          >
+            <svg
+              class="w-5 h-5 text-gray-600"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+
+          <button
+            class="p-2 rounded-full hover:bg-gray-100 transition"
+            @click="semaineSuivante"
+            aria-label="Semaine suivante"
+          >
+            <svg
+              class="w-5 h-5 text-gray-600"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Chaque jour (colonne) -->
+    <div class="flex w-full h-[100%] overflow-x-auto snap-x snap-mandatory">
+      <!-- Colonne heures -->
+      <div
+        class="w-14 flex-shrink-0 flex flex-col border-r border-gray-200 text-xs text-gray-500"
+      >
+        <div class="h-12"></div>
+        <!-- espace pour l’entête -->
         <div
           v-for="(heure, hIndex) in heures"
-          :key="hIndex"
-          class="border-b flex items-center justify-center text-xs text-gray-400 cursor-pointer"
-          :class="{
-            'bg-red-300 ': isSelected(jour.fullDate, heure),
-            'text-gray-400 hover:bg-blue-50': !isSelected(jour.fullDate, heure),
-          }"
-          @mousedown="startSelection(jour.fullDate, heure)"
-          @mouseover="extendSelection(jour.fullDate, heure)"
-          @mouseup="endSelection"
-        ></div>
-
-        <!-- Slots venant de la DB -->
-        <div
-          v-for="slot in daySlots(jour.fullDate)"
-          :key="slot.id + '-' + slot.start"
-          class="absolute left-1 right-1 bg-red-800 text-white rounded p-1 text-xs shadow flex flex-col"
-          :style="slotStyle(slot)"
+          :key="'hour-' + hIndex"
+          class="flex-1 flex items-start justify-end pr-1"
         >
-          <div class="flex justify-between items-center">
-            <span class="font-semibold">{{ slot.title }}</span>
-            <div v-if="isAdmin" class="flex gap-1">
-              <button @click="editSlot(slot)" class="hover:text-yellow-300">
-                ✏️
-              </button>
-              <button @click="removeSlot(slot.id)" class="hover:text-gray-300">
-                ❌
-              </button>
+          {{ heure }}
+        </div>
+      </div>
+      <!-- Colonnes jours -->
+      <div
+        v-for="(jour, index) in jours"
+        :key="index"
+        class="flex-1 h-[100%] flex-shrink-0 snap-center border-r border-gray-200 flex flex-col"
+      >
+        <!-- En-tête jour -->
+        <div
+          class="h-12 flex flex-col items-center justify-center bg-gray-100 border-b shrink-0"
+        >
+          <span class="text-sm font-medium">{{ jour.nom }}</span>
+          <span class="text-xs text-gray-500">{{ jour.date }}</span>
+        </div>
+
+        <!-- Lignes horaires -->
+        <div class="flex-1 grid grid-rows-21 relative">
+          <div
+            v-for="(heure, hIndex) in heures"
+            :key="hIndex"
+            class="border-b flex items-center justify-center text-xs text-gray-400 cursor-pointer"
+            :class="{
+              'bg-red-300 ': isSelected(jour.fullDate, heure),
+              'text-gray-400 hover:bg-blue-50': !isSelected(
+                jour.fullDate,
+                heure
+              ),
+            }"
+            @mousedown="startSelection(jour.fullDate, heure)"
+            @mouseover="extendSelection(jour.fullDate, heure)"
+            @mouseup="endSelection"
+          ></div>
+
+          <!-- Slots venant de la DB -->
+          <div
+            v-for="slot in daySlots(jour.fullDate)"
+            :key="slot.id + '-' + slot.start"
+            class="absolute left-1 right-1 bg-red-800 text-white rounded p-1 text-xs shadow flex flex-col"
+            :style="slotStyle(slot)"
+          >
+            <div class="flex justify-between items-center">
+              <span class="font-semibold">{{ slot.title }}</span>
+              <div v-if="isAdmin" class="flex gap-1">
+                <button @click="editSlot(slot)" class="hover:text-yellow-300">
+                  ✏️
+                </button>
+                <button
+                  @click="removeSlot(slot.id)"
+                  class="hover:text-gray-300"
+                >
+                  ❌
+                </button>
+              </div>
             </div>
+            <span class="text-[10px]">
+              {{ formatHour(slot.start) }} - {{ formatHour(slot.end) }}
+            </span>
           </div>
-          <span class="text-[10px]">
-            {{ formatHour(slot.start) }} - {{ formatHour(slot.end) }}
-          </span>
         </div>
       </div>
     </div>

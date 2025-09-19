@@ -29,19 +29,56 @@
               v-model="etablissement"
               type="text"
               required
-              placeholder="Nom de l'établissement"
+              placeholder="Nom du restaurant"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <!-- Adresse -->
+          <div class="space-y-1">
+            <label class="text-sm font-medium"
+              >Adresse de l’établissement</label
+            >
+            <input
+              v-model="etablissementAddress"
+              type="text"
+              required
+              placeholder="Adresse complète"
               class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <!-- Contact -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label class="text-sm font-medium">Téléphone</label>
+              <input
+                v-model="contactPhone"
+                type="tel"
+                required
+                placeholder="+33 6 12 34 56 78"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div class="space-y-1">
+              <label class="text-sm font-medium">Email</label>
+              <input
+                v-model="contactEmail"
+                type="email"
+                required
+                placeholder="contact@restaurant.com"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <!-- Nom du contact -->
           <div class="space-y-1">
-            <label class="text-sm font-medium">Contact</label>
+            <label class="text-sm font-medium">Nom du contact</label>
             <input
-              v-model="contact"
+              v-model="contactName"
               type="text"
-              required
-              placeholder="ex: client@email.com"
+              placeholder="ex: Responsable salle"
               class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -149,7 +186,6 @@
 import { ref, computed } from "vue";
 import { createMission } from "../services/missions";
 
-// Props
 const props = defineProps({
   open: Boolean,
   initialDate: String,
@@ -159,9 +195,12 @@ const props = defineProps({
 
 const emit = defineEmits(["close", "created"]);
 
-// Champs client
+// Champs
 const etablissement = ref("");
-const contact = ref("");
+const etablissementAddress = ref("");
+const contactName = ref("");
+const contactEmail = ref("");
+const contactPhone = ref("");
 const instructions = ref("");
 const mode = ref("freelance");
 
@@ -171,11 +210,11 @@ const endDate = ref(props.initialDate || "");
 const startTime = ref(props.initialStart || "12:00");
 const endTime = ref(props.initialEnd || "14:00");
 
-// borne min (lundi de la semaine courante)
+// borne min (lundi semaine courante)
 function getWeekStart(d = new Date()) {
   const x = new Date(d);
-  const day = x.getDay(); // 0=dim, 1=lun...
-  const diff = x.getDate() - (day === 0 ? 6 : day - 1); // lundi
+  const day = x.getDay();
+  const diff = x.getDate() - (day === 0 ? 6 : day - 1);
   x.setDate(diff);
   x.setHours(0, 0, 0, 0);
   return x;
@@ -199,7 +238,7 @@ const isInvalid = computed(() => {
   return s >= e;
 });
 
-// Scroll heures (par pas de 15 min)
+// Scroll heures
 function onScrollTime(event, field) {
   const val = field === "startTime" ? startTime.value : endTime.value;
   const [h, m] = val.split(":").map(Number);
@@ -214,7 +253,7 @@ function onScrollTime(event, field) {
   else endTime.value = newVal;
 }
 
-// Scroll dates (±1j ; Shift=±7j ; Alt=±30j)
+// Scroll dates
 function onScrollDate(event, field) {
   let step = 1;
   if (event.shiftKey) step = 7;
@@ -226,13 +265,10 @@ function onScrollDate(event, field) {
   let base = parseYMD(src.value) || new Date();
   base.setDate(base.getDate() + dir * step);
 
-  // clamp min
   const minDt = parseYMD(minDate);
   if (base < minDt) base = minDt;
 
   src.value = toYMD(base);
-
-  // Toujours endDate >= startDate
   if (endDate.value < startDate.value) endDate.value = startDate.value;
 }
 
@@ -252,10 +288,14 @@ async function onConfirm() {
   try {
     const { mission } = await createMission({
       etablissement: etablissement.value,
-      contact: contact.value,
+      etablissement_address: etablissementAddress.value,
+      contact_name: contactName.value,
+      contact_email: contactEmail.value,
+      contact_phone: contactPhone.value,
       instructions: instructions.value,
       mode: mode.value,
-      date_slot: startISO, // ⚠️ si tu veux stocker end → ajoute end_slot dans la DB
+      date_slot: startISO,
+      end_slot: endISO,
     });
 
     emit("created", mission);

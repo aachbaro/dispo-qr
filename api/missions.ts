@@ -22,10 +22,27 @@ function verifyAdmin(req: VercelRequest): boolean {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
+    // 🔒 Les missions peuvent être listées sans admin (mais à filtrer si tu veux)
     const { data, error } = await supabase
       .from("missions")
       .select(
-        "id, created_at, date_slot, etablissement, contact, instructions, mode, status, devis_url, facture_url, payment_link"
+        `
+        id,
+        created_at,
+        date_slot,
+        end_slot,
+        etablissement,
+        etablissement_address,
+        contact_name,
+        contact_email,
+        contact_phone,
+        instructions,
+        mode,
+        status,
+        devis_url,
+        facture_url,
+        payment_link
+      `
       )
       .order("created_at", { ascending: false });
 
@@ -34,9 +51,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    // ❌ pas besoin d'être admin → un client peut proposer une mission
-    const { etablissement, contact, instructions, mode, date_slot } = req.body;
-    if (!etablissement || !contact || !date_slot || !mode) {
+    // Un client peut proposer une mission
+    const {
+      etablissement,
+      etablissement_address,
+      contact_name,
+      contact_email,
+      contact_phone,
+      instructions,
+      mode,
+      date_slot,
+      end_slot,
+    } = req.body;
+
+    if (
+      !etablissement ||
+      !contact_email ||
+      !contact_phone ||
+      !date_slot ||
+      !mode
+    ) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -45,10 +79,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .insert([
         {
           etablissement,
-          contact,
+          etablissement_address,
+          contact_name,
+          contact_email,
+          contact_phone,
           instructions,
           mode,
           date_slot,
+          end_slot,
           status: "proposé",
         },
       ])
