@@ -13,23 +13,23 @@
         Entreprise introuvable
       </div>
 
-      <div v-else class="p-4 border border-black rounded bg-white mt-4">
-        <p><b>Email :</b> {{ entreprise.email }}</p>
-        <p><b>Téléphone :</b> {{ entreprise.telephone || "—" }}</p>
-        <p><b>Adresse :</b> {{ entreprise.adresse || "—" }}</p>
-      </div>
+      <EntrepriseInfos
+        v-else
+        :entreprise="entreprise"
+        :is-owner="isOwner"
+        @updated="entreprise = $event"
+      />
     </div>
 
     <!-- Agenda -->
     <div
       class="h-[70vh] max-w-[1200px] w-full flex items-center border border-black p-3 rounded-lg"
     >
-    <!-- 👇 Ici on détermine si l’utilisateur connecté est l’admin -->
-    <Agenda :slug="route.params.slug" :is-admin="isOwner" />
-  </div>
-  
-  <!-- Missions -->
-  <div class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg">
+      <Agenda :slug="route.params.slug" :is-admin="isOwner" />
+    </div>
+
+    <!-- Missions -->
+    <div class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg">
       <MissionList :slug="route.params.slug" :is-owner="isOwner" />
     </div>
   </div>
@@ -39,18 +39,17 @@
 import { ref, onMounted, computed } from "vue";
 import { useRoute } from "vue-router";
 import { getEntrepriseBySlug } from "../services/entreprises";
-import { getUser } from "../services/auth"; // 👈 pour savoir qui est connecté
+import { getUser } from "../services/auth";
 import Agenda from "../components/agenda/Agenda.vue";
 import MissionList from "../components/MissionList.vue";
+import EntrepriseInfos from "../components/EntrepriseInfos.vue";
 
 const route = useRoute();
 const entreprise = ref<any>(null);
 const loading = ref(true);
 
-const authUser = getUser(); // { id, email, role, slug? }
-const isOwner = computed(() => {
-  return authUser?.slug === route.params.slug;
-});
+const authUser = getUser();
+const isOwner = computed(() => authUser?.slug === route.params.slug);
 
 onMounted(async () => {
   try {
