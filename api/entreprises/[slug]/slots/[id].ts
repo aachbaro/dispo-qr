@@ -1,8 +1,7 @@
 // api/entreprises/[slug]/slots/[id].ts
-import { VercelRequest, VercelResponse } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
-// ⚠️ On utilise la SERVICE_ROLE_KEY côté API serverless (jamais côté frontend)
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -10,8 +9,6 @@ const supabase = createClient(
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { slug, id } = req.query;
-
-  // Validation basique des paramètres
   if (!slug || typeof slug !== "string") {
     return res.status(400).json({ error: "Slug requis" });
   }
@@ -19,10 +16,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: "ID invalide" });
   }
 
-  // 1️⃣ Vérifier que l’entreprise existe
+  // 🔎 Vérifier entreprise
   const { data: entreprise, error: errEntreprise } = await supabase
     .from("entreprise")
-    .select("id")
+    .select("id, user_id")
     .eq("slug", slug)
     .single();
 
@@ -32,10 +29,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const entrepriseId = entreprise.id;
 
-  // 2️⃣ Switch sur la méthode HTTP
   switch (req.method) {
+    // 📜 GET slot (public)
     case "GET": {
-      // 🔹 Récupérer un slot spécifique
       const { data, error } = await supabase
         .from("slots")
         .select("*")
@@ -49,8 +45,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ slot: data });
     }
 
+    // ✏️ PUT slot (owner only)
     case "PUT": {
-      // 🔹 Mettre à jour un slot
+      const user = await checkAuth(req, entreprise.user_id, res);
+      if (!user) return;
+
       const { start, end, title } = req.body;
       if (!start || !end) {
         return res.status(400).json({ error: "Champs start et end requis" });
@@ -72,8 +71,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ slot: data });
     }
 
+    // ❌ DELETE slot (owner only)
     case "DELETE": {
-      // 🔹 Supprimer un slot
+      const user = await checkAuth(req, entreprise.user_id, res);
+      if (!user) return;
+
       const { error } = await supabase
         .from("slots")
         .delete()
@@ -89,4 +91,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     default:
       return res.status(405).json({ error: "Méthode non autorisée" });
   }
+}
+
+// ----------------------
+// Helper auth
+// ----------------------
+async function checkAuth(
+  req: VercelRequest,
+  ownerId: string,
+  res: VercelResponse
+) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "❌ Unauthorized (no token)" });
+    return null;
+  }
+
+  const token = authHeader.split(" ")[1];
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token);
+
+  if (error || !user) {
+    res.status(401).json({ error: "❌ Unauthorized (invalid token)" });
+    return null;
+  }
+
+  if (user.id !== ownerId) {
+    res.status(403).json({ error: "❌ Forbidden (not your entreprise)" });
+    return null;
+  }
+
+  return user;
 }

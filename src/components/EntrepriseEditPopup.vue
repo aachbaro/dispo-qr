@@ -1,3 +1,4 @@
+<!-- src/components/EntrepriseEditPopup.vue -->
 <template>
   <Transition name="fade">
     <div
@@ -23,105 +24,60 @@
         <div class="px-6 py-4 space-y-4">
           <!-- Nom / Prénom -->
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-sm font-medium">Nom</label>
-              <input v-model="form.nom" type="text" class="input" />
-            </div>
-            <div>
-              <label class="text-sm font-medium">Prénom</label>
-              <input v-model="form.prenom" type="text" class="input" />
-            </div>
+            <FormField label="Nom" v-model="form.nom" />
+            <FormField label="Prénom" v-model="form.prenom" />
           </div>
 
           <!-- Adresse -->
-          <div>
-            <label class="text-sm font-medium">Adresse</label>
-            <input v-model="form.adresse" type="text" class="input" />
-          </div>
+          <FormField label="Adresse" v-model="form.adresse" />
 
           <!-- Email / Téléphone -->
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-sm font-medium">Email</label>
-              <input v-model="form.email" type="email" class="input" />
-            </div>
-            <div>
-              <label class="text-sm font-medium">Téléphone</label>
-              <input v-model="form.telephone" type="tel" class="input" />
-            </div>
+            <FormField label="Email" type="email" v-model="form.email" />
+            <FormField label="Téléphone" type="tel" v-model="form.telephone" />
           </div>
 
           <!-- SIRET / Statut -->
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-sm font-medium">SIRET</label>
-              <input v-model="form.siret" type="text" class="input" />
-            </div>
-            <div>
-              <label class="text-sm font-medium">Statut juridique</label>
-              <input
-                v-model="form.statut_juridique"
-                type="text"
-                class="input"
-              />
-            </div>
+            <FormField label="SIRET" v-model="form.siret" />
+            <FormField
+              label="Statut juridique"
+              v-model="form.statut_juridique"
+            />
           </div>
 
           <!-- TVA / Mention -->
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-sm font-medium">TVA intracom</label>
-              <input v-model="form.tva_intracom" type="text" class="input" />
-            </div>
-            <div>
-              <label class="text-sm font-medium">Mention TVA</label>
-              <input v-model="form.mention_tva" type="text" class="input" />
-            </div>
+            <FormField label="TVA intracom" v-model="form.tva_intracom" />
+            <FormField label="Mention TVA" v-model="form.mention_tva" />
           </div>
 
           <!-- Banque -->
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-sm font-medium">IBAN</label>
-              <input v-model="form.iban" type="text" class="input" />
-            </div>
-            <div>
-              <label class="text-sm font-medium">BIC</label>
-              <input v-model="form.bic" type="text" class="input" />
-            </div>
+            <FormField label="IBAN" v-model="form.iban" />
+            <FormField label="BIC" v-model="form.bic" />
           </div>
 
           <!-- Taux horaire / Devise -->
           <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-sm font-medium">Taux horaire</label>
-              <input
-                v-model.number="form.taux_horaire"
-                type="number"
-                step="0.01"
-                class="input"
-              />
-            </div>
-            <div>
-              <label class="text-sm font-medium">Devise</label>
-              <input v-model="form.devise" type="text" class="input" />
-            </div>
+            <FormField
+              label="Taux horaire"
+              type="number"
+              step="0.01"
+              v-model.number="form.taux_horaire"
+            />
+            <FormField label="Devise" v-model="form.devise" />
           </div>
 
           <!-- Conditions -->
-          <div>
-            <label class="text-sm font-medium">Conditions de paiement</label>
-            <input
-              v-model="form.conditions_paiement"
-              type="text"
-              class="input"
-            />
-          </div>
-
-          <div>
-            <label class="text-sm font-medium">Pénalités de retard</label>
-            <input v-model="form.penalites_retard" type="text" class="input" />
-          </div>
+          <FormField
+            label="Conditions de paiement"
+            v-model="form.conditions_paiement"
+          />
+          <FormField
+            label="Pénalités de retard"
+            v-model="form.penalites_retard"
+          />
         </div>
 
         <!-- Footer -->
@@ -149,21 +105,25 @@
 import { ref, watch } from "vue";
 import type { Entreprise } from "../services/entreprises";
 import { updateEntreprise } from "../services/entreprises";
+import FormField from "./ui/FormField.vue";
 
+// ✅ Props
 const props = defineProps<{
   open: boolean;
   entreprise: Entreprise;
 }>();
 
+// ✅ Events
 const emit = defineEmits<{
   (e: "close"): void;
   (e: "updated", data: Entreprise): void;
 }>();
 
+// ✅ State
 const loading = ref(false);
 const form = ref<Partial<Entreprise>>({});
 
-// ⚡ Remplir le formulaire quand on ouvre
+// ✅ Watch: quand on ouvre, remplir avec les infos actuelles
 watch(
   () => props.open,
   (val) => {
@@ -174,6 +134,7 @@ watch(
   { immediate: true }
 );
 
+// ✅ Actions
 function onCancel() {
   emit("close");
 }
@@ -195,11 +156,8 @@ async function onConfirm() {
 }
 </script>
 
+<!-- ✅ Style factorisé -->
 <style scoped>
-.input {
-  @apply w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500;
-}
-
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.15s ease;

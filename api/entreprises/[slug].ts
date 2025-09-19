@@ -1,10 +1,9 @@
 // api/entreprises/[slug].ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import jwt from "jsonwebtoken";
 
 // ----------------------
-// Supabase client
+// Supabase client (SERVICE_KEY car API sécurisée côté serveur)
 // ----------------------
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
@@ -12,7 +11,7 @@ const supabase = createClient(
 );
 
 // ----------------------
-// Constantes
+// Champs à exposer publiquement
 // ----------------------
 const ENTREPRISE_FIELDS = `
   id, user_id, nom, prenom, adresse, email, telephone, siret,
@@ -49,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 // ----------------------
-// GET: récupérer une entreprise
+// GET: récupérer une entreprise (public)
 // ----------------------
 async function handleGet(slug: string, res: VercelResponse) {
   const { data, error } = await supabase
@@ -58,21 +57,22 @@ async function handleGet(slug: string, res: VercelResponse) {
     .eq("slug", slug)
     .single();
 
-  if (error) {
-    return res.status(404).json({ error: error.message });
+  if (error || !data) {
+    return res.status(404).json({ error: "Entreprise introuvable" });
   }
 
   return res.status(200).json({ data });
 }
 
 // ----------------------
-// PUT: mettre à jour une entreprise
+// PUT: mettre à jour une entreprise (owner uniquement)
 // ----------------------
 async function handlePut(
   slug: string,
   req: VercelRequest,
   res: VercelResponse
 ) {
+  // Vérifie la présence du token
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith("Bearer ")) {
     return res.status(401).json({ error: "❌ Unauthorized (no token)" });
@@ -80,49 +80,48 @@ async function handlePut(
 
   const token = authHeader.split(" ")[1];
 
-  try {
-    // ✅ Vérifie avec le même secret que dans login.ts
-    const payload = jwt.verify(token, process.env.JWT_SECRET as string) as {
-      sub: string;
-      role: string;
-    };
+  // ✅ Vérifie le user via Supabase Auth
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser(token);
 
-    // Vérifie que l’entreprise appartient bien à l’utilisateur
-    const { data: entreprise, error: fetchError } = await supabase
-      .from("entreprise")
-      .select("id, user_id")
-      .eq("slug", slug)
-      .single();
-
-    if (fetchError || !entreprise) {
-      return res.status(404).json({ error: "Entreprise introuvable" });
-    }
-
-    if (entreprise.user_id !== payload.sub) {
-      return res
-        .status(403)
-        .json({ error: "❌ Forbidden (not your entreprise)" });
-    }
-
-    // Applique la mise à jour
-    const updates = req.body;
-    const { data, error: updateError } = await supabase
-      .from("entreprise")
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("slug", slug)
-      .select(ENTREPRISE_FIELDS)
-      .single();
-
-    if (updateError) {
-      return res.status(400).json({ error: updateError.message });
-    }
-
-    return res.status(200).json({ data });
-  } catch (err) {
-    console.error("❌ Invalid token:", err);
+  if (userError || !user) {
     return res.status(401).json({ error: "❌ Unauthorized (invalid token)" });
   }
+
+  // Vérifie que l’entreprise appartient bien à ce user
+  const { data: entreprise, error: fetchError } = await supabase
+    .from("entreprise")
+    .select("id, user_id")
+    .eq("slug", slug)
+    .single();
+
+  if (fetchError || !entreprise) {
+    return res.status(404).json({ error: "Entreprise introuvable" });
+  }
+
+  if (entreprise.user_id !== user.id) {
+    return res
+      .status(403)
+      .json({ error: "❌ Forbidden (not your entreprise)" });
+  }
+
+  // Applique la mise à jour
+  const updates = req.body;
+  const { data, error: updateError } = await supabase
+    .from("entreprise")
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("slug", slug)
+    .select(ENTREPRISE_FIELDS)
+    .single();
+
+  if (updateError) {
+    return res.status(400).json({ error: updateError.message });
+  }
+
+  return res.status(200).json({ data });
 }

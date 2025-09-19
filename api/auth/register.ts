@@ -1,15 +1,18 @@
 // api/auth/register.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 
+// ----------------------
+// Supabase client
+// ----------------------
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string
+  process.env.SUPABASE_SERVICE_ROLE_KEY as string // Service key car on crée aussi l’entreprise
 );
 
-// 🔧 Génère un slug "prenom-nom", avec suffixe si déjà pris
+// ----------------------
+// Génération slug unique
+// ----------------------
 async function generateUniqueSlug(nom: string, prenom: string) {
   const base = `${prenom}-${nom}`
     .normalize("NFD")
@@ -28,46 +31,52 @@ async function generateUniqueSlug(nom: string, prenom: string) {
       .eq("slug", slug)
       .maybeSingle();
 
-    if (!data) break; // dispo
+    if (!data) break;
     slug = `${base}-${i++}`;
   }
 
   return slug;
 }
 
+// ----------------------
+// Handler
+// ----------------------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
+    return res.status(405).json({ error: "❌ Method Not Allowed" });
   }
 
   const { email, password, role, entreprise } = req.body;
 
   if (!email || !password || !role) {
-    return res.status(400).json({ error: "Missing required fields" });
+    return res.status(400).json({ error: "❌ Champs obligatoires manquants" });
   }
 
   if (!["freelance", "client"].includes(role)) {
-    return res.status(400).json({ error: "Invalid role" });
+    return res.status(400).json({ error: "❌ Rôle invalide" });
   }
 
   try {
-    // 🔒 Hash du mot de passe
-    const passwordHash = await bcrypt.hash(password, 10);
+    // 1️⃣ Création user dans Supabase Auth
+    const {
+      data: { user },
+      error: signUpError,
+    } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { role },
+    });
 
-    // ➕ Création du user
-    const { data: user, error: userError } = await supabase
-      .from("users")
-      .insert([{ email, password_hash: passwordHash, role }])
-      .select()
-      .single();
-
-    if (userError) {
-      return res.status(500).json({ error: userError.message });
+    if (signUpError || !user) {
+      return res
+        .status(500)
+        .json({ error: signUpError?.message || "Erreur création utilisateur" });
     }
 
     let createdEntreprise = null;
 
-    // ➕ Si freelance → créer son entreprise liée
+    // 2️⃣ Si freelance → créer une entreprise associée
     if (role === "freelance") {
       if (!entreprise?.nom || !entreprise?.prenom) {
         return res
@@ -114,20 +123,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       createdEntreprise = ent;
     }
 
-    // 🔑 Générer un JWT pour l’utilisateur
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET!,
-      { expiresIn: "7d" }
-    );
-
     return res.status(201).json({
-      user: { id: user.id, email: user.email, role: user.role },
+      user: {
+        id: user.id,
+        email: user.email,
+        role,
+      },
       entreprise: createdEntreprise,
-      token,
     });
   } catch (err: any) {
-    console.error("Erreur register:", err);
-    return res.status(500).json({ error: "Internal Server Error" });
+    console.error("❌ Erreur register:", err);
+    return res.status(500).json({ error: "Erreur serveur" });
   }
 }

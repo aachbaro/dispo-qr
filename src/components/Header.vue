@@ -1,6 +1,7 @@
+<!-- src/components/Header.vue -->
 <template>
   <!-- Header -->
-  <header class="bg-white border-b border-black-600 shadow-sm">
+  <header class="bg-white border-b border-gray-200 shadow-sm">
     <div class="max-w-6xl mx-auto w-full flex justify-between items-center p-4">
       <!-- Logo / titre -->
       <h1 class="text-2xl font-bold cursor-pointer" @click="router.push('/')">
@@ -34,8 +35,8 @@
             Mon compte
           </button>
           <button
-            @click="logout"
-            class="px-4 py-2 rounded bg-back-200 hover:bg-back-300"
+            @click="logoutUser"
+            class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
           >
             Déconnexion
           </button>
@@ -44,7 +45,7 @@
         <!-- Contact -->
         <button
           @click="onContact"
-          class="px-4 py-2 rounded bg-back-100 hover:bg-back-200"
+          class="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200"
         >
           Contact
         </button>
@@ -59,7 +60,6 @@
     :open="openRegister"
     @close="openRegister = false"
   />
-
   <ContactModal
     :open="contactOpen"
     @close="contactOpen = false"
@@ -68,10 +68,10 @@
   />
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { clearAuth } from "../services/auth";
+import { logout } from "../services/auth"; // 👈 utilise logout
 import LoginModal from "./LoginModal.vue";
 import RegisterModal from "./RegisterModal.vue";
 import ContactModal from "./ContactModal.vue";
@@ -80,22 +80,24 @@ import { useAuth } from "../composables/useAuth";
 const router = useRouter();
 const { user, setUser } = useAuth();
 
-// états modals
+// États modals
 const contactOpen = ref(false);
 const openLogin = ref(false);
 const openRegister = ref(false);
 
-// état connexion
+// Ouvre modal contact
 function onContact() {
   contactOpen.value = true;
 }
 
-function logout() {
-  clearAuth();
+// Déconnexion
+function logoutUser() {
+  logout(); // 👈 utilise la fonction du service
   setUser(null);
   router.push("/");
 }
 
+// Accès à mon entreprise
 function goToMyEntreprise() {
   if (user.value && user.value.slug) {
     router.push(`/entreprise/${user.value.slug}`);

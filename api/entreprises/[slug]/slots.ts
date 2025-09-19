@@ -1,23 +1,22 @@
 // api/entreprises/[slug]/slots.ts
-import { VercelRequest, VercelResponse } from "@vercel/node";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // ⚠️ SERVICE KEY car accès à toutes les lignes
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { slug } = req.query;
-
   if (!slug || typeof slug !== "string") {
     return res.status(400).json({ error: "Slug requis" });
   }
 
-  // 1️⃣ Récupérer l’entreprise via slug
+  // 🔎 Récupérer l’entreprise
   const { data: entreprise, error: errEntreprise } = await supabase
     .from("entreprise")
-    .select("id")
+    .select("id, user_id")
     .eq("slug", slug)
     .single();
 
@@ -27,44 +26,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const entrepriseId = entreprise.id;
 
-  // 2️⃣ GET slots
-  if (req.method === "GET") {
-    const { from, to } = req.query;
+  switch (req.method) {
+    // 📜 Lister slots → public
+    case "GET": {
+      const { from, to } = req.query;
 
-    let query = supabase
-      .from("slots")
-      .select("*")
-      .eq("entreprise_id", entrepriseId)
-      .order("start", { ascending: true });
+      let query = supabase
+        .from("slots")
+        .select("*")
+        .eq("entreprise_id", entrepriseId)
+        .order("start", { ascending: true });
 
-    if (from && to) {
-      query = query.gte("start", from as string).lt("end", to as string);
+      if (from && to) {
+        query = query.gte("start", from as string).lt("end", to as string);
+      }
+
+      const { data, error } = await query;
+      if (error) return res.status(500).json({ error: error.message });
+
+      return res.status(200).json({ slots: data });
     }
 
-    const { data, error } = await query;
-    if (error) return res.status(500).json({ error: error.message });
+    // ➕ Créer slot → réservé owner
+    case "POST": {
+      const user = await checkAuth(req, entreprise.user_id, res);
+      if (!user) return; // checkAuth a déjà répondu
 
-    return res.status(200).json({ slots: data });
-  }
+      const { start, end, title } = req.body;
+      if (!start || !end) {
+        return res.status(400).json({ error: "Champs start et end requis" });
+      }
 
-  // 3️⃣ POST slot
-  if (req.method === "POST") {
-    const { start, end, title } = req.body;
+      const { data, error } = await supabase
+        .from("slots")
+        .insert([{ start, end, title, entreprise_id: entrepriseId }])
+        .select("*")
+        .single();
 
-    if (!start || !end) {
-      return res.status(400).json({ error: "Champs start et end requis" });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json({ slot: data });
     }
 
-    const { data, error } = await supabase
-      .from("slots")
-      .insert([{ start, end, title, entreprise_id: entrepriseId }])
-      .select("*")
-      .single();
+    default:
+      return res.status(405).json({ error: "Méthode non autorisée" });
+  }
+}
 
-    if (error) return res.status(500).json({ error: error.message });
-
-    return res.status(201).json({ slot: data });
+// ----------------------
+// Helper auth
+// ----------------------
+async function checkAuth(
+  req: VercelRequest,
+  ownerId: string,
+  res: VercelResponse
+) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "❌ Unauthorized (no token)" });
+    return null;
   }
 
-  return res.status(405).json({ error: "Méthode non autorisée" });
+  const token = authHeader.split(" ")[1];
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token);
+
+  if (error || !user) {
+    res.status(401).json({ error: "❌ Unauthorized (invalid token)" });
+    return null;
+  }
+
+  if (user.id !== ownerId) {
+    res.status(403).json({ error: "❌ Forbidden (not your entreprise)" });
+    return null;
+  }
+
+  return user;
 }

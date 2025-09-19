@@ -1,47 +1,15 @@
-// src/services/slots.ts
+import { request } from "./api";
 
-/**
- * Types pour les slots
- */
 export interface Slot {
   id: number;
-  start: string; // timestamp ISO
-  end: string; // timestamp ISO
+  start: string;
+  end: string;
   title: string;
   created_at: string;
   entreprise_id: number;
 }
 
-/**
- * Helpers
- */
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem("adminToken");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(getAuthHeaders() ?? {}),
-      ...(options.headers as Record<string, string>),
-    },
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || res.statusText);
-  }
-  return res.json();
-}
-
-/**
- * Services API Slots (par entreprise)
- */
-
-// 📜 Récupérer les slots d’une entreprise
+// 📜 Liste
 export async function getEntrepriseSlots(
   slug: string,
   params?: { from?: string; to?: string }
@@ -55,7 +23,7 @@ export async function getEntrepriseSlots(
   return request<{ slots: Slot[] }>(`/api/entreprises/${slug}/slots${qs}`);
 }
 
-// ➕ Créer un slot pour une entreprise
+// ➕ Create
 export async function createEntrepriseSlot(
   slug: string,
   slot: Pick<Slot, "start" | "end" | "title">
@@ -66,24 +34,22 @@ export async function createEntrepriseSlot(
   });
 }
 
-// ✏️ Mettre à jour un slot
+// ✏️ Update
 export async function updateEntrepriseSlot(
   slug: string,
   id: number,
   updates: Partial<Slot>
 ): Promise<{ slot: Slot }> {
   return request<{ slot: Slot }>(`/api/entreprises/${slug}/slots/${id}`, {
-    method: "PUT", // cohérent avec l’API
+    method: "PUT",
     body: JSON.stringify(updates),
   });
 }
 
-// ❌ Supprimer un slot
+// ❌ Delete
 export async function deleteEntrepriseSlot(
   slug: string,
   id: number
 ): Promise<void> {
-  await request(`/api/entreprises/${slug}/slots/${id}`, {
-    method: "DELETE",
-  });
+  await request(`/api/entreprises/${slug}/slots/${id}`, { method: "DELETE" });
 }

@@ -1,99 +1,101 @@
 // src/services/auth.ts
+import { createClient } from "@supabase/supabase-js";
+
+// ----------------------
+// Supabase client (frontend)
+// ----------------------
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL as string,
+  import.meta.env.VITE_SUPABASE_ANON_KEY as string
+);
+
+// ----------------------
+// Types
+// ----------------------
 export type UserRole = "freelance" | "client" | "admin";
 
 export interface AuthUser {
   id: string;
   email: string;
-  role: UserRole;
-  slug?: string; // 👈 pour les freelances avec entreprise
+  role?: UserRole;
+  slug?: string; // 👈 si freelance avec entreprise
+  nom?: string;
+  prenom?: string;
 }
 
-const API_BASE = "";
-
-// --- Helpers ---
-function saveToken(token: string) {
-  localStorage.setItem("authToken", token);
+// ----------------------
+// Helpers
+// ----------------------
+export async function getSession() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session;
 }
 
-function saveUser(user: AuthUser) {
-  localStorage.setItem("authUser", JSON.stringify(user));
-}
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) {
+    console.error("❌ Erreur getUser:", error.message);
+    return null;
+  }
+  if (!data.user) return null;
 
-export function getToken(): string | null {
-  return localStorage.getItem("authToken");
-}
+  // 👇 Custom claims si tu veux stocker plus (role, slug…)
+  const metadata = data.user.user_metadata;
 
-export function getUser(): AuthUser | null {
-  const raw = localStorage.getItem("authUser");
-  return raw ? (JSON.parse(raw) as AuthUser) : null;
-}
-
-export function clearAuth() {
-  localStorage.removeItem("authToken");
-  localStorage.removeItem("authUser");
-}
-
-export function getAuthHeaders(): Record<string, string> {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-// --- API calls ---
-export async function register(payload: {
-  email: string;
-  password: string;
-  role: UserRole;
-  entreprise?: {
-    nom: string;
-    prenom: string;
+  return {
+    id: data.user.id,
+    email: data.user.email!,
+    role: metadata?.role,
+    slug: metadata?.slug,
+    nom: metadata?.nom,
+    prenom: metadata?.prenom,
   };
-}) {
-  const res = await fetch("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) throw new Error("❌ Erreur inscription");
-
-  const data = await res.json();
-
-  // ✅ Stockage
-  saveToken(data.token);
-
-  const user: AuthUser = {
-    ...data.user,
-    slug: data.user.slug ?? undefined, // 👈 slug récupéré directement
-  };
-  saveUser(user);
-
-  return { user, token: data.token, entreprise: data.entreprise };
 }
 
-export async function login(
+// ----------------------
+// Auth actions
+// ----------------------
+
+/**
+ * Inscription avec Supabase Auth
+ */
+export async function register(
   email: string,
-  password: string
-): Promise<{ user: AuthUser; token: string }> {
-  const res = await fetch(`${API_BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+  password: string,
+  metadata?: any
+) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: metadata, // 👈 user_metadata (role, nom, prenom…)
+    },
   });
 
-  if (!res.ok) throw new Error("❌ Erreur connexion");
-  const data = await res.json();
+  if (error) throw error;
 
-  // ✅ Stockage
-  saveToken(data.token);
-  const user: AuthUser = {
-    ...data.user,
-    slug: data.user.slug ?? undefined, // 👈 correction ici
-  };
-  saveUser(user);
-
-  return { user, token: data.token };
+  return data.user;
 }
 
-export function logout() {
-  clearAuth();
+/**
+ * Connexion avec Supabase Auth
+ */
+export async function login(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) throw error;
+
+  return data.session; // contient access_token
+}
+
+/**
+ * Déconnexion
+ */
+export async function logout() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
 }

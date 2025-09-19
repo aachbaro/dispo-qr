@@ -39,7 +39,7 @@
 import { ref, onMounted, computed } from "vue";
 import { useRoute } from "vue-router";
 import { getEntrepriseBySlug } from "../services/entreprises";
-import { getUser } from "../services/auth";
+import { useAuth } from "../composables/useAuth"; // 👈 au lieu de getUser
 import Agenda from "../components/agenda/Agenda.vue";
 import MissionList from "../components/MissionList.vue";
 import EntrepriseInfos from "../components/EntrepriseInfos.vue";
@@ -48,8 +48,10 @@ const route = useRoute();
 const entreprise = ref<any>(null);
 const loading = ref(true);
 
-const authUser = getUser();
-const isOwner = computed(() => authUser?.slug === route.params.slug);
+// 👇 Récupère user via le composable
+const { user } = useAuth();
+
+const isOwner = computed(() => user.value?.slug === route.params.slug);
 
 onMounted(async () => {
   try {

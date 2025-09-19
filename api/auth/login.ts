@@ -1,15 +1,13 @@
 // api/auth/login.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 
 // ----------------------
 // Supabase client
 // ----------------------
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string
+  process.env.SUPABASE_ANON_KEY as string // ⚠️ ANON KEY car c’est l’auth standard
 );
 
 // ----------------------
@@ -30,55 +28,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 🔎 Récupérer l’utilisateur
-    const { data: user, error } = await supabase
-      .from("users")
-      .select("id, email, password_hash, role")
-      .eq("email", email)
-      .single();
+    // 🔑 Auth via Supabase
+    const {
+      data: { user, session },
+      error,
+    } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-    if (error || !user) {
-      return res.status(401).json({ error: "❌ Utilisateur introuvable" });
+    if (error || !user || !session) {
+      return res
+        .status(401)
+        .json({ error: "❌ Email ou mot de passe incorrect" });
     }
 
-    // 🔑 Vérifier le mot de passe
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return res.status(401).json({ error: "❌ Mot de passe incorrect" });
-    }
-
-    // 📌 Si freelance → récupérer entreprise associée
+    // 📌 Récupérer l’entreprise associée (si c’est un freelance)
     let entreprise = null;
-    if (user.role === "freelance") {
-      const { data: ent, error: entError } = await supabase
+    if (user.user_metadata?.role === "freelance") {
+      const { data: ent } = await supabase
         .from("entreprise")
         .select("id, slug, nom, prenom")
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (entError) {
-        console.warn("⚠️ Erreur récupération entreprise:", entError.message);
-      }
       entreprise = ent;
     }
 
-    // 🎟 Générer un JWT cohérent
-    const token = jwt.sign(
-      {
-        sub: user.id, // 👈 c’est ça qu’on checkera côté [slug].ts
-        role: user.role,
-      },
-      process.env.JWT_SECRET as string, // 👈 cohérent partout
-      { expiresIn: "1h" }
-    );
-
-    // ✅ Réponse
     return res.status(200).json({
-      token,
+      token: session.access_token, // 🎟️ token JWT géré par Supabase
       user: {
         id: user.id,
         email: user.email,
-        role: user.role,
+        role: user.user_metadata?.role ?? "client",
         slug: entreprise?.slug ?? null,
         nom: entreprise?.nom ?? null,
         prenom: entreprise?.prenom ?? null,
