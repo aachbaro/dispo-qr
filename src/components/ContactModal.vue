@@ -10,7 +10,7 @@
       <!-- Téléphone -->
       <a
         :href="`tel:${phone}`"
-        class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 transition"
+        class="flex items-center gap-3 p-3 rounded-lg hover:bg-back-100 transition"
       >
         <svg
           class="w-6 h-6 text-blue-600"
@@ -36,13 +36,13 @@
                22 16.92z"
           />
         </svg>
-        <span class="text-gray-700 font-medium">{{ phone }}</span>
+        <span class="text-back-700 font-medium">{{ phone }}</span>
       </a>
 
       <!-- Email -->
       <a
         :href="`mailto:${email}`"
-        class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 transition"
+        class="flex items-center gap-3 p-3 rounded-lg hover:bg-back-100 transition"
       >
         <svg
           class="w-6 h-6 text-green-600"
@@ -56,13 +56,13 @@
           <path d="M4 4h16v16H4z" />
           <polyline points="22,6 12,13 2,6" />
         </svg>
-        <span class="text-gray-700 font-medium">{{ email }}</span>
+        <span class="text-back-700 font-medium">{{ email }}</span>
       </a>
 
       <!-- Bouton fermer -->
       <button
         @click="close"
-        class="mt-5 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition"
+        class="mt-5 px-4 py-2 bg-back-800 text-white rounded-lg hover:bg-back-700 transition"
       >
         Fermer
       </button>

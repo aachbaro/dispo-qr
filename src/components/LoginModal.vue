@@ -21,13 +21,13 @@
             v-model="email"
             type="email"
             placeholder="Email"
-            class="w-full rounded-lg border border-gray-300 px-3 py-2"
+            class="w-full rounded-lg border border-back-300 px-3 py-2"
           />
           <input
             v-model="password"
             type="password"
             placeholder="Mot de passe"
-            class="w-full rounded-lg border border-gray-300 px-3 py-2"
+            class="w-full rounded-lg border border-back-300 px-3 py-2"
           />
           <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
         </div>
@@ -35,7 +35,7 @@
         <div class="px-5 py-4 border-t flex justify-end gap-2">
           <button
             type="button"
-            class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+            class="px-4 py-2 rounded bg-back-200 hover:bg-back-300"
             @click="onCancel"
           >
             Annuler

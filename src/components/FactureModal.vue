@@ -31,7 +31,7 @@
             <input
               v-model="clientName"
               type="text"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2"
+              class="w-full rounded-lg border border-back-300 px-3 py-2"
             />
           </div>
 
@@ -41,7 +41,7 @@
               v-model="clientAddress"
               rows="2"
               placeholder="Ex: 40 rue Richer, 75009 Paris"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2"
+              class="w-full rounded-lg border border-back-300 px-3 py-2"
             ></textarea>
           </div>
 
@@ -52,7 +52,7 @@
               <input
                 v-model="contactName"
                 type="text"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2"
+                class="w-full rounded-lg border border-back-300 px-3 py-2"
               />
             </div>
             <div class="space-y-1">
@@ -60,7 +60,7 @@
               <input
                 v-model="contactPhone"
                 type="text"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2"
+                class="w-full rounded-lg border border-back-300 px-3 py-2"
               />
             </div>
           </div>
@@ -70,7 +70,7 @@
             <input
               v-model="contactEmail"
               type="email"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2"
+              class="w-full rounded-lg border border-back-300 px-3 py-2"
             />
           </div>
 
@@ -80,7 +80,7 @@
             <textarea
               v-model="description"
               rows="3"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2"
+              class="w-full rounded-lg border border-back-300 px-3 py-2"
             ></textarea>
           </div>
 
@@ -92,7 +92,7 @@
               type="number"
               min="0"
               step="0.01"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2"
+              class="w-full rounded-lg border border-back-300 px-3 py-2"
             />
           </div>
         </div>

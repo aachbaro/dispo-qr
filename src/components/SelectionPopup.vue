@@ -78,6 +78,7 @@
             </div>
           </div>
 
+          <!-- Errors -->
           <p v-if="isInvalid" class="text-sm text-red-600">
             L'heure de début doit être antérieure à l'heure de fin.
           </p>
@@ -94,14 +95,14 @@
         <!-- Footer -->
         <div class="px-5 py-4 border-t flex justify-end gap-2">
           <button class="btn-primary transition" @click="onCancel">
-            annuler
+            Annuler
           </button>
           <button
             class="btn-primary transition disabled:opacity-50"
             :disabled="isInvalid || !title || isBeforeMinWeek || isPastStart"
             @click="onConfirm"
           >
-            valider
+            Valider
           </button>
         </div>
       </div>
@@ -109,18 +110,23 @@
   </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch, computed, nextTick } from "vue";
-import { createSlot } from "@/services/api";
+import { createEntrepriseSlot } from "@/services/slots";
 
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  initialDate: { type: String, default: "" }, // YYYY-MM-DD
-  initialStart: { type: String, default: "12:00" }, // HH:mm
-  initialEnd: { type: String, default: "14:00" }, // HH:mm
-});
+const props = defineProps<{
+  open: boolean;
+  initialDate?: string; // YYYY-MM-DD
+  initialStart?: string; // HH:mm
+  initialEnd?: string; // HH:mm
+  slug: string; // 👈 slug entreprise obligatoire
+}>();
 
-const emit = defineEmits(["update:open", "created", "cancel"]);
+const emit = defineEmits<{
+  (e: "update:open", value: boolean): void;
+  (e: "created", slot: any): void;
+  (e: "cancel"): void;
+}>();
 
 // ----------------- Utils dates -----------------
 function getWeekStart(d = new Date()) {
@@ -131,31 +137,26 @@ function getWeekStart(d = new Date()) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
-function toYMD(dt) {
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth() + 1).padStart(2, "0");
-  const d = String(dt.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+function toYMD(dt: Date) {
+  return dt.toISOString().split("T")[0];
 }
-function parseYMD(s) {
+function parseYMD(s: string | undefined) {
   if (!s) return null;
   const [y, m, d] = s.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
-  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d
-    ? dt
-    : null;
+  return dt;
 }
 
-// Borne basse : lundi semaine courante (exposé au template pour :min)
+// borne basse : lundi semaine courante
 const minDate = toYMD(getWeekStart());
 
 // ----------------- Champs -----------------
 const title = ref("");
-const startDate = ref(props.initialDate);
-const endDate = ref(props.initialDate);
-const startTime = ref(props.initialStart);
-const endTime = ref(props.initialEnd);
-const startDateEl = ref(null);
+const startDate = ref(props.initialDate ?? "");
+const endDate = ref(props.initialDate ?? "");
+const startTime = ref(props.initialStart ?? "12:00");
+const endTime = ref(props.initialEnd ?? "14:00");
+const startDateEl = ref<HTMLInputElement | null>(null);
 
 // ----------------- Validations -----------------
 const startDateTime = computed(
@@ -165,19 +166,10 @@ const endDateTime = computed(
   () => new Date(`${endDate.value}T${endTime.value}`)
 );
 
-const isInvalid = computed(() => {
-  const s = startDateTime.value;
-  const e = endDateTime.value;
-  return isNaN(s) || isNaN(e) || s >= e;
-});
+const isInvalid = computed(() => startDateTime.value >= endDateTime.value);
 
 const isBeforeMinWeek = computed(() => {
-  return (
-    !startDate.value ||
-    !endDate.value ||
-    startDate.value < minDate ||
-    endDate.value < minDate
-  );
+  return startDate.value < minDate || endDate.value < minDate;
 });
 
 const isPastStart = computed(() => {
@@ -191,23 +183,21 @@ watch(
     if (!val) return;
 
     title.value = "";
-
-    // Clamp la date initiale à minDate
     const init = props.initialDate || toYMD(new Date());
     const clamped = init < minDate ? minDate : init;
 
     startDate.value = clamped;
     endDate.value = clamped;
-    startTime.value = props.initialStart;
-    endTime.value = props.initialEnd;
+    startTime.value = props.initialStart ?? "12:00";
+    endTime.value = props.initialEnd ?? "14:00";
 
     await nextTick();
     startDateEl.value?.focus();
   }
 );
 
-// ----------------- Scroll heures (15 min) -----------------
-function onScrollTime(event, field) {
+// ----------------- Scroll helpers -----------------
+function onScrollTime(event: WheelEvent, field: "startTime" | "endTime") {
   const val = field === "startTime" ? startTime.value : endTime.value;
   const [h, m] = val.split(":").map(Number);
   let minutes = h * 60 + m;
@@ -221,28 +211,19 @@ function onScrollTime(event, field) {
   else endTime.value = newVal;
 }
 
-// ----------------- Scroll dates (±1j ; Shift=±7j ; Alt=±30j) + clamp minDate -----------------
-function onScrollDate(event, field) {
-  if (Math.abs(event.deltaY) < 1) return;
-
+function onScrollDate(event: WheelEvent, field: "startDate" | "endDate") {
   let step = 1;
-  if (event.shiftKey) step = 7; // semaine
-  if (event.altKey) step = 30; // ~mois
-
+  if (event.shiftKey) step = 7;
+  if (event.altKey) step = 30;
   const dir = event.deltaY < 0 ? +1 : -1;
   const src = field === "startDate" ? startDate : endDate;
 
-  let base = parseYMD(src.value) || parseYMD(props.initialDate) || new Date();
-  base.setHours(12, 0, 0, 0); // évite soucis DST
+  let base = parseYMD(src.value) || new Date();
+  base.setHours(12, 0, 0, 0);
   base.setDate(base.getDate() + dir * step);
 
-  // clamp min
-  const minDt = parseYMD(minDate);
-  if (base < minDt) base = minDt;
-
+  if (base < parseYMD(minDate)!) base = parseYMD(minDate)!;
   src.value = toYMD(base);
-
-  // Toujours endDate >= startDate
   if (endDate.value < startDate.value) endDate.value = startDate.value;
 }
 
@@ -253,7 +234,6 @@ function onCancel() {
 }
 
 async function onConfirm() {
-  // Double barrière : pas dans le passé, pas avant lundi de la semaine courante
   if (
     isInvalid.value ||
     !title.value ||
@@ -268,7 +248,7 @@ async function onConfirm() {
   const endISO = new Date(`${endDate.value}T${endTime.value}`).toISOString();
 
   try {
-    const { slot } = await createSlot({
+    const { slot } = await createEntrepriseSlot(props.slug, {
       start: startISO,
       end: endISO,
       title: title.value,

@@ -1,10 +1,8 @@
-// public/services/missions.ts
+// src/services/missions.ts
 
 /**
  * Types partagés pour les missions
  */
-
-// Payload qu’un client peut envoyer en créant une mission
 export interface MissionPayload {
   etablissement: string;
   etablissement_address?: string;
@@ -13,11 +11,10 @@ export interface MissionPayload {
   contact_phone: string;
   instructions?: string;
   mode: "freelance" | "salarié";
-  date_slot: string; // format ISO (datetime-local)
-  end_slot: string; // format ISO (datetime-local)
+  date_slot: string; // format ISO
+  end_slot: string; // format ISO
 }
 
-// Mission complète telle qu’elle est stockée en base
 export interface Mission extends MissionPayload {
   id: number;
   created_at: string;
@@ -34,7 +31,6 @@ export interface Mission extends MissionPayload {
   payment_link?: string;
 }
 
-// Type pour une mise à jour partielle
 export type MissionUpdate = Partial<MissionPayload> & {
   status?: Mission["status"];
   devis_url?: string;
@@ -43,52 +39,79 @@ export type MissionUpdate = Partial<MissionPayload> & {
 };
 
 /**
- * Services API
+ * Helpers
  */
-
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem("adminToken");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// ➕ Créer une mission (côté client)
-export async function createMission(
-  payload: MissionPayload
-): Promise<{ mission: Mission }> {
-  const res = await fetch("/api/missions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(getAuthHeaders() ?? {}),
+      ...(options.headers as Record<string, string>),
+    },
   });
 
-  if (!res.ok) throw new Error("❌ Erreur création mission");
-
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText);
+  }
   return res.json();
 }
 
-// 📜 Lister toutes les missions
-export async function listMissions(): Promise<{ missions: Mission[] }> {
-  const res = await fetch("/api/missions");
-  if (!res.ok) throw new Error("❌ Erreur récupération missions");
+/**
+ * Services API Missions (par entreprise)
+ */
 
-  return res.json();
+// ➕ Créer une mission
+export async function createEntrepriseMission(
+  slug: string,
+  payload: MissionPayload
+): Promise<{ mission: Mission }> {
+  return request<{ mission: Mission }>(`/api/entreprises/${slug}/missions`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// 📜 Lister les missions d’une entreprise
+export async function listEntrepriseMissions(
+  slug: string,
+  params: { from?: string; to?: string; status?: Mission["status"] } = {}
+): Promise<{ missions: Mission[] }> {
+  const query = new URLSearchParams(
+    params as Record<string, string>
+  ).toString();
+  return request<{ missions: Mission[] }>(
+    `/api/entreprises/${slug}/missions${query ? `?${query}` : ""}`
+  );
 }
 
 // ✏️ Mettre à jour une mission
-export async function updateMission(
+export async function updateEntrepriseMission(
+  slug: string,
   id: number,
   updates: MissionUpdate
 ): Promise<{ mission: Mission }> {
-  const res = await fetch(`/api/missions/${id}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify(updates),
+  return request<{ mission: Mission }>(
+    `/api/entreprises/${slug}/missions/${id}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    }
+  );
+}
+
+// ❌ Supprimer une mission
+export async function deleteEntrepriseMission(
+  slug: string,
+  id: number
+): Promise<void> {
+  await request(`/api/entreprises/${slug}/missions/${id}`, {
+    method: "DELETE",
   });
-
-  if (!res.ok) throw new Error("❌ Erreur mise à jour mission");
-
-  return res.json();
 }

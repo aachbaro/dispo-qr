@@ -30,7 +30,7 @@
               type="text"
               required
               placeholder="Nom du restaurant"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -44,7 +44,7 @@
               type="text"
               required
               placeholder="Adresse complète"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -57,7 +57,7 @@
                 type="tel"
                 required
                 placeholder="+33 6 12 34 56 78"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div class="space-y-1">
@@ -67,7 +67,7 @@
                 type="email"
                 required
                 placeholder="contact@restaurant.com"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -79,7 +79,7 @@
               v-model="contactName"
               type="text"
               placeholder="ex: Responsable salle"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -90,7 +90,7 @@
               v-model="instructions"
               rows="3"
               placeholder="Précisions sur la mission..."
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             ></textarea>
           </div>
 
@@ -99,7 +99,7 @@
             <label class="text-sm font-medium">Mode</label>
             <select
               v-model="mode"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             >
               <option value="freelance">Freelance (auto-entrepreneur)</option>
               <option value="salarié">Salarié (contrat d'extra)</option>
@@ -115,7 +115,7 @@
                 v-model="startDate"
                 :min="minDate"
                 @wheel.prevent="onScrollDate($event, 'startDate')"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
@@ -125,7 +125,7 @@
                 v-model="endDate"
                 :min="minDate"
                 @wheel.prevent="onScrollDate($event, 'endDate')"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -139,7 +139,7 @@
                 v-model="startTime"
                 step="900"
                 @wheel.prevent="onScrollTime($event, 'startTime')"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
@@ -149,7 +149,7 @@
                 v-model="endTime"
                 step="900"
                 @wheel.prevent="onScrollTime($event, 'endTime')"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -163,7 +163,7 @@
         <div class="px-5 py-4 border-t flex justify-end gap-2">
           <button
             type="button"
-            class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+            class="px-4 py-2 rounded bg-back-200 hover:bg-back-300"
             @click="onCancel"
           >
             Annuler
@@ -184,13 +184,15 @@
 
 <script setup>
 import { ref, computed } from "vue";
-import { createMission } from "../services/missions";
+import { createEntrepriseMission } from "../services/missions";
 
 const props = defineProps({
   open: Boolean,
   initialDate: String,
   initialStart: String,
   initialEnd: String,
+  slug: String,
+  required: true,
 });
 
 const emit = defineEmits(["close", "created"]);
@@ -286,7 +288,7 @@ async function onConfirm() {
   const endISO = new Date(`${endDate.value}T${endTime.value}`).toISOString();
 
   try {
-    const { mission } = await createMission({
+    const { mission } = await createEntrepriseMission(props.slug, {
       etablissement: etablissement.value,
       etablissement_address: etablissementAddress.value,
       contact_name: contactName.value,
@@ -301,8 +303,8 @@ async function onConfirm() {
     emit("created", mission);
     emit("close");
   } catch (err) {
-    console.error("Erreur création mission:", err);
-    alert("❌ Erreur lors de l'envoi");
+    console.error("❌ Erreur lors de la création de mission:", err);
+    alert("Erreur lors de l'envoi");
   }
 }
 </script>

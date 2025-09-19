@@ -3,7 +3,7 @@
   <div class="max-w-3xl mx-auto p-6 space-y-8">
     <!-- Header -->
     <h1 class="text-2xl font-bold text-center">Bienvenue sur Dispo-QR</h1>
-    <p class="text-center text-gray-600">
+    <p class="text-center text-back-600">
       Consultez l’agenda d’une entreprise ou connectez-vous pour gérer le vôtre.
     </p>
 
@@ -52,7 +52,7 @@
           class="cursor-pointer underline"
           @click="router.push(`/entreprise/${e.slug}`)"
         >
-          {{ e.nom }} — <span class="text-gray-500 text-sm">{{ e.slug }}</span>
+          {{ e.nom }} — <span class="text-back-500 text-sm">{{ e.slug }}</span>
         </li>
       </ul>
     </div>

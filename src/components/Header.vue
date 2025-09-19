@@ -1,6 +1,6 @@
 <template>
   <!-- Header -->
-  <header class="bg-white border-b shadow-sm">
+  <header class="bg-white border-b border-black-600 shadow-sm">
     <div class="max-w-6xl mx-auto w-full flex justify-between items-center p-4">
       <!-- Logo / titre -->
       <h1 class="text-2xl font-bold cursor-pointer" @click="router.push('/')">
@@ -35,7 +35,7 @@
           </button>
           <button
             @click="logout"
-            class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+            class="px-4 py-2 rounded bg-back-200 hover:bg-back-300"
           >
             Déconnexion
           </button>
@@ -44,7 +44,7 @@
         <!-- Contact -->
         <button
           @click="onContact"
-          class="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200"
+          class="px-4 py-2 rounded bg-back-100 hover:bg-back-200"
         >
           Contact
         </button>

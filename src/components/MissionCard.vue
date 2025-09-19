@@ -9,7 +9,7 @@
     </div>
 
     <!-- Adresse établissement -->
-    <p v-if="mission.etablissement_address" class="text-sm text-gray-600">
+    <p v-if="mission.etablissement_address" class="text-sm text-back-600">
       📍 {{ mission.etablissement_address }}
     </p>
 
@@ -37,13 +37,13 @@
     </p>
 
     <!-- Créneau -->
-    <p class="text-sm text-gray-600">
+    <p class="text-sm text-back-600">
       📅 {{ formatDate(mission.date_slot) }} →
       {{ formatDate(mission.end_slot) }}
     </p>
 
     <!-- Instructions -->
-    <p v-if="mission.instructions" class="text-sm italic text-gray-700">
+    <p v-if="mission.instructions" class="text-sm italic text-back-700">
       {{ mission.instructions }}
     </p>
 
@@ -77,7 +77,7 @@
         <button class="btn-primary hover:bg-green-700" @click="createDevis">
           Créer devis
         </button>
-        <button class="btn-primary hover:bg-gray-700" @click="markRealized">
+        <button class="btn-primary hover:bg-back-700" @click="markRealized">
           Marquer réalisée
         </button>
       </template>
@@ -106,7 +106,7 @@
       <!-- Payé -->
       <template v-else-if="mission.status === 'payé'">
         <span class="text-sm text-green-600">Mission payée ✅</span>
-        <button class="btn-primary hover:bg-gray-700" @click="closeMission">
+        <button class="btn-primary hover:bg-back-700" @click="closeMission">
           Clore
         </button>
       </template>
@@ -128,14 +128,15 @@
   />
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from "vue";
-import { updateMission } from "../services/missions";
+import { updateEntrepriseMission } from "../services/missions"; // ✅ nouveau nom
 import FactureModal from "./FactureModal.vue";
 
-const props = defineProps({
-  mission: { type: Object, required: true },
-});
+const props = defineProps<{
+  mission: any;
+  slug: string; // 👈 on reçoit le slug de l’entreprise
+}>();
 
 const emit = defineEmits(["updated"]);
 const loading = ref(false);
@@ -156,11 +157,11 @@ const statusClass = computed(() => {
     case "refusé":
       return "bg-red-100 text-red-800";
     default:
-      return "bg-gray-100 text-gray-800";
+      return "bg-back-100 text-back-800";
   }
 });
 
-function formatDate(dateStr) {
+function formatDate(dateStr: string) {
   if (!dateStr) return "";
   return new Date(dateStr).toLocaleString("fr-FR", {
     dateStyle: "short",
@@ -168,11 +169,12 @@ function formatDate(dateStr) {
   });
 }
 
-// ✅ Réels
 async function acceptMission() {
   loading.value = true;
   try {
-    await updateMission(props.mission.id, { status: "validé" });
+    await updateEntrepriseMission(props.slug, props.mission.id, {
+      status: "validé",
+    });
     emit("updated");
   } catch (err) {
     console.error("Erreur acceptation mission :", err);
@@ -185,11 +187,29 @@ async function acceptMission() {
 async function rejectMission() {
   loading.value = true;
   try {
-    await updateMission(props.mission.id, { status: "refusé" });
+    await updateEntrepriseMission(props.slug, props.mission.id, {
+      status: "refusé",
+    });
     emit("updated");
   } catch (err) {
     console.error("Erreur refus mission :", err);
     alert("❌ Impossible de refuser la mission");
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function markRealized() {
+  loading.value = true;
+  try {
+    await updateEntrepriseMission(props.slug, props.mission.id, {
+      status: "réalisé",
+      end_slot: new Date().toISOString(),
+    });
+    emit("updated");
+  } catch (err) {
+    console.error("Erreur lors du marquage réalisé :", err);
+    alert("❌ Impossible de marquer la mission comme réalisée");
   } finally {
     loading.value = false;
   }
@@ -203,24 +223,8 @@ function createFacture() {
   console.log("📄 Générer une facture", props.mission.id);
   showFactureModal.value = true;
 }
-function handleFactureGenerated(data) {
+function handleFactureGenerated(data: unknown) {
   console.log("📄 Facture générée avec :", data);
-}
-async function markRealized() {
-  loading.value = true;
-  try {
-    await updateMission(props.mission.id, {
-      status: "réalisé",
-      end_slot: new Date().toISOString(),
-    });
-    emit("updated");
-    console.log("🔨 Mission marquée comme réalisée :", props.mission.id);
-  } catch (err) {
-    console.error("Erreur lors du marquage réalisé :", err);
-    alert("❌ Impossible de marquer la mission comme réalisée");
-  } finally {
-    loading.value = false;
-  }
 }
 function sendPaymentLink() {
   console.log("💳 Envoyer lien de paiement pour mission", props.mission.id);

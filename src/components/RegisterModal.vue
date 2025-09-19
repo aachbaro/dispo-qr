@@ -22,7 +22,7 @@
             v-model="email"
             type="email"
             placeholder="Email"
-            class="w-full rounded-lg border border-gray-300 px-3 py-2"
+            class="w-full rounded-lg border border-back-300 px-3 py-2"
             required
           />
 
@@ -31,14 +31,14 @@
             v-model="password"
             type="password"
             placeholder="Mot de passe"
-            class="w-full rounded-lg border border-gray-300 px-3 py-2"
+            class="w-full rounded-lg border border-back-300 px-3 py-2"
             required
           />
 
           <!-- Role -->
           <select
             v-model="role"
-            class="w-full rounded-lg border border-gray-300 px-3 py-2"
+            class="w-full rounded-lg border border-back-300 px-3 py-2"
           >
             <option value="freelance">Freelance</option>
             <option value="client">Client</option>
@@ -46,7 +46,7 @@
 
           <!-- Bloc infos entreprise (si freelance) -->
           <div v-if="role === 'freelance'" class="space-y-2 border-t pt-3">
-            <h3 class="text-sm font-semibold text-gray-700">
+            <h3 class="text-sm font-semibold text-back-700">
               Informations de base
             </h3>
 
@@ -54,18 +54,18 @@
               v-model="entreprise.nom"
               type="text"
               placeholder="Nom"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2"
+              class="w-full rounded-lg border border-back-300 px-3 py-2"
               required
             />
             <input
               v-model="entreprise.prenom"
               type="text"
               placeholder="Prénom"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2"
+              class="w-full rounded-lg border border-back-300 px-3 py-2"
               required
             />
 
-            <p class="text-xs text-gray-500">
+            <p class="text-xs text-back-500">
               Vous pourrez compléter votre profil (adresse, SIRET, IBAN, etc.)
               plus tard dans votre tableau de bord.
             </p>
@@ -78,7 +78,7 @@
         <div class="px-5 py-4 border-t flex justify-end gap-2">
           <button
             type="button"
-            class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+            class="px-4 py-2 rounded bg-back-200 hover:bg-back-300"
             @click="onCancel"
           >
             Annuler
