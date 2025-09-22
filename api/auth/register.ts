@@ -3,15 +3,15 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
 // ----------------------
-// Supabase client
+// Supabase client (service key car on gère des comptes)
 // ----------------------
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string // Service key car on crée aussi l’entreprise
+  process.env.SUPABASE_SERVICE_ROLE_KEY as string
 );
 
 // ----------------------
-// Génération slug unique
+// Générer un slug unique pour l’entreprise
 // ----------------------
 async function generateUniqueSlug(nom: string, prenom: string) {
   const base = `${prenom}-${nom}`
@@ -39,7 +39,7 @@ async function generateUniqueSlug(nom: string, prenom: string) {
 }
 
 // ----------------------
-// Handler
+// Handler principal
 // ----------------------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -48,40 +48,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { email, password, role, entreprise } = req.body;
 
+  // --- Validation basique
   if (!email || !password || !role) {
     return res.status(400).json({ error: "❌ Champs obligatoires manquants" });
   }
-
   if (!["freelance", "client"].includes(role)) {
     return res.status(400).json({ error: "❌ Rôle invalide" });
   }
 
   try {
-    // 1️⃣ Création user dans Supabase Auth
+    // 1️⃣ Création du user dans Supabase Auth
+    console.log("📩 Payload reçu:", { email, password, role, entreprise });
     const {
       data: { user },
       error: signUpError,
     } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true,
+      email_confirm: true, // 👈 pas besoin de confirmer manuellement
       user_metadata: { role },
     });
 
+    console.log("📤 Réponse createUser:", user, signUpError);
     if (signUpError || !user) {
-      return res
-        .status(500)
-        .json({ error: signUpError?.message || "Erreur création utilisateur" });
+      return res.status(500).json({
+        error: signUpError?.message || "Erreur création utilisateur",
+      });
     }
 
     let createdEntreprise = null;
 
-    // 2️⃣ Si freelance → créer une entreprise associée
+    // 2️⃣ Si freelance → créer une entreprise liée
     if (role === "freelance") {
       if (!entreprise?.nom || !entreprise?.prenom) {
         return res
           .status(400)
-          .json({ error: "Nom et prénom obligatoires pour un freelance" });
+          .json({ error: "Nom et prénom requis pour un freelance" });
       }
 
       const slug = await generateUniqueSlug(entreprise.nom, entreprise.prenom);
@@ -123,6 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       createdEntreprise = ent;
     }
 
+    // 3️⃣ Réponse finale
     return res.status(201).json({
       user: {
         id: user.id,
@@ -133,6 +136,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err: any) {
     console.error("❌ Erreur register:", err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    return res.status(500).json({ error: err.message || "Erreur serveur" });
   }
 }

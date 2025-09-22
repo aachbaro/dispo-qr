@@ -7,7 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 // ----------------------
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
-  process.env.SUPABASE_ANON_KEY as string // ⚠️ ANON KEY car c’est l’auth standard
+  process.env.SUPABASE_ANON_KEY as string // 🔑 Auth standard
 );
 
 // ----------------------
@@ -28,14 +28,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 🔑 Auth via Supabase
+    // 1️⃣ Auth via Supabase
     const {
       data: { user, session },
       error,
-    } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error || !user || !session) {
       return res
@@ -43,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .json({ error: "❌ Email ou mot de passe incorrect" });
     }
 
-    // 📌 Récupérer l’entreprise associée (si c’est un freelance)
+    // 2️⃣ Récupérer l’entreprise associée si freelance
     let entreprise = null;
     if (user.user_metadata?.role === "freelance") {
       const { data: ent } = await supabase
@@ -55,8 +52,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       entreprise = ent;
     }
 
+    // 3️⃣ Retourner token + infos user
     return res.status(200).json({
-      token: session.access_token, // 🎟️ token JWT géré par Supabase
+      token: session.access_token, // 🎟️ JWT Supabase
       user: {
         id: user.id,
         email: user.email,
@@ -66,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         prenom: entreprise?.prenom ?? null,
       },
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error("❌ Erreur login:", err);
     return res.status(500).json({ error: "Erreur serveur" });
   }

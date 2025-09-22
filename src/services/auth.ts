@@ -60,22 +60,20 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 /**
  * Inscription avec Supabase Auth
  */
-export async function register(
-  email: string,
-  password: string,
-  metadata?: any
-) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: metadata, // 👈 user_metadata (role, nom, prenom…)
-    },
+export async function register(payload: {
+  email: string;
+  password: string;
+  role: "freelance" | "client";
+  entreprise?: { nom: string; prenom: string };
+}) {
+  const res = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 
-  if (error) throw error;
-
-  return data.user;
+  if (!res.ok) throw new Error("Erreur inscription");
+  return res.json();
 }
 
 /**
