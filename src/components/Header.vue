@@ -1,4 +1,3 @@
-<!-- src/components/Header.vue -->
 <template>
   <!-- Header -->
   <header class="bg-white border-b border-gray-200 shadow-sm">
@@ -28,6 +27,7 @@
 
         <!-- Si connecté -->
         <template v-else>
+          <span class="text-gray-700 font-medium"> 👤 {{ user.email }} </span>
           <button
             @click="goToMyEntreprise"
             class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700"
@@ -71,11 +71,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { logout } from "../services/auth"; // 👈 utilise logout
 import LoginModal from "./LoginModal.vue";
 import RegisterModal from "./RegisterModal.vue";
 import ContactModal from "./ContactModal.vue";
 import { useAuth } from "../composables/useAuth";
+import { supabase } from "../services/supabase";
 
 const router = useRouter();
 const { user, setUser } = useAuth();
@@ -91,8 +91,11 @@ function onContact() {
 }
 
 // Déconnexion
-function logoutUser() {
-  logout(); // 👈 utilise la fonction du service
+async function logoutUser() {
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error("❌ Erreur déconnexion:", error.message);
+  }
   setUser(null);
   router.push("/");
 }

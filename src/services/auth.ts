@@ -1,13 +1,5 @@
 // src/services/auth.ts
-import { createClient } from "@supabase/supabase-js";
-
-// ----------------------
-// Supabase client (frontend)
-// ----------------------
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL as string,
-  import.meta.env.VITE_SUPABASE_ANON_KEY as string
-);
+import { supabase } from "./supabase"; // 👈 on réutilise l’instance existante
 
 // ----------------------
 // Types
@@ -56,16 +48,14 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 // ----------------------
 // Auth actions
 // ----------------------
-
-/**
- * Inscription avec Supabase Auth
- */
 export async function register(payload: {
   email: string;
   password: string;
   role: "freelance" | "client";
   entreprise?: { nom: string; prenom: string };
 }) {
+  // ⚠️ Pour l’instant tu appelles encore ton ancienne API
+  // Quand tu migreras, tu utiliseras directement supabase.auth.signUp()
   const res = await fetch("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -76,9 +66,6 @@ export async function register(payload: {
   return res.json();
 }
 
-/**
- * Connexion avec Supabase Auth
- */
 export async function login(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -86,13 +73,9 @@ export async function login(email: string, password: string) {
   });
 
   if (error) throw error;
-
   return data.session; // contient access_token
 }
 
-/**
- * Déconnexion
- */
 export async function logout() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;

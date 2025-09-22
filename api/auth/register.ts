@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
 // ----------------------
-// Supabase client (service key car on gère des comptes)
+// Supabase client (service role key car on gère des comptes)
 // ----------------------
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
@@ -13,7 +13,10 @@ const supabase = createClient(
 // ----------------------
 // Générer un slug unique pour l’entreprise
 // ----------------------
-async function generateUniqueSlug(nom: string, prenom: string) {
+async function generateUniqueSlug(
+  nom: string,
+  prenom: string
+): Promise<string> {
   const base = `${prenom}-${nom}`
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -25,13 +28,18 @@ async function generateUniqueSlug(nom: string, prenom: string) {
   let i = 1;
 
   while (true) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("entreprise")
       .select("id")
       .eq("slug", slug)
       .maybeSingle();
 
-    if (!data) break;
+    if (error) {
+      console.error("❌ Erreur vérification slug:", error.message);
+      throw new Error("Impossible de vérifier l’unicité du slug");
+    }
+
+    if (!data) break; // slug dispo
     slug = `${base}-${i++}`;
   }
 
@@ -58,27 +66,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // 1️⃣ Création du user dans Supabase Auth
-    console.log("📩 Payload reçu:", { email, password, role, entreprise });
+    console.log("📩 Payload reçu:", { email, role, entreprise });
     const {
       data: { user },
       error: signUpError,
     } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // 👈 pas besoin de confirmer manuellement
+      email_confirm: true,
       user_metadata: { role },
     });
 
-    console.log("📤 Réponse createUser:", user, signUpError);
     if (signUpError || !user) {
+      console.error("❌ Erreur création user:", signUpError);
       return res.status(500).json({
         error: signUpError?.message || "Erreur création utilisateur",
       });
     }
+    console.log("📤 Utilisateur créé:", user.id);
+
+    // 2️⃣ Création du profile lié
+    const { error: profileError } = await supabase.from("profiles").insert([
+      {
+        id: user.id,
+        role,
+      },
+    ]);
+
+    if (profileError) {
+      console.error("❌ Erreur création profile:", profileError.message);
+      return res.status(500).json({ error: "Erreur création profile" });
+    }
 
     let createdEntreprise = null;
 
-    // 2️⃣ Si freelance → créer une entreprise liée
+    // 3️⃣ Si freelance → créer une entreprise liée
     if (role === "freelance") {
       if (!entreprise?.nom || !entreprise?.prenom) {
         return res
@@ -119,19 +141,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (entError) {
+        console.error("❌ Erreur création entreprise:", entError.message);
         return res.status(500).json({ error: entError.message });
       }
 
       createdEntreprise = ent;
+      console.log("🏢 Entreprise créée:", createdEntreprise.slug);
+
+      // 🔄 Mettre à jour user_metadata avec le slug
+      const { error: updateError } = await supabase.auth.admin.updateUserById(
+        user.id,
+        {
+          user_metadata: {
+            role,
+            slug: createdEntreprise.slug,
+            nom: entreprise.nom,
+            prenom: entreprise.prenom,
+          },
+        }
+      );
+
+      if (updateError) {
+        console.error("⚠️ Erreur mise à jour metadata:", updateError.message);
+      }
     }
 
-    // 3️⃣ Réponse finale
+    // 4️⃣ Réponse finale
     return res.status(201).json({
       user: {
         id: user.id,
         email: user.email,
         role,
+        slug: createdEntreprise?.slug ?? null,
       },
+      profile: { role },
       entreprise: createdEntreprise,
     });
   } catch (err: any) {

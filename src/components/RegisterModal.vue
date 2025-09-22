@@ -97,21 +97,19 @@
   </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { register } from "../services/auth";
+import { supabase } from "../services/supabase";
 
-const props = defineProps({
-  open: Boolean,
-});
+const props = defineProps<{ open: boolean }>();
 const emit = defineEmits(["close", "registered"]);
 
 const router = useRouter();
 
 const email = ref("");
 const password = ref("");
-const role = ref("freelance");
+const role = ref<"freelance" | "client">("freelance");
 const error = ref("");
 const loading = ref(false);
 
@@ -127,26 +125,52 @@ function onCancel() {
 async function handleRegister() {
   loading.value = true;
   error.value = "";
+
   try {
-    const res = await register({
-      email: email.value,
-      password: password.value,
-      role: role.value,
-      entreprise: role.value === "freelance" ? entreprise.value : undefined,
+    // 1️⃣ Appel à ton API backend pour créer user + profile + entreprise
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.value,
+        password: password.value,
+        role: role.value,
+        entreprise: role.value === "freelance" ? entreprise.value : undefined,
+      }),
     });
 
-    console.log("✅ Utilisateur inscrit:", res.user);
-    emit("registered", res.user);
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Erreur inscription");
+    }
 
-    if (res.entreprise) {
-      router.push(`/entreprise/${res.entreprise.slug}`);
+    const data = await res.json();
+    console.log("✅ Utilisateur inscrit:", data);
+
+    emit("registered", data);
+
+    // 2️⃣ Connexion automatique du nouvel utilisateur
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email: email.value,
+      password: password.value,
+    });
+
+    if (loginError) {
+      console.error("❌ Erreur login auto:", loginError.message);
+    } else {
+      console.log("🔑 Login auto réussi !");
+    }
+
+    // 3️⃣ Redirection
+    if (data.entreprise?.slug) {
+      router.push(`/entreprise/${data.entreprise.slug}`);
     } else {
       router.push("/");
     }
 
     emit("close");
-  } catch (err) {
-    error.value = "❌ Erreur lors de l'inscription.";
+  } catch (err: any) {
+    error.value = err.message || "❌ Erreur lors de l'inscription.";
     console.error(err);
   } finally {
     loading.value = false;

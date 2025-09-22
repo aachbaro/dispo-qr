@@ -54,10 +54,11 @@
   </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from "vue";
-import { login } from "../services/auth";
 import { useAuth } from "../composables/useAuth";
+import { supabase } from "../services/supabase";
+import type { AuthUser } from "../services/auth"; // ton type custom
 
 const props = defineProps({
   open: Boolean,
@@ -77,15 +78,35 @@ function onCancel() {
 async function handleLogin() {
   loading.value = true;
   error.value = "";
-  try {
-    const data = await login(email.value, password.value);
-    console.log("✅ Login réussi:", data);
 
-    setUser(data.user);
-    emit("logged", data.user);
+  try {
+    const { data, error: signInError } = await supabase.auth.signInWithPassword(
+      {
+        email: email.value,
+        password: password.value,
+      }
+    );
+
+    if (signInError) throw signInError;
+    if (!data.user) throw new Error("Connexion échouée");
+
+    // 👉 Mapper User → AuthUser
+    const authUser: AuthUser = {
+      id: data.user.id,
+      email: data.user.email ?? "", // force string
+      role: data.user.user_metadata?.role,
+      slug: data.user.user_metadata?.slug,
+      nom: data.user.user_metadata?.nom,
+      prenom: data.user.user_metadata?.prenom,
+    };
+
+    console.log("✅ Login réussi:", authUser);
+
+    setUser(authUser);
+    emit("logged", authUser);
     emit("close");
-  } catch (err) {
-    error.value = "Identifiants invalides.";
+  } catch (err: any) {
+    error.value = err.message || "Identifiants invalides.";
     console.error(err);
   } finally {
     loading.value = false;
