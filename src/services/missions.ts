@@ -1,8 +1,24 @@
 // src/services/missions.ts
+// -------------------------------------------------------------
+// Services liés aux missions d'une entreprise
+//
+// Fonctions disponibles :
+// - createEntrepriseMission(entrepriseId, payload) : créer une mission (owner uniquement)
+// - listEntrepriseMissions(ref, params?)           : lister les missions (public ou owner)
+// - updateEntrepriseMission(entrepriseId, missionId, updates) : mettre à jour une mission
+// - deleteEntrepriseMission(entrepriseId, missionId)          : supprimer une mission
+//
+// ⚠️ Notes :
+// - Les routes API sont désormais unifiées : /api/entreprises/[ref]/missions
+//   (ref = slug pour lecture publique, id pour accès owner).
+// - Les contrôles d'accès (public vs privé) sont gérés côté API.
+// -------------------------------------------------------------
 
-/**
- * Types partagés pour les missions
- */
+import { request } from "./api";
+
+// ----------------------
+// Types
+// ----------------------
 export interface MissionPayload {
   etablissement: string;
   etablissement_address?: string;
@@ -38,67 +54,53 @@ export type MissionUpdate = Partial<MissionPayload> & {
   payment_link?: string;
 };
 
-/**
- * Helpers
- */
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem("adminToken");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(getAuthHeaders() ?? {}),
-      ...(options.headers as Record<string, string>),
-    },
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || res.statusText);
-  }
-  return res.json();
-}
+// ----------------------
+// Services Missions
+// ----------------------
 
 /**
- * Services API Missions (par entreprise)
+ * ➕ Créer une mission (owner uniquement)
  */
-
-// ➕ Créer une mission
 export async function createEntrepriseMission(
-  slug: string,
+  entrepriseId: number,
   payload: MissionPayload
 ): Promise<{ mission: Mission }> {
-  return request<{ mission: Mission }>(`/api/entreprises/${slug}/missions`, {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  return request<{ mission: Mission }>(
+    `/api/entreprises/${entrepriseId}/missions`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
-// 📜 Lister les missions d’une entreprise
+/**
+ * 📜 Lister les missions d’une entreprise
+ * @param ref - id (number) ou slug (string) de l’entreprise
+ */
 export async function listEntrepriseMissions(
-  slug: string,
+  ref: string | number,
   params: { from?: string; to?: string; status?: Mission["status"] } = {}
 ): Promise<{ missions: Mission[] }> {
   const query = new URLSearchParams(
     params as Record<string, string>
   ).toString();
+
   return request<{ missions: Mission[] }>(
-    `/api/entreprises/${slug}/missions${query ? `?${query}` : ""}`
+    `/api/entreprises/${ref}/missions${query ? `?${query}` : ""}`
   );
 }
 
-// ✏️ Mettre à jour une mission
+/**
+ * ✏️ Mettre à jour une mission (owner uniquement)
+ */
 export async function updateEntrepriseMission(
-  slug: string,
-  id: number,
+  entrepriseId: number,
+  missionId: number,
   updates: MissionUpdate
 ): Promise<{ mission: Mission }> {
   return request<{ mission: Mission }>(
-    `/api/entreprises/${slug}/missions/${id}`,
+    `/api/entreprises/${entrepriseId}/missions/${missionId}`,
     {
       method: "PUT",
       body: JSON.stringify(updates),
@@ -106,12 +108,14 @@ export async function updateEntrepriseMission(
   );
 }
 
-// ❌ Supprimer une mission
+/**
+ * ❌ Supprimer une mission (owner uniquement)
+ */
 export async function deleteEntrepriseMission(
-  slug: string,
-  id: number
+  entrepriseId: number,
+  missionId: number
 ): Promise<void> {
-  await request(`/api/entreprises/${slug}/missions/${id}`, {
+  await request(`/api/entreprises/${entrepriseId}/missions/${missionId}`, {
     method: "DELETE",
   });
 }

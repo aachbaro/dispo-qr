@@ -1,5 +1,20 @@
 // src/services/auth.ts
-import { supabase } from "./supabase"; // 👈 on réutilise l’instance existante
+// -------------------------------------------------------------
+// Services liés à l’authentification (couche Supabase)
+//
+// Fonctions disponibles :
+// - getSession()              : retourne la session en cours (JWT, user, etc.)
+// - getCurrentUser()          : retourne les infos du user courant (AuthUser)
+// - register(payload)         : inscription via l’API backend (/api/auth/register)
+// - login(email, password)    : connexion via Supabase Auth (retourne session)
+// - logout()                  : déconnexion Supabase
+//
+// ⚠️ Remarques :
+// - Le stockage user/token est désormais géré par `useAuth.ts`.
+// - Ici : uniquement les appels Supabase / API.
+// -------------------------------------------------------------
+
+import { supabase } from "./supabase";
 
 // ----------------------
 // Types
@@ -10,7 +25,7 @@ export interface AuthUser {
   id: string;
   email: string;
   role?: UserRole;
-  slug?: string; // 👈 si freelance avec entreprise
+  slug?: string; // slug entreprise si freelance
   nom?: string;
   prenom?: string;
 }
@@ -18,12 +33,19 @@ export interface AuthUser {
 // ----------------------
 // Helpers
 // ----------------------
+
+/**
+ * 🔑 Récupérer la session en cours (token, infos user, expiration…)
+ */
 export async function getSession() {
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
   return data.session;
 }
 
+/**
+ * 👤 Récupérer l’utilisateur courant (ou null si non connecté)
+ */
 export async function getCurrentUser(): Promise<AuthUser | null> {
   const { data, error } = await supabase.auth.getUser();
   if (error) {
@@ -32,7 +54,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   }
   if (!data.user) return null;
 
-  // 👇 Custom claims si tu veux stocker plus (role, slug…)
   const metadata = data.user.user_metadata;
 
   return {
@@ -46,16 +67,18 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 // ----------------------
-// Auth actions
+// Actions
 // ----------------------
+
+/**
+ * 📝 Inscription (via backend custom)
+ */
 export async function register(payload: {
   email: string;
   password: string;
   role: "freelance" | "client";
   entreprise?: { nom: string; prenom: string };
 }) {
-  // ⚠️ Pour l’instant tu appelles encore ton ancienne API
-  // Quand tu migreras, tu utiliseras directement supabase.auth.signUp()
   const res = await fetch("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -66,6 +89,9 @@ export async function register(payload: {
   return res.json();
 }
 
+/**
+ * 🔑 Connexion utilisateur
+ */
 export async function login(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
@@ -73,9 +99,23 @@ export async function login(email: string, password: string) {
   });
 
   if (error) throw error;
-  return data.session; // contient access_token
+
+  const session = data.session;
+  const token = session?.access_token;
+
+  if (token) {
+    console.log("🔑 Token sauvegardé:", token);
+    localStorage.setItem("authToken", token);
+  } else {
+    console.warn("⚠️ Aucun access_token reçu de Supabase !");
+  }
+
+  return session;
 }
 
+/**
+ * 🚪 Déconnexion utilisateur
+ */
 export async function logout() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;

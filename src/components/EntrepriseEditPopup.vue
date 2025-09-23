@@ -140,11 +140,11 @@ function onCancel() {
 }
 
 async function onConfirm() {
-  if (!props.entreprise?.slug) return;
+  if (!props.entreprise?.id) return; // ⚠️ utiliser l’ID numérique
 
   loading.value = true;
   try {
-    const { data } = await updateEntreprise(props.entreprise.slug, form.value);
+    const { data } = await updateEntreprise(props.entreprise.id, form.value);
     emit("updated", data);
     emit("close");
   } catch (err) {
@@ -156,7 +156,6 @@ async function onConfirm() {
 }
 </script>
 
-<!-- ✅ Style factorisé -->
 <style scoped>
 .fade-enter-active,
 .fade-leave-active {

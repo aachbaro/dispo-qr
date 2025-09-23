@@ -13,3 +13,4 @@ supabase.auth.getSession().then(({ data }) => {
 const app = createApp(App);
 app.use(router); // ✅ fonctionne si c'est bien une instance
 app.mount("#app");
+

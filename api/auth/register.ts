@@ -1,18 +1,28 @@
 // api/auth/register.ts
+// -------------------------------------------------------------
+// Route : /api/auth/register
+//
+// - POST : Crée un nouvel utilisateur dans Supabase Auth
+//   • Ajoute un profil dans la table `profiles`
+//   • Si role = "freelance", crée aussi une entrée dans `entreprise`
+//   • Génère un slug unique pour l’entreprise
+//
+// ⚠️ Utilise la clé service role (supabaseAdmin)
+// -------------------------------------------------------------
+
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseAdmin } from "../_supabase.js";
 
 // ----------------------
-// Supabase client (service role key car on gère des comptes)
+// Helpers
 // ----------------------
-const supabase = createClient(
-  process.env.SUPABASE_URL as string,
-  process.env.SUPABASE_SERVICE_ROLE_KEY as string
-);
 
-// ----------------------
-// Générer un slug unique pour l’entreprise
-// ----------------------
+/**
+ * Génère un slug unique à partir d’un nom/prénom
+ * @param nom - Nom de l’utilisateur
+ * @param prenom - Prénom de l’utilisateur
+ * @returns slug unique pour entreprise
+ */
 async function generateUniqueSlug(
   nom: string,
   prenom: string
@@ -28,7 +38,7 @@ async function generateUniqueSlug(
   let i = 1;
 
   while (true) {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("entreprise")
       .select("id")
       .eq("slug", slug)
@@ -49,9 +59,10 @@ async function generateUniqueSlug(
 // ----------------------
 // Handler principal
 // ----------------------
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "❌ Method Not Allowed" });
+    return res.status(405).json({ error: "❌ Méthode non autorisée" });
   }
 
   const { email, password, role, entreprise } = req.body;
@@ -70,7 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const {
       data: { user },
       error: signUpError,
-    } = await supabase.auth.admin.createUser({
+    } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
@@ -85,13 +96,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     console.log("📤 Utilisateur créé:", user.id);
 
-    // 2️⃣ Création du profile lié
-    const { error: profileError } = await supabase.from("profiles").insert([
-      {
-        id: user.id,
-        role,
-      },
-    ]);
+    // 2️⃣ Création du profil lié
+    const { error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .insert([
+        {
+          id: user.id,
+          role,
+        },
+      ]);
 
     if (profileError) {
       console.error("❌ Erreur création profile:", profileError.message);
@@ -110,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const slug = await generateUniqueSlug(entreprise.nom, entreprise.prenom);
 
-      const { data: ent, error: entError } = await supabase
+      const { data: ent, error: entError } = await supabaseAdmin
         .from("entreprise")
         .insert([
           {
@@ -149,17 +162,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log("🏢 Entreprise créée:", createdEntreprise.slug);
 
       // 🔄 Mettre à jour user_metadata avec le slug
-      const { error: updateError } = await supabase.auth.admin.updateUserById(
-        user.id,
-        {
+      const { error: updateError } =
+        await supabaseAdmin.auth.admin.updateUserById(user.id, {
           user_metadata: {
             role,
             slug: createdEntreprise.slug,
             nom: entreprise.nom,
             prenom: entreprise.prenom,
           },
-        }
-      );
+        });
 
       if (updateError) {
         console.error("⚠️ Erreur mise à jour metadata:", updateError.message);
@@ -178,7 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       entreprise: createdEntreprise,
     });
   } catch (err: any) {
-    console.error("❌ Erreur register:", err);
+    console.error("❌ Exception register:", err);
     return res.status(500).json({ error: err.message || "Erreur serveur" });
   }
 }

@@ -3,16 +3,15 @@
 // Services liés aux entreprises
 //
 // Fonctions disponibles :
+// - listEntreprises()                : retourne la liste publique de toutes les entreprises
+// - createEntreprise(payload)        : crée une entreprise (user connecté requis)
+// - getEntreprise(ref)               : retourne une entreprise (slug = public, id = owner)
+// - updateEntreprise(ref, updates)   : met à jour une entreprise (owner uniquement)
 //
-// - listEntreprises() : retourne la liste publique de toutes les entreprises
-// - createEntreprise(payload) : crée une entreprise (user connecté requis)
-// - getEntrepriseBySlug(slug) : retourne une entreprise publique via son slug
-// - updateEntreprise(id, updates) : met à jour une entreprise (owner uniquement)
-//
-// ⚠️ Remarque :
-// - L’accès public se fait via le slug (lecture uniquement).
-// - L’update doit idéalement se faire via l’ID ou user_id
-//   (plus sûr que le slug qui peut changer).
+// ⚠️ Remarques :
+// - La lecture publique se fait via le slug (string).
+// - La lecture/modification propriétaire se fait via l’id ou le slug.
+// - Les contrôles d’accès sont appliqués côté API.
 // -------------------------------------------------------------
 
 import { request } from "./api";
@@ -44,13 +43,15 @@ export interface Entreprise {
 }
 
 // ----------------------
-// Services
+// Services Entreprises
 // ----------------------
 
 /**
- * 📜 Liste publique des entreprises
+ * 📜 Liste publique de toutes les entreprises
  */
-export async function listEntreprises(): Promise<{ entreprises: Entreprise[] }> {
+export async function listEntreprises(): Promise<{
+  entreprises: Entreprise[];
+}> {
   return request<{ entreprises: Entreprise[] }>("/api/entreprises");
 }
 
@@ -67,24 +68,26 @@ export async function createEntreprise(
 }
 
 /**
- * 🔍 Récupérer une entreprise publique par son slug
+ * 🔍 Récupérer une entreprise
+ * @param ref - slug (string) → lecture publique | id (number) → lecture owner
  */
-export async function getEntrepriseBySlug(
-  slug: string
+export async function getEntreprise(
+  ref: string | number
 ): Promise<{ data: Entreprise }> {
-  return request<{ data: Entreprise }>(`/api/entreprises/${slug}`);
+  return request<{ data: Entreprise }>(`/api/entreprises/${ref}`);
 }
 
 /**
  * ✏️ Mettre à jour une entreprise (owner uniquement)
- * ⚠️ Ici je propose de passer l'ID plutôt que le slug
- * pour plus de cohérence côté sécurité.
+ * @param ref - identifiant numérique OU slug de l’entreprise
  */
 export async function updateEntreprise(
-  id: number,
-  updates: Partial<Omit<Entreprise, "id" | "slug" | "created_at" | "updated_at">>
+  ref: string | number,
+  updates: Partial<
+    Omit<Entreprise, "id" | "slug" | "created_at" | "updated_at">
+  >
 ): Promise<{ data: Entreprise }> {
-  return request<{ data: Entreprise }>(`/api/entreprises/${id}`, {
+  return request<{ data: Entreprise }>(`/api/entreprises/${ref}`, {
     method: "PUT",
     body: JSON.stringify(updates),
   });

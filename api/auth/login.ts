@@ -1,21 +1,32 @@
 // api/auth/login.ts
+// -------------------------------------------------------------
+// Route : /api/auth/login
+//
+// - POST : Authentifie un utilisateur via email + password
+//   • Vérifie les credentials dans Supabase Auth
+//   • Retourne un JWT d’accès + infos de profil
+//   • Si role = "freelance", joint les infos de l’entreprise associée
+//
+// ⚠️ Utilise la clé ANON (client standard)
+// -------------------------------------------------------------
+
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
 // ----------------------
-// Supabase client
+// Supabase client public
 // ----------------------
 const supabase = createClient(
   process.env.SUPABASE_URL as string,
-  process.env.SUPABASE_ANON_KEY as string // 🔑 Auth standard
+  process.env.SUPABASE_ANON_KEY as string // 🔑 Clé publique
 );
 
 // ----------------------
-// Handler
+// Handler principal
 // ----------------------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "❌ Method not allowed" });
+    return res.status(405).json({ error: "❌ Méthode non autorisée" });
   }
 
   const { email, password } = req.body as {
@@ -28,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 1️⃣ Auth via Supabase
+    // 1️⃣ Authentification via Supabase
     const {
       data: { user, session },
       error,
@@ -40,21 +51,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .json({ error: "❌ Email ou mot de passe incorrect" });
     }
 
-    // 2️⃣ Récupérer l’entreprise associée si freelance
+    // 2️⃣ Récupérer l’entreprise associée si role = freelance
     let entreprise = null;
     if (user.user_metadata?.role === "freelance") {
-      const { data: ent } = await supabase
+      const { data: ent, error: entError } = await supabase
         .from("entreprise")
         .select("id, slug, nom, prenom")
         .eq("user_id", user.id)
         .maybeSingle();
+
+      if (entError) {
+        console.warn(
+          "⚠️ Impossible de charger l’entreprise liée:",
+          entError.message
+        );
+      }
 
       entreprise = ent;
     }
 
     // 3️⃣ Retourner token + infos user
     return res.status(200).json({
-      token: session.access_token, // 🎟️ JWT Supabase
+      token: session.access_token, // 🎟️ JWT d’auth
       user: {
         id: user.id,
         email: user.email,
@@ -64,8 +82,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         prenom: entreprise?.prenom ?? null,
       },
     });
-  } catch (err) {
-    console.error("❌ Erreur login:", err);
-    return res.status(500).json({ error: "Erreur serveur" });
+  } catch (err: any) {
+    console.error("❌ Exception login:", err);
+    return res.status(500).json({ error: err.message || "Erreur serveur" });
   }
 }
