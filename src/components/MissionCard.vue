@@ -1,3 +1,15 @@
+// src/components/MissionCard.vue //
+------------------------------------------------------------- // Carte d’une
+mission (MissionCard) //
+------------------------------------------------------------- // // 📌
+Description : // - Affiche les détails d’une mission (contact, créneau, statut)
+// - Permet d’accepter/refuser/mettre à jour le statut // - Gère l’ouverture du
+FactureModal pour générer une facture // // 🔒 Règles d’accès : // - Affichage
+public si mission transmise // - Actions (accepter/refuser/générer facture)
+réservées à l’owner entreprise // // ⚠️ Remarques : // - Charge l’entreprise via
+son slug pour alimenter FactureModal // - Passe l’entreprise complète en prop au
+modal // // -------------------------------------------------------------
+
 <template>
   <div class="border rounded-lg p-4 space-y-2">
     <!-- Infos principales -->
@@ -123,24 +135,38 @@
     v-if="showFactureModal"
     :open="showFactureModal"
     :mission="mission"
+    :entreprise="entreprise || {}"
     @close="showFactureModal = false"
     @generated="handleFactureGenerated"
   />
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { updateEntrepriseMission } from "../services/missions"; // ✅ nouveau nom
+import { ref, computed, onMounted } from "vue";
+import { updateEntrepriseMission } from "../services/missions";
+import { getEntreprise } from "../services/entreprises";
 import FactureModal from "./FactureModal.vue";
 
 const props = defineProps<{
   mission: any;
-  slug: string; // 👈 on reçoit le slug de l’entreprise
+  slug: string; // slug de l’entreprise (depuis MissionList)
 }>();
 
 const emit = defineEmits(["updated"]);
 const loading = ref(false);
 const showFactureModal = ref(false);
+const entreprise = ref<any>(null); // 👈 nouvelle donnée
+
+// Charger entreprise via slug
+onMounted(async () => {
+  try {
+    const response = await getEntreprise(props.slug);
+    console.log("Réponse getEntreprise :", response);
+    entreprise.value = response.data || response.entreprise || response;
+  } catch (err) {
+    console.error("❌ Erreur récupération entreprise :", err);
+  }
+});
 
 const statusClass = computed(() => {
   switch (props.mission.status) {
@@ -204,7 +230,6 @@ async function markRealized() {
   try {
     await updateEntrepriseMission(props.slug, props.mission.id, {
       status: "réalisé",
-      end_slot: new Date().toISOString(),
     });
     emit("updated");
   } catch (err) {
