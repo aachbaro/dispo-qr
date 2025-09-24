@@ -1,14 +1,20 @@
-// src/components/MissionCard.vue //
-------------------------------------------------------------- // Carte d’une
-mission (MissionCard) //
-------------------------------------------------------------- // // 📌
-Description : // - Affiche les détails d’une mission (contact, créneau, statut)
-// - Permet d’accepter/refuser/mettre à jour le statut // - Gère l’ouverture du
-FactureModal pour générer une facture // // 🔒 Règles d’accès : // - Affichage
-public si mission transmise // - Actions (accepter/refuser/générer facture)
-réservées à l’owner entreprise // // ⚠️ Remarques : // - Charge l’entreprise via
-son slug pour alimenter FactureModal // - Passe l’entreprise complète en prop au
-modal // // -------------------------------------------------------------
+<!-- src/components/MissionCard.vue -->
+<!-- -------------------------------------------------------------
+ Carte d’une mission (MissionCard)
+ ---------------------------------------------------------------
+ 📌 Description :
+ - Affiche les détails d’une mission (contact, créneau, statut)
+ - Permet d’accepter/refuser/mettre à jour le statut
+ - Gère l’ouverture du FactureModal pour générer une facture
+
+ 🔒 Règles d’accès :
+ - Affichage public si mission transmise
+ - Actions réservées à l’owner entreprise
+
+ ⚠️ Remarques :
+ - Charge l’entreprise via son slug pour alimenter FactureModal
+ - Passe l’entreprise complète en prop au modal
+ ------------------------------------------------------------- -->
 
 <template>
   <div class="border rounded-lg p-4 space-y-2">
@@ -21,9 +27,19 @@ modal // // -------------------------------------------------------------
     </div>
 
     <!-- Adresse établissement -->
-    <p v-if="mission.etablissement_address" class="text-sm text-back-600">
-      📍 {{ mission.etablissement_address }}
-    </p>
+    <div
+      v-if="mission.etablissement_adresse_ligne1 || mission.ville"
+      class="text-sm text-back-600"
+    >
+      📍
+      {{ mission.etablissement_adresse_ligne1 || "" }}
+      <span v-if="mission.etablissement_adresse_ligne2">
+        , {{ mission.etablissement_adresse_ligne2 }}
+      </span>
+      <br />
+      {{ mission.code_postal || "" }} {{ mission.ville || "" }}
+      <span v-if="mission.pays">({{ mission.pays }})</span>
+    </div>
 
     <!-- Contact -->
     <p v-if="mission.contact_name" class="text-sm font-medium">
@@ -147,21 +163,22 @@ import { updateEntrepriseMission } from "../services/missions";
 import { getEntreprise } from "../services/entreprises";
 import FactureModal from "./FactureModal.vue";
 
+import type { Mission } from "../services/missions";
+
 const props = defineProps<{
-  mission: any;
-  slug: string; // slug de l’entreprise (depuis MissionList)
+  mission: Mission;
+  slug: string;
 }>();
 
 const emit = defineEmits(["updated"]);
 const loading = ref(false);
 const showFactureModal = ref(false);
-const entreprise = ref<any>(null); // 👈 nouvelle donnée
+const entreprise = ref<any>(null);
 
 // Charger entreprise via slug
 onMounted(async () => {
   try {
     const response = await getEntreprise(props.slug);
-    console.log("Réponse getEntreprise :", response);
     entreprise.value = response.data || response.entreprise || response;
   } catch (err) {
     console.error("❌ Erreur récupération entreprise :", err);
@@ -245,7 +262,6 @@ function createDevis() {
   console.log("📝 Générer un devis pour mission", props.mission.id);
 }
 function createFacture() {
-  console.log("📄 Générer une facture", props.mission.id);
   showFactureModal.value = true;
 }
 function handleFactureGenerated(data: unknown) {

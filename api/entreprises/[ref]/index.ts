@@ -18,10 +18,6 @@ import { supabaseAdmin } from "../../_supabase.js";
 // ----------------------
 // Helpers
 // ----------------------
-
-/**
- * ✅ Vérifie le token et récupère le user_id
- */
 async function getUserFromToken(req: VercelRequest) {
   const auth = req.headers.authorization;
   if (!auth) return null;
@@ -35,9 +31,6 @@ async function getUserFromToken(req: VercelRequest) {
   return data.user;
 }
 
-/**
- * 🛡️ Vérifie si le user est owner ou admin
- */
 function canAccessSensitive(user: any, entreprise: any): boolean {
   if (!user) return false;
   if (user.id === entreprise.user_id) return true;
@@ -45,17 +38,12 @@ function canAccessSensitive(user: any, entreprise: any): boolean {
   return false;
 }
 
-/**
- * 🔍 Récupère une entreprise par id ou slug
- */
 async function findEntreprise(ref: string) {
   let query = supabaseAdmin.from("entreprise").select("*");
 
   if (!isNaN(Number(ref))) {
-    // ref est numérique → chercher par id
     query = query.eq("id", Number(ref));
   } else {
-    // sinon → chercher par slug
     query = query.eq("slug", ref);
   }
 
@@ -63,7 +51,7 @@ async function findEntreprise(ref: string) {
 }
 
 // ----------------------
-// Handler principal
+// Handler
 // ----------------------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { ref } = req.query;
@@ -73,12 +61,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // ✅ Récupère user si connecté
     const user = await getUserFromToken(req);
 
+    // ----------------------
+    // GET
+    // ----------------------
     if (req.method === "GET") {
       const { data: entreprise, error } = await findEntreprise(ref);
-
       if (error) {
         console.error("❌ Erreur fetch entreprise:", error.message);
         return res.status(500).json({ error: error.message });
@@ -87,13 +76,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: "Entreprise non trouvée" });
       }
 
-      // Filtrage selon droits
+      // Champs publics
       let data: any = {
         id: entreprise.id,
         slug: entreprise.slug,
         nom: entreprise.nom,
         prenom: entreprise.prenom,
-        adresse: entreprise.adresse,
+        adresse_ligne1: entreprise.adresse_ligne1,
+        adresse_ligne2: entreprise.adresse_ligne2,
+        ville: entreprise.ville,
+        code_postal: entreprise.code_postal,
+        pays: entreprise.pays,
         email: entreprise.email,
         telephone: entreprise.telephone,
         taux_horaire: entreprise.taux_horaire,
@@ -101,6 +94,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         created_at: entreprise.created_at,
       };
 
+      // Champs privés si owner/admin
       if (canAccessSensitive(user, entreprise)) {
         data = {
           ...data,
@@ -119,21 +113,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ entreprise: data });
     }
 
+    // ----------------------
+    // PUT
+    // ----------------------
     if (req.method === "PUT") {
       if (!user) return res.status(401).json({ error: "Non authentifié" });
 
       const { data: entreprise } = await findEntreprise(ref);
-
       if (!entreprise) {
         return res.status(404).json({ error: "Entreprise non trouvée" });
       }
-
       if (!canAccessSensitive(user, entreprise)) {
         return res.status(403).json({ error: "Accès interdit" });
       }
 
       const updates = req.body;
-
       const { data, error } = await supabaseAdmin
         .from("entreprise")
         .update(updates)
@@ -142,19 +136,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (error) return res.status(500).json({ error: error.message });
-
       return res.status(200).json({ entreprise: data });
     }
 
+    // ----------------------
+    // DELETE
+    // ----------------------
     if (req.method === "DELETE") {
       if (!user) return res.status(401).json({ error: "Non authentifié" });
 
       const { data: entreprise } = await findEntreprise(ref);
-
       if (!entreprise) {
         return res.status(404).json({ error: "Entreprise non trouvée" });
       }
-
       if (!canAccessSensitive(user, entreprise)) {
         return res.status(403).json({ error: "Accès interdit" });
       }
@@ -165,7 +159,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", entreprise.id);
 
       if (error) return res.status(500).json({ error: error.message });
-
       return res.status(200).json({ message: "Entreprise supprimée" });
     }
 

@@ -24,7 +24,14 @@ export interface Entreprise {
   user_id?: string;
   nom: string;
   prenom: string;
-  adresse: string;
+
+  // ✅ Adresse découpée
+  adresse_ligne1: string;
+  adresse_ligne2?: string;
+  ville: string;
+  code_postal: string;
+  pays: string;
+
   email: string;
   telephone?: string;
   siret: string;
@@ -73,8 +80,8 @@ export async function createEntreprise(
  */
 export async function getEntreprise(
   ref: string | number
-): Promise<{ data: Entreprise }> {
-  return request<{ data: Entreprise }>(`/api/entreprises/${ref}`);
+): Promise<{ entreprise: Entreprise }> {
+  return request<{ entreprise: Entreprise }>(`/api/entreprises/${ref}`);
 }
 
 /**
@@ -86,8 +93,8 @@ export async function updateEntreprise(
   updates: Partial<
     Omit<Entreprise, "id" | "slug" | "created_at" | "updated_at">
   >
-): Promise<{ data: Entreprise }> {
-  return request<{ data: Entreprise }>(`/api/entreprises/${ref}`, {
+): Promise<{ entreprise: Entreprise }> {
+  return request<{ entreprise: Entreprise }>(`/api/entreprises/${ref}`, {
     method: "PUT",
     body: JSON.stringify(updates),
   });

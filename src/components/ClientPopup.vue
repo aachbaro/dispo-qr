@@ -30,21 +30,54 @@
               type="text"
               required
               placeholder="Nom du restaurant"
-              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          <!-- Adresse -->
+          <!-- Adresse (ligne 1 et 2) -->
           <div class="space-y-1">
-            <label class="text-sm font-medium"
-              >Adresse de l’établissement</label
-            >
+            <label class="text-sm font-medium">Adresse</label>
             <input
-              v-model="etablissementAddress"
+              v-model="adresseLigne1"
               type="text"
               required
-              placeholder="Adresse complète"
-              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              placeholder="Adresse (ligne 1)"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              v-model="adresseLigne2"
+              type="text"
+              placeholder="Complément d’adresse (ligne 2)"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <!-- CP / Ville -->
+          <div class="grid grid-cols-2 gap-3">
+            <input
+              v-model="codePostal"
+              type="text"
+              required
+              placeholder="Code postal"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              v-model="ville"
+              type="text"
+              required
+              placeholder="Ville"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <!-- Pays -->
+          <div class="space-y-1">
+            <input
+              v-model="pays"
+              type="text"
+              required
+              placeholder="Pays"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -57,7 +90,7 @@
                 type="tel"
                 required
                 placeholder="+33 6 12 34 56 78"
-                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div class="space-y-1">
@@ -67,7 +100,7 @@
                 type="email"
                 required
                 placeholder="contact@restaurant.com"
-                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -79,7 +112,7 @@
               v-model="contactName"
               type="text"
               placeholder="ex: Responsable salle"
-              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -90,7 +123,7 @@
               v-model="instructions"
               rows="3"
               placeholder="Précisions sur la mission..."
-              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             ></textarea>
           </div>
 
@@ -99,7 +132,7 @@
             <label class="text-sm font-medium">Mode</label>
             <select
               v-model="mode"
-              class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
             >
               <option value="freelance">Freelance (auto-entrepreneur)</option>
               <option value="salarié">Salarié (contrat d'extra)</option>
@@ -115,7 +148,7 @@
                 v-model="startDate"
                 :min="minDate"
                 @wheel.prevent="onScrollDate($event, 'startDate')"
-                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
@@ -125,7 +158,7 @@
                 v-model="endDate"
                 :min="minDate"
                 @wheel.prevent="onScrollDate($event, 'endDate')"
-                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -139,7 +172,7 @@
                 v-model="startTime"
                 step="900"
                 @wheel.prevent="onScrollTime($event, 'startTime')"
-                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <div>
@@ -149,7 +182,7 @@
                 v-model="endTime"
                 step="900"
                 @wheel.prevent="onScrollTime($event, 'endTime')"
-                class="w-full rounded-lg border border-back-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -163,7 +196,7 @@
         <div class="px-5 py-4 border-t flex justify-end gap-2">
           <button
             type="button"
-            class="px-4 py-2 rounded bg-back-200 hover:bg-back-300"
+            class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
             @click="onCancel"
           >
             Annuler
@@ -199,7 +232,11 @@ const emit = defineEmits(["close", "created"]);
 
 // Champs
 const etablissement = ref("");
-const etablissementAddress = ref("");
+const adresseLigne1 = ref("");
+const adresseLigne2 = ref("");
+const codePostal = ref("");
+const ville = ref("");
+const pays = ref("");
 const contactName = ref("");
 const contactEmail = ref("");
 const contactPhone = ref("");
@@ -290,7 +327,11 @@ async function onConfirm() {
   try {
     const { mission } = await createEntrepriseMission(props.slug, {
       etablissement: etablissement.value,
-      etablissement_address: etablissementAddress.value,
+      etablissement_adresse_ligne1: adresseLigne1.value,
+      etablissement_adresse_ligne2: adresseLigne2.value || null,
+      etablissement_code_postal: codePostal.value,
+      etablissement_ville: ville.value,
+      etablissement_pays: pays.value,
       contact_name: contactName.value,
       contact_email: contactEmail.value,
       contact_phone: contactPhone.value,
@@ -308,14 +349,3 @@ async function onConfirm() {
   }
 }
 </script>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.15s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

@@ -4,7 +4,25 @@
     <!-- Infos principales -->
     <p><b>Email :</b> {{ entreprise.email }}</p>
     <p><b>Téléphone :</b> {{ entreprise.telephone || "—" }}</p>
-    <p><b>Adresse :</b> {{ entreprise.adresse || "—" }}</p>
+
+    <!-- Adresse -->
+    <div>
+      <b>Adresse :</b>
+      <template v-if="hasAdresse">
+        <div class="ml-4">
+          <p>{{ entreprise.adresse_ligne1 }}</p>
+          <p v-if="entreprise.adresse_ligne2">
+            {{ entreprise.adresse_ligne2 }}
+          </p>
+          <p>
+            {{ entreprise.code_postal || "" }}
+            {{ entreprise.ville || "" }}
+          </p>
+          <p v-if="entreprise.pays">{{ entreprise.pays }}</p>
+        </div>
+      </template>
+      <span v-else>—</span>
+    </div>
 
     <!-- Bouton Modifier -->
     <div v-if="isOwner" class="mt-4 flex justify-end">
@@ -28,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import type { Entreprise } from "../services/entreprises";
 import EntrepriseEditPopup from "./EntrepriseEditPopup.vue";
 
@@ -46,8 +64,19 @@ const emit = defineEmits<{
 // ✅ State
 const showEdit = ref(false);
 
+// ✅ Computed
+const hasAdresse = computed(() =>
+  Boolean(
+    props.entreprise.adresse_ligne1 ||
+      props.entreprise.adresse_ligne2 ||
+      props.entreprise.code_postal ||
+      props.entreprise.ville ||
+      props.entreprise.pays
+  )
+);
+
 // ✅ Methods
 function handleUpdated(data: Entreprise) {
-  emit("updated", data); // Remonte l’info au parent
+  emit("updated", data);
 }
 </script>

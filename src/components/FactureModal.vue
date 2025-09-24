@@ -1,23 +1,17 @@
-// src/components/FactureModal.vue
-// -------------------------------------------------------------
-// Modal de génération de facture
-// -------------------------------------------------------------
-//
-// 📌 Description :
-//   - Permet à une entreprise connectée de générer une facture
-//   - Pré-remplit les infos de l’entreprise et de la mission
-//   - Calcule automatiquement heures travaillées, HT, TTC
-//
-// 🔒 Règles d’accès :
-//   - Accessible uniquement aux entreprises connectées
-//   - Les infos entreprise proviennent de la table entreprise
-//
-// ⚠️ Remarques :
-//   - Le numéro de facture est saisi manuellement (format YYYY-NNNN)
-//   - Message explicatif sous le champ pour rappeler l’obligation légale
-//
-// -------------------------------------------------------------
+// src/components/FactureModal.vue //
+------------------------------------------------------------- // Modal de
+génération de facture //
+------------------------------------------------------------- // // 📌
+Description : // - Permet à une entreprise connectée de générer une facture // -
+Pré-remplit les infos de l’entreprise et de la mission // - Calcule
+automatiquement heures travaillées, HT, TTC // // 🔒 Règles d’accès : // -
+Accessible uniquement aux entreprises connectées // - Les infos entreprise
+proviennent de la table entreprise // // ⚠️ Remarques : // - Le numéro de
+facture est saisi manuellement (format YYYY-NNNN) // - Message explicatif sous
+le champ pour rappeler l’obligation légale // //
+-------------------------------------------------------------
 
+<!-- src/components/FactureModal.vue -->
 <template>
   <Transition name="fade">
     <div
@@ -43,27 +37,110 @@
         </div>
 
         <!-- Body -->
-        <div class="px-5 py-4 space-y-4">
+        <div class="px-5 py-4 space-y-6">
           <!-- Émetteur -->
           <div>
             <h3 class="text-sm font-semibold text-gray-700">Émetteur</h3>
-            <div class="grid grid-cols-2 gap-3">
-              <input v-model="entNom" type="text" class="input" placeholder="Nom" />
-              <input v-model="entPrenom" type="text" class="input" placeholder="Prénom" />
-              <input v-model="entAdresse" type="text" class="col-span-2 input" placeholder="Adresse" />
-              <input v-model="entEmail" type="email" class="input" placeholder="Email" />
-              <input v-model="entTelephone" type="text" class="input" placeholder="Téléphone" />
-              <input v-model="entSiret" type="text" class="input" placeholder="SIRET" />
-              <input v-model="entStatut" type="text" class="input" placeholder="Statut juridique" />
+            <div class="grid grid-cols-2 gap-3 mt-2">
+              <input
+                v-model="entNom"
+                type="text"
+                class="input"
+                placeholder="Nom"
+              />
+              <input
+                v-model="entPrenom"
+                type="text"
+                class="input"
+                placeholder="Prénom"
+              />
+
+              <!-- Adresse -->
+              <input
+                v-model="entAdresseLigne1"
+                type="text"
+                class="col-span-2 input"
+                placeholder="Adresse ligne 1"
+              />
+              <input
+                v-model="entAdresseLigne2"
+                type="text"
+                class="col-span-2 input"
+                placeholder="Adresse ligne 2"
+              />
+
+              <input
+                v-model="entCodePostal"
+                type="text"
+                class="input"
+                placeholder="Code postal"
+              />
+              <input
+                v-model="entVille"
+                type="text"
+                class="input"
+                placeholder="Ville"
+              />
+              <input
+                v-model="entPays"
+                type="text"
+                class="col-span-2 input"
+                placeholder="Pays"
+              />
+
+              <!-- Contact -->
+              <input
+                v-model="entEmail"
+                type="email"
+                class="input"
+                placeholder="Email"
+              />
+              <input
+                v-model="entTelephone"
+                type="text"
+                class="input"
+                placeholder="Téléphone"
+              />
+
+              <!-- Infos légales -->
+              <input
+                v-model="entSiret"
+                type="text"
+                class="input"
+                placeholder="SIRET"
+              />
+              <input
+                v-model="entStatut"
+                type="text"
+                class="input"
+                placeholder="Statut juridique"
+              />
             </div>
           </div>
 
           <!-- Mentions -->
           <div>
-            <h3 class="text-sm font-semibold text-gray-700">Mentions légales</h3>
-            <textarea v-model="entMentionTva" rows="1" class="input w-full" />
-            <textarea v-model="entConditions" rows="1" class="input w-full" />
-            <textarea v-model="entPenalites" rows="1" class="input w-full" />
+            <h3 class="text-sm font-semibold text-gray-700">
+              Mentions légales
+            </h3>
+            <textarea
+              v-model="entMentionTva"
+              rows="1"
+              class="input w-full"
+              placeholder="Mention TVA"
+            />
+            <textarea
+              v-model="entConditions"
+              rows="1"
+              class="input w-full"
+              placeholder="Conditions de paiement"
+            />
+            <textarea
+              v-model="entPenalites"
+              rows="1"
+              class="input w-full"
+              placeholder="Pénalités de retard"
+            />
           </div>
 
           <!-- Numéro + date -->
@@ -79,8 +156,7 @@
               />
               <p class="text-xs text-gray-700 mt-1">
                 ⚖️ <b>Attention :</b> le numéro de facture doit être
-                <b>unique, chronologique et sans trou</b> pour toute votre activité.
-                Exemple recommandé : <code>2025-0001</code>, <code>2025-0002</code>, etc.
+                <b>unique, chronologique et sans trou</b>.
               </p>
               <p v-if="invoiceError" class="text-sm text-red-600 mt-1">
                 {{ invoiceError }}
@@ -98,35 +174,101 @@
           </div>
 
           <!-- Client -->
-          <div class="space-y-1">
-            <label class="text-sm font-medium">Établissement</label>
-            <input v-model="clientName" type="text" class="input w-full" />
+          <div>
+            <h3 class="text-sm font-semibold text-gray-700">Client</h3>
+            <div class="space-y-2 mt-2">
+              <input
+                v-model="clientName"
+                type="text"
+                class="input w-full"
+                placeholder="Nom établissement"
+              />
+              <input
+                v-model="clientAdresseLigne1"
+                type="text"
+                class="input w-full"
+                placeholder="Adresse ligne 1"
+              />
+              <input
+                v-model="clientAdresseLigne2"
+                type="text"
+                class="input w-full"
+                placeholder="Adresse ligne 2"
+              />
+
+              <div class="grid grid-cols-2 gap-3">
+                <input
+                  v-model="clientCodePostal"
+                  type="text"
+                  class="input"
+                  placeholder="Code postal"
+                />
+                <input
+                  v-model="clientVille"
+                  type="text"
+                  class="input"
+                  placeholder="Ville"
+                />
+              </div>
+              <input
+                v-model="clientPays"
+                type="text"
+                class="input w-full"
+                placeholder="Pays"
+              />
+
+              <div class="grid grid-cols-2 gap-3">
+                <input
+                  v-model="contactName"
+                  type="text"
+                  class="input"
+                  placeholder="Nom contact"
+                />
+                <input
+                  v-model="contactPhone"
+                  type="text"
+                  class="input"
+                  placeholder="Téléphone"
+                />
+              </div>
+              <input
+                v-model="contactEmail"
+                type="email"
+                class="input w-full"
+                placeholder="Email"
+              />
+            </div>
           </div>
-          <div class="space-y-1">
-            <label class="text-sm font-medium">Adresse client</label>
-            <textarea v-model="clientAddress" rows="2" class="input w-full"></textarea>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <input v-model="contactName" type="text" class="input" placeholder="Nom contact" />
-            <input v-model="contactPhone" type="text" class="input" placeholder="Téléphone" />
-          </div>
-          <input v-model="contactEmail" type="email" class="input w-full" placeholder="Email" />
 
           <!-- Description -->
           <div class="space-y-1">
             <label class="text-sm font-medium">Description</label>
-            <textarea v-model="description" rows="3" class="input w-full"></textarea>
+            <textarea
+              v-model="description"
+              rows="3"
+              class="input w-full"
+            ></textarea>
           </div>
 
           <!-- Heures / taux -->
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1">
               <label class="text-sm font-medium">Durée (heures)</label>
-              <input v-model="hours" type="number" step="0.25" class="input w-full" />
+              <input
+                v-model="hours"
+                type="number"
+                step="0.25"
+                class="input w-full"
+              />
             </div>
             <div class="space-y-1">
               <label class="text-sm font-medium">Taux horaire (€)</label>
-              <input v-model="rate" type="number" step="0.01" class="input w-full" />
+              <input
+                v-model="rate"
+                type="number"
+                step="0.01"
+                class="input w-full"
+              />
             </div>
           </div>
 
@@ -134,25 +276,48 @@
           <div class="grid grid-cols-3 gap-3 mt-2">
             <div class="space-y-1">
               <label class="text-sm font-medium">Montant HT (€)</label>
-              <input :value="amountHt" type="number" class="input w-full bg-gray-100" readonly />
+              <input
+                :value="amountHt"
+                type="number"
+                class="input w-full bg-gray-100"
+                readonly
+              />
             </div>
             <div class="space-y-1">
               <label class="text-sm font-medium">TVA (%)</label>
-              <input v-model="tvaRate" type="number" step="0.1" class="input w-full" />
+              <input
+                v-model="tvaRate"
+                type="number"
+                step="0.1"
+                class="input w-full"
+              />
             </div>
             <div class="space-y-1">
               <label class="text-sm font-medium">Total TTC (€)</label>
-              <input :value="totalTtc" type="number" class="input w-full bg-gray-100" readonly />
+              <input
+                :value="totalTtc"
+                type="number"
+                class="input w-full bg-gray-100"
+                readonly
+              />
             </div>
           </div>
         </div>
 
         <!-- Footer -->
         <div class="px-5 py-4 border-t flex justify-end gap-2">
-          <button type="button" class="btn-primary hover:bg-red-700" @click="onCancel">
+          <button
+            type="button"
+            class="btn-primary hover:bg-red-700"
+            @click="onCancel"
+          >
             Annuler
           </button>
-          <button type="button" class="btn-primary hover:bg-blue-700" @click="generate">
+          <button
+            type="button"
+            class="btn-primary hover:bg-blue-700"
+            @click="generate"
+          >
             Générer
           </button>
         </div>
@@ -163,18 +328,24 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { createEntrepriseFacture } from "../services/factures";
 
 const props = defineProps({
   open: Boolean,
-  mission: { type: Object, required: true },
+  mission: { type: Object, required: false },
   entreprise: { type: Object, required: true },
 });
 
-const emit = defineEmits(["close", "generated"]);
+const emit = defineEmits(["close", "created"]);
 
+// Émetteur
 const entNom = ref("");
 const entPrenom = ref("");
-const entAdresse = ref("");
+const entAdresseLigne1 = ref("");
+const entAdresseLigne2 = ref("");
+const entCodePostal = ref("");
+const entVille = ref("");
+const entPays = ref("");
 const entEmail = ref("");
 const entTelephone = ref("");
 const entSiret = ref("");
@@ -183,20 +354,27 @@ const entMentionTva = ref("");
 const entConditions = ref("");
 const entPenalites = ref("");
 
+// Client
 const clientName = ref("");
-const clientAddress = ref("");
+const clientAdresseLigne1 = ref("");
+const clientAdresseLigne2 = ref("");
+const clientCodePostal = ref("");
+const clientVille = ref("");
+const clientPays = ref("");
 const contactName = ref("");
 const contactPhone = ref("");
 const contactEmail = ref("");
 const description = ref("");
 
+// Facture
 const invoiceNumber = ref("");
-const invoiceDate = ref(new Date().toLocaleDateString("fr-FR"));
+const invoiceDate = ref(new Date().toISOString().slice(0, 10));
 const invoiceError = ref("");
 
 const hours = ref(0);
 const rate = ref(0);
 const tvaRate = ref(0);
+const loading = ref(false);
 
 const amountHt = computed(() => (hours.value * rate.value).toFixed(2));
 const totalTtc = computed(() => {
@@ -205,18 +383,23 @@ const totalTtc = computed(() => {
   return (ht * (1 + tva / 100)).toFixed(2);
 });
 
+// ✅ validation format facture
 function validateInvoiceNumber(num: string): boolean {
-  const regex = /^\d{4}-\d{1,}$/;
-  return regex.test(num);
+  return /^\d{4}-\d{1,}$/.test(num);
 }
 
+// ✅ Pré-remplissage entreprise
 watch(
   () => props.entreprise,
   (e) => {
     if (e) {
       entNom.value = e.nom;
       entPrenom.value = e.prenom;
-      entAdresse.value = e.adresse;
+      entAdresseLigne1.value = e.adresse_ligne1 || "";
+      entAdresseLigne2.value = e.adresse_ligne2 || "";
+      entCodePostal.value = e.code_postal || "";
+      entVille.value = e.ville || "";
+      entPays.value = e.pays || "";
       entEmail.value = e.email;
       entTelephone.value = e.telephone || "";
       entSiret.value = e.siret;
@@ -230,19 +413,24 @@ watch(
   { immediate: true }
 );
 
+// ✅ Pré-remplissage mission
 watch(
   () => props.mission,
   (m) => {
     if (m) {
       clientName.value = m.etablissement || "";
-      clientAddress.value = m.etablissement_address || "";
+      clientAdresseLigne1.value = m.etablissement_adresse_ligne1 || "";
+      clientAdresseLigne2.value = m.etablissement_adresse_ligne2 || "";
+      clientCodePostal.value = m.etablissement_code_postal || "";
+      clientVille.value = m.etablissement_ville || "";
+      clientPays.value = m.etablissement_pays || "";
       contactName.value = m.contact_name || "";
       contactPhone.value = m.contact_phone || "";
       contactEmail.value = m.contact_email || "";
-      description.value = `Mission du ${new Date(m.date_slot).toLocaleString("fr-FR", {
-        dateStyle: "short",
-        timeStyle: "short",
-      })}`;
+      description.value = `Mission du ${new Date(m.date_slot).toLocaleString(
+        "fr-FR",
+        { dateStyle: "short", timeStyle: "short" }
+      )}`;
 
       const start = new Date(m.date_slot);
       const end = new Date(m.end_slot);
@@ -257,9 +445,9 @@ function onCancel() {
   emit("close");
 }
 
-function generate() {
+// ✅ Génération facture
+async function generate() {
   invoiceError.value = "";
-
   if (!invoiceNumber.value) {
     invoiceError.value = "Numéro de facture obligatoire.";
     return;
@@ -270,39 +458,56 @@ function generate() {
   }
 
   if (!clientName.value || !hours.value || !rate.value) {
-    alert("Merci de vérifier les infos du client, le nombre d'heures et le taux.");
+    alert(
+      "Merci de vérifier les infos du client, le nombre d'heures et le taux."
+    );
     return;
   }
 
-  emit("generated", {
-    invoiceNumber: invoiceNumber.value,
-    invoiceDate: invoiceDate.value,
-    entreprise: {
-      nom: entNom.value,
-      prenom: entPrenom.value,
-      adresse: entAdresse.value,
-      email: entEmail.value,
-      telephone: entTelephone.value,
-      siret: entSiret.value,
-      statut_juridique: entStatut.value,
+  loading.value = true;
+  try {
+    const payload = {
+      numero: invoiceNumber.value,
+      date_emission: invoiceDate.value,
+      entreprise_id: props.entreprise.id,
+      mission_id: props.mission?.id ?? null,
+
+      // Client
+      client_name: clientName.value,
+      client_address_ligne1: clientAdresseLigne1.value,
+      client_address_ligne2: clientAdresseLigne2.value,
+      client_code_postal: clientCodePostal.value,
+      client_ville: clientVille.value,
+      client_pays: clientPays.value,
+      contact_name: contactName.value,
+      contact_phone: contactPhone.value,
+      contact_email: contactEmail.value,
+
+      description: description.value,
+      hours: parseFloat(hours.value.toString()),
+      rate: parseFloat(rate.value.toString()),
+      montant_ht: parseFloat(amountHt.value),
+      tva: parseFloat(tvaRate.value),
+      montant_ttc: parseFloat(totalTtc.value),
+
       mention_tva: entMentionTva.value,
       conditions_paiement: entConditions.value,
       penalites_retard: entPenalites.value,
-    },
-    clientName: clientName.value,
-    clientAddress: clientAddress.value,
-    contactName: contactName.value,
-    contactPhone: contactPhone.value,
-    contactEmail: contactEmail.value,
-    description: description.value,
-    hours: parseFloat(hours.value.toString()),
-    rate: parseFloat(rate.value.toString()),
-    amountHt: parseFloat(amountHt.value),
-    tvaRate: parseFloat(tvaRate.value),
-    totalTtc: parseFloat(totalTtc.value),
-  });
+    };
 
-  emit("close");
+    const { facture } = await createEntrepriseFacture(
+      props.entreprise.id,
+      payload
+    );
+
+    emit("created", facture);
+    emit("close");
+  } catch (err) {
+    console.error("❌ Erreur génération facture :", err);
+    alert("Impossible de générer la facture");
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 

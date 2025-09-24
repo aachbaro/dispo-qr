@@ -6,6 +6,7 @@
  - Infos de l’entreprise (nom, prénom, infos publiques ou privées)
  - Agenda (slots)
  - Missions (selon droits)
+ - Factures (owner uniquement)
  
  ⚠️ Règles :
  - Si l’utilisateur connecté est owner (slug correspond) → accès complet
@@ -56,6 +57,19 @@
         :is-owner="isOwner"
       />
     </div>
+
+    <!-- Factures -->
+    <div
+      v-if="entreprise && isOwner"
+      class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg"
+    >
+      <FactureList
+        :ref-entreprise="entreprise.id"
+        :entreprise="entreprise"
+        @edit="onEditFacture"
+        @deleted="onDeletedFacture"
+      />
+    </div>
   </div>
 </template>
 
@@ -68,6 +82,7 @@ import { getEntreprise } from "../services/entreprises";
 import Agenda from "../components/agenda/Agenda.vue";
 import MissionList from "../components/MissionList.vue";
 import EntrepriseInfos from "../components/EntrepriseInfos.vue";
+import FactureList from "../components/factures/FactureList.vue";
 
 // ----------------------
 // State
@@ -95,4 +110,16 @@ onMounted(async () => {
     loading.value = false;
   }
 });
+
+// ----------------------
+// Handlers factures
+// ----------------------
+function onEditFacture(facture: any) {
+  console.log("✏️ Éditer facture", facture);
+  // TODO: ouvrir modal édition facture
+}
+
+function onDeletedFacture(id: number) {
+  console.log("🗑️ Facture supprimée", id);
+}
 </script>

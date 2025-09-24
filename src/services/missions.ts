@@ -21,10 +21,20 @@ import { request } from "./api";
 // ----------------------
 export interface MissionPayload {
   etablissement: string;
-  etablissement_address?: string;
+
+  // Adresse normalisée
+  etablissement_adresse_ligne1: string;
+  etablissement_adresse_ligne2?: string;
+  etablissement_ville: string;
+  etablissement_code_postal: string;
+  etablissement_pays?: string;
+
+  // Contact
   contact_name?: string;
   contact_email: string;
   contact_phone: string;
+
+  // Infos mission
   instructions?: string;
   mode: "freelance" | "salarié";
   date_slot: string; // format ISO

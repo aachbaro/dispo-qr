@@ -26,7 +26,6 @@
  */
 export function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem("authToken");
-  console.log("🔑 getAuthHeaders() token:", token);
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -50,7 +49,7 @@ export async function request<T>(
     ...(options.headers || {}),
   };
 
-  console.log("🌍 Fetch:", url, options.method || "GET", { headers });
+  // console.log("🌍 Fetch:", url, options.method || "GET", { headers });
 
   const res = await fetch(url, { ...options, headers });
 

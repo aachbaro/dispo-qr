@@ -29,7 +29,17 @@
           </div>
 
           <!-- Adresse -->
-          <FormField label="Adresse" v-model="form.adresse" />
+          <FormField label="Adresse (ligne 1)" v-model="form.adresse_ligne1" />
+          <FormField
+            label="Adresse (ligne 2)"
+            v-model="form.adresse_ligne2"
+            placeholder="Complément d'adresse (facultatif)"
+          />
+          <div class="grid grid-cols-3 gap-3">
+            <FormField label="Code postal" v-model="form.code_postal" />
+            <FormField label="Ville" v-model="form.ville" />
+            <FormField label="Pays" v-model="form.pays" />
+          </div>
 
           <!-- Email / Téléphone -->
           <div class="grid grid-cols-2 gap-3">
@@ -83,7 +93,7 @@
         <!-- Footer -->
         <div class="px-6 py-4 border-t flex justify-end gap-2">
           <button
-            class="px-4 py-2 rounded bg-back-200 hover:bg-back-300"
+            class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
             @click="onCancel"
           >
             Annuler
@@ -140,7 +150,7 @@ function onCancel() {
 }
 
 async function onConfirm() {
-  if (!props.entreprise?.id) return; // ⚠️ utiliser l’ID numérique
+  if (!props.entreprise?.id) return;
 
   loading.value = true;
   try {
