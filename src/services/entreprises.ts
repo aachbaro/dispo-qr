@@ -7,6 +7,7 @@
 // - createEntreprise(payload)        : crée une entreprise (user connecté requis)
 // - getEntreprise(ref)               : retourne une entreprise (slug = public, id = owner)
 // - updateEntreprise(ref, updates)   : met à jour une entreprise (owner uniquement)
+// - connectEntrepriseStripe(ref)     : génère un lien d’onboarding Stripe
 //
 // ⚠️ Remarques :
 // - La lecture publique se fait via le slug (string).
@@ -47,24 +48,21 @@ export interface Entreprise {
   slug: string;
   created_at: string;
   updated_at: string;
+
+  // Ajout Stripe
+  stripe_account_id?: string;
 }
 
 // ----------------------
 // Services Entreprises
 // ----------------------
 
-/**
- * 📜 Liste publique de toutes les entreprises
- */
 export async function listEntreprises(): Promise<{
   entreprises: Entreprise[];
 }> {
   return request<{ entreprises: Entreprise[] }>("/api/entreprises");
 }
 
-/**
- * ➕ Créer une entreprise (user connecté requis)
- */
 export async function createEntreprise(
   payload: Omit<Entreprise, "id" | "created_at" | "updated_at" | "user_id">
 ): Promise<{ entreprise: Entreprise }> {
@@ -74,20 +72,12 @@ export async function createEntreprise(
   });
 }
 
-/**
- * 🔍 Récupérer une entreprise
- * @param ref - slug (string) → lecture publique | id (number) → lecture owner
- */
 export async function getEntreprise(
   ref: string | number
 ): Promise<{ entreprise: Entreprise }> {
   return request<{ entreprise: Entreprise }>(`/api/entreprises/${ref}`);
 }
 
-/**
- * ✏️ Mettre à jour une entreprise (owner uniquement)
- * @param ref - identifiant numérique OU slug de l’entreprise
- */
 export async function updateEntreprise(
   ref: string | number,
   updates: Partial<
@@ -98,4 +88,15 @@ export async function updateEntreprise(
     method: "PUT",
     body: JSON.stringify(updates),
   });
+}
+
+/**
+ * 🔗 Connecter une entreprise à Stripe (génère un lien d’onboarding)
+ * @param ref - slug ou id de l’entreprise
+ * @returns URL Stripe à laquelle rediriger l’utilisateur
+ */
+export async function connectEntrepriseStripe(
+  ref: string | number
+): Promise<{ url: string }> {
+  return request<{ url: string }>(`/api/entreprises/${ref}/connect-stripe`);
 }

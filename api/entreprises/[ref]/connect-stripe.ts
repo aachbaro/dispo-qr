@@ -22,11 +22,9 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
-import { supabaseAdmin } from "../../_supabase"; // adapte si besoin
+import { supabaseAdmin } from "../../_supabase.js"; // adapte si besoin
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-  apiVersion: "2024-06-20",
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {

@@ -52,16 +52,10 @@ export interface Mission extends MissionPayload {
     | "payé"
     | "terminé"
     | "refusé";
-  devis_url?: string;
-  facture_url?: string;
-  payment_link?: string;
 }
 
 export type MissionUpdate = Partial<MissionPayload> & {
   status?: Mission["status"];
-  devis_url?: string;
-  facture_url?: string;
-  payment_link?: string;
 };
 
 // ----------------------

@@ -27,6 +27,24 @@
       <p class="text-sm font-bold mt-1">
         Total TTC : {{ facture.montant_ttc.toFixed(2) }} €
       </p>
+
+      <!-- Paiement -->
+      <div v-if="facture.payment_link" class="mt-2">
+        💳
+        <a
+          :href="facture.payment_link"
+          target="_blank"
+          class="text-blue-600 underline"
+        >
+          Lien de paiement
+        </a>
+        <button
+          class="ml-2 text-xs text-gray-600 underline"
+          @click="copyPaymentLink"
+        >
+          Copier
+        </button>
+      </div>
     </div>
 
     <!-- Actions -->
@@ -35,6 +53,7 @@
       <button class="btn-secondary" @click="$emit('edit', facture)">
         ✏️ Modifier
       </button>
+      <button class="btn-secondary" @click="onPaymentLink">💳 Paiement</button>
       <button class="btn-danger" @click="onDelete">🗑️ Supprimer</button>
     </div>
   </div>
@@ -45,6 +64,7 @@ import { computed } from "vue";
 import type { Facture } from "../../services/factures";
 import { useFactures } from "../../composables/useFactures";
 import { generateFacturePdf } from "../../utils/pdf/facturePdf";
+import { generateFacturePaymentLink } from "../../services/factures";
 
 const props = defineProps<{
   facture: Facture;
@@ -52,7 +72,7 @@ const props = defineProps<{
   entreprise: any; // ⚠️ doit contenir iban, bic, infos émetteur
 }>();
 
-const emit = defineEmits(["edit", "deleted"]);
+const emit = defineEmits(["edit", "deleted", "updated"]);
 
 const { removeFacture } = useFactures();
 
@@ -86,6 +106,31 @@ function downloadPdf() {
   } catch (err) {
     console.error("❌ Erreur génération PDF:", err);
     alert("Impossible de générer le PDF.");
+  }
+}
+
+async function onPaymentLink() {
+  try {
+    const { url } = await generateFacturePaymentLink(
+      props.refEntreprise,
+      props.facture.id
+    );
+    emit("updated", { ...props.facture, payment_link: url });
+    alert("✅ Lien de paiement généré !");
+  } catch (err) {
+    console.error("❌ Erreur génération lien paiement:", err);
+    alert("Impossible de générer le lien de paiement");
+  }
+}
+
+async function copyPaymentLink() {
+  if (!props.facture.payment_link) return;
+  try {
+    await navigator.clipboard.writeText(props.facture.payment_link);
+    alert("Lien copié dans le presse-papier ✅");
+  } catch (err) {
+    console.error("❌ Erreur copie lien:", err);
+    alert("Impossible de copier le lien");
   }
 }
 </script>

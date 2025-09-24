@@ -92,6 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         taux_horaire: entreprise.taux_horaire,
         devise: entreprise.devise,
         created_at: entreprise.created_at,
+        stripe_account_id: entreprise.stripe_account_id,
       };
 
       // Champs privés si owner/admin

@@ -8,10 +8,11 @@
 // - getEntrepriseFacture(ref, factureId)     : récupérer une facture
 // - updateEntrepriseFacture(ref, factureId)  : mettre à jour une facture
 // - deleteEntrepriseFacture(ref, factureId)  : supprimer une facture
+// - generateFacturePaymentLink(ref, id)      : générer un lien de paiement Stripe
 //
 // ⚠️ Notes :
 // - ref = slug (string) ou id (number) de l’entreprise
-// - l’API applique les contrôles d’accès (JWT + RLS)
+// - L’API applique les contrôles d’accès (JWT + RLS)
 // -------------------------------------------------------------
 
 import { request } from "./api";
@@ -51,6 +52,7 @@ export interface FacturePayload {
   conditions_paiement?: string;
   penalites_retard?: string;
 
+  // Lien mission
   mission_id?: number; // optionnel
 }
 
@@ -58,10 +60,23 @@ export interface Facture extends FacturePayload {
   id: number;
   entreprise_id: number;
   created_at: string;
+
+  // PDF généré
   url?: string;
+
+  // Paiement Stripe
+  payment_link?: string;
+  stripe_session_id?: string;
+  stripe_payment_intent?: string;
+  status: "en_attente" | "payé" | "annulée";
 }
 
-export type FactureUpdate = Partial<FacturePayload>;
+export type FactureUpdate = Partial<FacturePayload> & {
+  payment_link?: string;
+  stripe_session_id?: string;
+  stripe_payment_intent?: string;
+  status?: Facture["status"];
+};
 
 // ----------------------
 // Services Factures
@@ -128,4 +143,17 @@ export async function deleteEntrepriseFacture(
   await request(`/api/entreprises/${ref}/factures/${factureId}`, {
     method: "DELETE",
   });
+}
+
+/**
+ * 💳 Générer un lien de paiement Stripe pour une facture
+ */
+export async function generateFacturePaymentLink(
+  ref: string | number,
+  factureId: number
+): Promise<{ url: string }> {
+  return request<{ url: string }>(
+    `/api/entreprises/${ref}/factures/${factureId}/payment-link`,
+    { method: "POST" }
+  );
 }

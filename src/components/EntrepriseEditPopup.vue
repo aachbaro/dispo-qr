@@ -154,8 +154,11 @@ async function onConfirm() {
 
   loading.value = true;
   try {
-    const { data } = await updateEntreprise(props.entreprise.id, form.value);
-    emit("updated", data);
+    const { entreprise } = await updateEntreprise(
+      props.entreprise.id,
+      form.value
+    );
+    emit("updated", entreprise);
     emit("close");
   } catch (err) {
     console.error("❌ Erreur mise à jour entreprise:", err);

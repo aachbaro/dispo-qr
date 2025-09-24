@@ -24,6 +24,19 @@
       <span v-else>—</span>
     </div>
 
+    <!-- Stripe -->
+    <div v-if="isOwner" class="mt-4">
+      <div
+        v-if="entreprise.stripe_account_id"
+        class="text-green-600 font-medium"
+      >
+        ✅ Compte Stripe connecté
+      </div>
+      <div v-else>
+        <ConnectStripeButton :refEntreprise="entreprise.slug" />
+      </div>
+    </div>
+
     <!-- Bouton Modifier -->
     <div v-if="isOwner" class="mt-4 flex justify-end">
       <button
@@ -46,9 +59,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import type { Entreprise } from "../services/entreprises";
+import { getEntreprise } from "../services/entreprises";
 import EntrepriseEditPopup from "./EntrepriseEditPopup.vue";
+import ConnectStripeButton from "./ConnectStripeButton.vue";
 
 // ✅ Props
 const props = defineProps<{
@@ -60,6 +75,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "updated", data: Entreprise): void;
 }>();
+
+console.log("✅ Props entreprise:", props.entreprise); // 👈 log props
 
 // ✅ State
 const showEdit = ref(false);
@@ -79,4 +96,22 @@ const hasAdresse = computed(() =>
 function handleUpdated(data: Entreprise) {
   emit("updated", data);
 }
+
+/**
+ * 🔄 Recharge entreprise après redirection Stripe
+ */
+async function refreshEntrepriseIfNeeded() {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has("stripe-success")) {
+    try {
+      const { entreprise } = await getEntreprise(props.entreprise.slug);
+      emit("updated", entreprise);
+    } catch (err) {
+      console.error("❌ Erreur refresh entreprise après Stripe:", err);
+    }
+  }
+}
+
+// ✅ Lifecycle
+onMounted(refreshEntrepriseIfNeeded);
 </script>
