@@ -1,19 +1,23 @@
 // api/entreprises/[ref]/factures/[id]/payment-link.ts
 // -------------------------------------------------------------
-// Génère un lien de paiement Stripe pour une facture donnée
+// Générateur de lien de paiement Stripe pour une facture
 // -------------------------------------------------------------
 //
-// Étapes :
-// 1. Vérifie l’authentification de l’utilisateur (JWT)
-// 2. Vérifie que le user est bien owner ou admin de l’entreprise
-// 3. Récupère la facture en base
-// 4. Crée une session Checkout Stripe avec le montant TTC
-// 5. Sauvegarde session_id, payment_intent et lien de paiement en base
-// 6. Retourne { url } pour rediriger ou partager
+// 📌 Description :
+//   - Crée une session Checkout Stripe pour la facture
+//   - Retourne une URL sécurisée à partager ou rediriger
 //
-// ⚠️ Notes :
-// - Le statut de la facture est mis à jour en `paiement_en_attente`
-// - L’état final sera confirmé via le webhook Stripe
+// 📍 Endpoints :
+//   - POST /api/entreprises/[ref]/factures/[id]/payment-link
+//
+// 🔒 Règles d’accès :
+//   - Authentification JWT requise
+//   - Réservé au propriétaire de l’entreprise ou admin
+//
+// ⚠️ Remarques :
+//   - Le statut de la facture passe en `pending_payment`
+//   - Le statut final sera confirmé par le webhook Stripe
+//
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -130,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent,
         payment_link: session.url,
-        status: "paiement_en_attente",
+        status: "pending_payment", // ✅ enum normalisé
       })
       .eq("id", facture.id);
 

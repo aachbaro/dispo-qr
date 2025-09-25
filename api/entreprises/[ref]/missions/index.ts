@@ -1,16 +1,27 @@
 // api/entreprises/[ref]/missions/index.ts
 // -------------------------------------------------------------
-// Route missions entreprise : /api/entreprises/[ref]/missions
+// Gestion des missions d’une entreprise
+// -------------------------------------------------------------
 //
-// - GET : Liste les missions
-//   • Si user authentifié + owner/admin → accès complet
-//   • Sinon → accès limité (missions publiques uniquement, ex. status validé/terminé)
+// 📌 Description :
+//   - Liste ou crée des missions liées à une entreprise
 //
-// - POST : Créer une mission
-//   • Si user connecté → mission liée à son compte (client_id)
-//   • Si user non connecté → mission anonyme (contact infos dans payload)
+// 📍 Endpoints :
+//   - GET  /api/entreprises/[ref]/missions → liste missions
+//   - POST /api/entreprises/[ref]/missions → crée mission
 //
-// ⚠️ Vérifie le token JWT pour gérer les droits d’accès en GET
+// 🔒 Règles d’accès :
+//   - Authentification JWT obligatoire pour créer
+//   - GET :
+//       • Si owner/admin → accès complet
+//       • Sinon → accès limité (missions publiques seulement)
+//
+// ⚠️ Remarques :
+//   - ref = slug (string) ou id (number) de l’entreprise
+//   - id  = identifiant numérique de la mission
+//   - Statuts possibles → ENUM mission_status :
+//       • proposed, validated, pending_payment, paid, completed, refused, realized
+//
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -88,7 +99,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .order("created_at", { ascending: false });
 
       if (!canAccessSensitive(user, entreprise)) {
-        query = query.in("status", ["validé", "terminé"]);
+        // 🌍 Pour le public : seulement les missions validées ou complétées
+        query = query.in("status", ["validated", "completed"]);
       }
 
       const { data, error } = await query;
@@ -111,6 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ...payload,
             entreprise_id: entreprise.id,
             client_id: user.id, // lié au compte client
+            status: payload.status || "proposed", // sécurité
           })
           .select()
           .single();
@@ -125,7 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .insert({
           ...payload,
           entreprise_id: entreprise.id,
-          status: "proposé", // par défaut
+          status: "proposed", // par défaut
         })
         .select()
         .single();

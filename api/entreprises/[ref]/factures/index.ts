@@ -1,18 +1,25 @@
 // api/entreprises/[ref]/factures/index.ts
 // -------------------------------------------------------------
-// Route factures entreprise : /api/entreprises/[ref]/factures
+// Gestion des factures d’une entreprise
+// -------------------------------------------------------------
 //
-// - GET  : Liste les factures d’une entreprise
-// - POST : Créer une facture
+// 📌 Description :
+//   - Liste toutes les factures d’une entreprise
+//   - Permet de créer une nouvelle facture
+//
+// 📍 Endpoints :
+//   - GET  /api/entreprises/[ref]/factures  → liste factures
+//   - POST /api/entreprises/[ref]/factures  → créer facture
 //
 // 🔒 Règles d’accès :
-//   - Réservé à l’owner de l’entreprise ou admin
-//   - Vérification via JWT (auth.uid lié à entreprise.user_id)
+//   - Authentification JWT requise
+//   - Réservé au propriétaire de l’entreprise ou admin
 //
 // ⚠️ Remarques :
 //   - Le numéro de facture doit être unique dans l’entreprise
 //   - Une facture peut être liée ou non à une mission
-//   - Le tri est décroissant par date d’émission
+//   - Le tri se fait par date d’émission décroissante
+//   - Les statuts possibles sont définis dans l’ENUM facture_status
 //
 // -------------------------------------------------------------
 
@@ -67,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const user = await getUserFromToken(req);
 
-    // 🔍 Entreprise
+    // 🔍 Récupération entreprise
     const { data: entreprise, error: entrepriseError } = await findEntreprise(
       ref
     );
@@ -108,6 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...payload,
         entreprise_id: entreprise.id,
         mission_id: payload.mission_id || null,
+        status: payload.status || "pending_payment", // ✅ statut par défaut cohérent
       };
 
       const { data, error } = await supabaseAdmin

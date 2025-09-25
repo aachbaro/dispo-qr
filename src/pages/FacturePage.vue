@@ -12,10 +12,18 @@
     </div>
 
     <!-- Infos facture -->
-    <div v-if="facture" class="border rounded p-4 bg-white shadow">
+    <div v-if="facture" class="border rounded p-4 bg-white shadow space-y-2">
       <p><b>Client :</b> {{ facture.client_name }}</p>
       <p><b>Total TTC :</b> {{ facture.montant_ttc.toFixed(2) }} €</p>
-      <p><b>Status :</b> {{ facture.status }}</p>
+      <p>
+        <b>Status :</b>
+        <span
+          :class="statusClasses[facture.status]"
+          class="px-2 py-1 rounded text-sm font-medium"
+        >
+          {{ statusLabels[facture.status] || facture.status }}
+        </span>
+      </p>
     </div>
     <div v-else class="text-gray-500">Chargement...</div>
   </div>
@@ -26,11 +34,34 @@ import { ref, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { getEntrepriseFacture } from "../services/factures";
 
+// ----------------------
+// State
+// ----------------------
 const route = useRoute();
 const facture = ref<any>(null);
 const paid = ref(false);
 const canceled = ref(false);
 
+// ----------------------
+// Labels & styles
+// ----------------------
+const statusLabels: Record<string, string> = {
+  pending: "En attente",
+  pending_payment: "Paiement en attente",
+  paid: "Payée",
+  cancelled: "Annulée",
+};
+
+const statusClasses: Record<string, string> = {
+  pending: "bg-gray-100 text-gray-700",
+  pending_payment: "bg-yellow-100 text-yellow-700",
+  paid: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-700",
+};
+
+// ----------------------
+// Lifecycle
+// ----------------------
 onMounted(async () => {
   // 🎯 check paramètres Stripe
   paid.value = route.query.paid === "1";

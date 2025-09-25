@@ -16,6 +16,9 @@
 // ⚠️ Notes :
 // - ref = slug (string) ou id (number) de l’entreprise
 // - id  = id numérique de la facture
+// - Le numéro de facture doit être unique dans l’entreprise
+// - En prod, DELETE devrait être remplacé par un "annuler" logique
+// - Si la facture est marquée comme "paid", la mission liée passe aussi en "paid"
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -76,9 +79,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: "Accès interdit" });
     }
 
-    // Gestion selon méthode
+    // ----------------------
+    // GET → Lire facture
+    // ----------------------
     if (req.method === "GET") {
-      // 📄 Lire facture
       const { data: facture, error } = await supabaseAdmin
         .from("factures")
         .select("*")
@@ -86,45 +90,72 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("entreprise_id", entreprise.id)
         .single();
 
-      if (error || !facture) {
+      if (error) return res.status(500).json({ error: error.message });
+      if (!facture) {
         return res.status(404).json({ error: "Facture introuvable" });
       }
 
       return res.status(200).json({ facture });
     }
 
+    // ----------------------
+    // PUT → Mettre à jour facture
+    // ----------------------
     if (req.method === "PUT") {
-      // ✏️ Mettre à jour facture
-      const updates = req.body ? JSON.parse(req.body) : {};
+      const payload = req.body ? JSON.parse(req.body) : {};
+
+      const toUpdate = {
+        ...payload,
+        mission_id: payload.mission_id || null,
+      };
 
       const { data: facture, error } = await supabaseAdmin
         .from("factures")
-        .update(updates)
+        .update(toUpdate)
         .eq("id", Number(id))
         .eq("entreprise_id", entreprise.id)
         .select()
         .single();
 
-      if (error || !facture) {
-        return res.status(500).json({ error: "Erreur mise à jour facture" });
+      if (error) {
+        if (error.code === "23505") {
+          return res
+            .status(400)
+            .json({ error: "Numéro de facture déjà utilisé." });
+        }
+        return res.status(500).json({ error: error.message });
+      }
+
+      // 🔄 Propagation du statut vers la mission si payé
+      if (facture && facture.status === "paid" && facture.mission_id) {
+        const { error: missionError } = await supabaseAdmin
+          .from("missions")
+          .update({ status: "paid" })
+          .eq("id", facture.mission_id);
+
+        if (missionError) {
+          console.error(
+            `⚠️ Erreur lors de la mise à jour de la mission liée à la facture ${facture.id}:`,
+            missionError
+          );
+        }
       }
 
       return res.status(200).json({ facture });
     }
 
+    // ----------------------
+    // DELETE → Supprimer facture
+    // ----------------------
     if (req.method === "DELETE") {
-      // 🗑️ Supprimer facture
       const { error } = await supabaseAdmin
         .from("factures")
         .delete()
         .eq("id", Number(id))
         .eq("entreprise_id", entreprise.id);
 
-      if (error) {
-        return res.status(500).json({ error: "Erreur suppression facture" });
-      }
-
-      return res.status(200).json({ success: true });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(204).end();
     }
 
     return res.status(405).json({ error: "Méthode non autorisée" });

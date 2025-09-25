@@ -68,7 +68,7 @@ export interface Facture extends FacturePayload {
   payment_link?: string;
   stripe_session_id?: string;
   stripe_payment_intent?: string;
-  status: "en_attente" | "payé" | "annulée";
+  status: "pending" | "pending_payment" | "paid" | "cancelled";
 }
 
 export type FactureUpdate = Partial<FacturePayload> & {

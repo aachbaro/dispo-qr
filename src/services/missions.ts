@@ -9,7 +9,7 @@
 // - deleteEntrepriseMission(entrepriseId, missionId)          : supprimer une mission
 //
 // ⚠️ Notes :
-// - Les routes API sont désormais unifiées : /api/entreprises/[ref]/missions
+// - Les routes API sont unifiées : /api/entreprises/[ref]/missions
 //   (ref = slug pour lecture publique, id pour accès owner).
 // - Les contrôles d'accès (public vs privé) sont gérés côté API.
 // -------------------------------------------------------------
@@ -45,13 +45,13 @@ export interface Mission extends MissionPayload {
   id: number;
   created_at: string;
   status:
-    | "proposé"
-    | "validé"
-    | "réalisé"
-    | "paiement_en_attente"
-    | "payé"
-    | "terminé"
-    | "refusé";
+    | "proposed"
+    | "validated"
+    | "pending_payment"
+    | "paid"
+    | "completed"
+    | "refused"
+    | "realized";
 }
 
 export type MissionUpdate = Partial<MissionPayload> & {

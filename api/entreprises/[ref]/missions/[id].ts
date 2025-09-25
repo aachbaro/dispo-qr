@@ -1,13 +1,24 @@
 // api/entreprises/[ref]/missions/[id].ts
 // -------------------------------------------------------------
-// Route mission spécifique : /api/entreprises/[ref]/missions/[id]
+// Gestion d’une mission spécifique
+// -------------------------------------------------------------
 //
-// - PUT    : Met à jour une mission (owner entreprise ou admin uniquement)
-// - DELETE : Supprime une mission (owner entreprise ou admin uniquement)
+// 📌 Description :
+//   - Permet de mettre à jour ou supprimer une mission
 //
-// ⚠️ Vérifie le token JWT pour différencier droits d’accès
-// ⚠️ ref = id (bigint) ou slug de l’entreprise
-// ⚠️ id  = identifiant numérique de la mission
+// 📍 Endpoints :
+//   - PUT    /api/entreprises/[ref]/missions/[id] → update mission
+//   - DELETE /api/entreprises/[ref]/missions/[id] → delete mission
+//
+// 🔒 Règles d’accès :
+//   - Authentification JWT obligatoire
+//   - Réservé au propriétaire de l’entreprise ou admin
+//
+// ⚠️ Remarques :
+//   - ref = slug (string) ou id (number) de l’entreprise
+//   - id  = identifiant numérique de la mission
+//   - Les statuts possibles sont ceux définis dans l’ENUM mission_status
+//
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -28,7 +39,7 @@ async function getUserFromToken(req: VercelRequest) {
   return data.user;
 }
 
-function canAccessSensitive(user: any, entreprise: any): boolean {
+function canAccess(user: any, entreprise: any): boolean {
   if (!user) return false;
   if (user.id === entreprise.user_id) return true;
   if (user.app_metadata?.role === "admin") return true;
@@ -56,13 +67,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // ✅ Vérifie user connecté
+    // 🔐 Vérifie user connecté
     const user = await getUserFromToken(req);
     if (!user) {
       return res.status(401).json({ error: "Non authentifié" });
     }
 
-    // 🔍 Récupère l’entreprise (id ou slug)
+    // 🔎 Récupère l’entreprise (id ou slug)
     const { data: entreprise, error: entrepriseError } = await findEntreprise(
       ref
     );
@@ -75,17 +86,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 🔒 Vérifie les droits
-    if (!canAccessSensitive(user, entreprise)) {
+    if (!canAccess(user, entreprise)) {
       return res.status(403).json({ error: "Accès interdit" });
     }
 
-    // Cast mission id en number
+    // 🔢 Cast mission id
     const missionId = Number(id);
     if (isNaN(missionId)) {
       return res.status(400).json({ error: "ID mission invalide" });
     }
 
-    // 🔍 Vérifie que la mission existe bien pour cette entreprise
+    // 🔎 Vérifie que la mission existe
     const { data: mission, error: missionError } = await supabaseAdmin
       .from("missions")
       .select("*")
@@ -106,6 +117,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ----------------------
     if (req.method === "PUT") {
       const updates = req.body;
+
+      // ✅ Forcer le statut dans l’ENUM (sécurité)
+      if (
+        updates.status &&
+        ![
+          "proposed",
+          "validated",
+          "pending_payment",
+          "paid",
+          "completed",
+          "refused",
+          "realized",
+        ].includes(updates.status)
+      ) {
+        return res.status(400).json({ error: "Statut invalide" });
+      }
 
       const { data, error } = await supabaseAdmin
         .from("missions")

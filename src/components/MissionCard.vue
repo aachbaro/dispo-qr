@@ -21,15 +21,18 @@
     <!-- Infos principales -->
     <div class="flex justify-between items-center">
       <h3 class="font-bold text-lg">{{ mission.etablissement }}</h3>
-      <span class="px-2 py-1 text-xs rounded-full" :class="statusClass">
-        {{ mission.status }}
+      <span
+        class="px-2 py-1 text-xs rounded-full"
+        :class="statusClasses[mission.status]"
+      >
+        {{ statusLabels[mission.status] || mission.status }}
       </span>
     </div>
 
     <!-- Adresse établissement -->
     <div
       v-if="mission.etablissement_adresse_ligne1 || mission.ville"
-      class="text-sm text-back-600"
+      class="text-sm text-gray-600"
     >
       📍
       {{ mission.etablissement_adresse_ligne1 || "" }}
@@ -65,13 +68,13 @@
     </p>
 
     <!-- Créneau -->
-    <p class="text-sm text-back-600">
+    <p class="text-sm text-gray-600">
       📅 {{ formatDate(mission.date_slot) }} →
       {{ formatDate(mission.end_slot) }}
     </p>
 
     <!-- Instructions -->
-    <p v-if="mission.instructions" class="text-sm italic text-back-700">
+    <p v-if="mission.instructions" class="text-sm italic text-gray-700">
       {{ mission.instructions }}
     </p>
 
@@ -82,8 +85,8 @@
 
     <!-- Actions -->
     <div class="flex gap-2 mt-3 justify-end">
-      <!-- Proposé -->
-      <template v-if="mission.status === 'proposé'">
+      <!-- Proposed -->
+      <template v-if="mission.status === 'proposed'">
         <button
           class="btn-primary hover:bg-blue-700"
           @click="acceptMission"
@@ -100,18 +103,18 @@
         </button>
       </template>
 
-      <!-- Validé -->
-      <template v-else-if="mission.status === 'validé'">
+      <!-- Validated -->
+      <template v-else-if="mission.status === 'validated'">
         <button class="btn-primary hover:bg-green-700" @click="createDevis">
           Créer devis
         </button>
-        <button class="btn-primary hover:bg-back-700" @click="markRealized">
+        <button class="btn-primary hover:bg-gray-700" @click="markRealized">
           Marquer réalisée
         </button>
       </template>
 
-      <!-- Réalisé -->
-      <template v-else-if="mission.status === 'réalisé'">
+      <!-- Realized -->
+      <template v-else-if="mission.status === 'realized'">
         <button class="btn-primary hover:bg-green-700" @click="createFacture">
           Créer facture
         </button>
@@ -123,25 +126,30 @@
         </button>
       </template>
 
-      <!-- Paiement en attente -->
-      <template v-else-if="mission.status === 'paiement_en_attente'">
+      <!-- Pending payment -->
+      <template v-else-if="mission.status === 'pending_payment'">
         <span class="text-sm text-yellow-600">Paiement en attente…</span>
         <button class="btn-primary hover:bg-green-700" @click="markPaid">
           Marquer payé
         </button>
       </template>
 
-      <!-- Payé -->
-      <template v-else-if="mission.status === 'payé'">
+      <!-- Paid -->
+      <template v-else-if="mission.status === 'paid'">
         <span class="text-sm text-green-600">Mission payée ✅</span>
-        <button class="btn-primary hover:bg-back-700" @click="closeMission">
+        <button class="btn-primary hover:bg-gray-700" @click="closeMission">
           Clore
         </button>
       </template>
 
-      <!-- Refusé -->
-      <template v-else-if="mission.status === 'refusé'">
+      <!-- Refused -->
+      <template v-else-if="mission.status === 'refused'">
         <span class="text-sm text-red-500">Mission refusée</span>
+      </template>
+
+      <!-- Closed -->
+      <template v-else-if="mission.status === 'closed'">
+        <span class="text-sm text-gray-500">Mission clôturée</span>
       </template>
     </div>
   </div>
@@ -158,11 +166,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, onMounted } from "vue";
 import { updateEntrepriseMission } from "../services/missions";
 import { getEntreprise } from "../services/entreprises";
 import FactureModal from "./FactureModal.vue";
-
 import type { Mission } from "../services/missions";
 
 const props = defineProps<{
@@ -175,7 +182,32 @@ const loading = ref(false);
 const showFactureModal = ref(false);
 const entreprise = ref<any>(null);
 
-// Charger entreprise via slug
+// ----------------------
+// Status labels & styles
+// ----------------------
+const statusLabels: Record<string, string> = {
+  proposed: "Proposée",
+  validated: "Validée",
+  realized: "Réalisée",
+  pending_payment: "Paiement en attente",
+  paid: "Payée",
+  refused: "Refusée",
+  closed: "Clôturée",
+};
+
+const statusClasses: Record<string, string> = {
+  proposed: "bg-yellow-100 text-yellow-800",
+  validated: "bg-green-100 text-green-800",
+  realized: "bg-blue-100 text-blue-800",
+  pending_payment: "bg-purple-100 text-purple-800",
+  paid: "bg-indigo-100 text-indigo-800",
+  refused: "bg-red-100 text-red-800",
+  closed: "bg-gray-100 text-gray-800",
+};
+
+// ----------------------
+// Lifecycle
+// ----------------------
 onMounted(async () => {
   try {
     const response = await getEntreprise(props.slug);
@@ -185,25 +217,9 @@ onMounted(async () => {
   }
 });
 
-const statusClass = computed(() => {
-  switch (props.mission.status) {
-    case "proposé":
-      return "bg-yellow-100 text-yellow-800";
-    case "validé":
-      return "bg-green-100 text-green-800";
-    case "réalisé":
-      return "bg-blue-100 text-blue-800";
-    case "paiement_en_attente":
-      return "bg-purple-100 text-purple-800";
-    case "payé":
-      return "bg-indigo-100 text-indigo-800";
-    case "refusé":
-      return "bg-red-100 text-red-800";
-    default:
-      return "bg-back-100 text-back-800";
-  }
-});
-
+// ----------------------
+// Utils & actions
+// ----------------------
 function formatDate(dateStr: string) {
   if (!dateStr) return "";
   return new Date(dateStr).toLocaleString("fr-FR", {
@@ -213,45 +229,29 @@ function formatDate(dateStr: string) {
 }
 
 async function acceptMission() {
-  loading.value = true;
-  try {
-    await updateEntrepriseMission(props.slug, props.mission.id, {
-      status: "validé",
-    });
-    emit("updated");
-  } catch (err) {
-    console.error("Erreur acceptation mission :", err);
-    alert("❌ Impossible d'accepter la mission");
-  } finally {
-    loading.value = false;
-  }
+  await updateStatus("validated", "Impossible d'accepter la mission");
 }
-
 async function rejectMission() {
-  loading.value = true;
-  try {
-    await updateEntrepriseMission(props.slug, props.mission.id, {
-      status: "refusé",
-    });
-    emit("updated");
-  } catch (err) {
-    console.error("Erreur refus mission :", err);
-    alert("❌ Impossible de refuser la mission");
-  } finally {
-    loading.value = false;
-  }
+  await updateStatus("refused", "Impossible de refuser la mission");
+}
+async function markRealized() {
+  await updateStatus(
+    "realized",
+    "Impossible de marquer la mission comme réalisée"
+  );
 }
 
-async function markRealized() {
+// ----------------------
+// Generic updater
+// ----------------------
+async function updateStatus(status: Mission["status"], errorMsg: string) {
   loading.value = true;
   try {
-    await updateEntrepriseMission(props.slug, props.mission.id, {
-      status: "réalisé",
-    });
+    await updateEntrepriseMission(props.slug, props.mission.id, { status });
     emit("updated");
   } catch (err) {
-    console.error("Erreur lors du marquage réalisé :", err);
-    alert("❌ Impossible de marquer la mission comme réalisée");
+    console.error(errorMsg, err);
+    alert("❌ " + errorMsg);
   } finally {
     loading.value = false;
   }

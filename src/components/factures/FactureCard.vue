@@ -1,10 +1,21 @@
 <!-- src/components/factures/FactureCard.vue -->
+<!-- -------------------------------------------------------------
+ Carte d’une facture (FactureCard)
+ ---------------------------------------------------------------
+ 📌 Description :
+ - Affiche les détails d’une facture (client, montant, statut, lien paiement)
+ - Permet de générer PDF, modifier, générer lien de paiement, supprimer
+
+ 🔒 Règles d’accès :
+ - Actions réservées à l’owner entreprise
+ ------------------------------------------------------------- -->
+
 <template>
   <div
-    class="border rounded-lg p-4 shadow-sm bg-white flex justify-between items-center"
+    class="border rounded-lg p-4 shadow-sm bg-white flex justify-between items-start"
   >
     <!-- Infos facture -->
-    <div>
+    <div class="space-y-1">
       <h3 class="font-semibold">📄 Facture {{ facture.numero }}</h3>
       <p class="text-sm text-gray-600">
         Émise le {{ formatDate(facture.date_emission) }}
@@ -28,6 +39,14 @@
         Total TTC : {{ facture.montant_ttc.toFixed(2) }} €
       </p>
 
+      <!-- Statut -->
+      <span
+        class="inline-block px-2 py-1 text-xs rounded-full mt-1"
+        :class="statusClasses[facture.status]"
+      >
+        {{ statusLabels[facture.status] || facture.status }}
+      </span>
+
       <!-- Paiement -->
       <div v-if="facture.payment_link" class="mt-2">
         💳
@@ -48,7 +67,7 @@
     </div>
 
     <!-- Actions -->
-    <div class="flex gap-2">
+    <div class="flex flex-col gap-2 items-end">
       <button class="btn-secondary" @click="downloadPdf">⬇️ PDF</button>
       <button class="btn-secondary" @click="$emit('edit', facture)">
         ✏️ Modifier
@@ -75,6 +94,21 @@ const props = defineProps<{
 const emit = defineEmits(["edit", "deleted", "updated"]);
 
 const { removeFacture } = useFactures();
+
+// ----------------------
+// Status labels & styles
+// ----------------------
+const statusLabels: Record<string, string> = {
+  pending: "En attente",
+  paid: "Payée",
+  cancelled: "Annulée",
+};
+
+const statusClasses: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-800",
+  paid: "bg-green-100 text-green-800",
+  cancelled: "bg-red-100 text-red-800",
+};
 
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString("fr-FR");

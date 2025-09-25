@@ -3,21 +3,23 @@
 // Webhook Stripe - Suivi des paiements
 // -------------------------------------------------------------
 //
-// URL (dev) : http://localhost:3000/api/stripe/webhook
+// 📌 Description :
+//   - Vérifie la signature Stripe
+//   - Gère les événements principaux :
+//       • checkout.session.completed → facture marquée "paid"
+//       • payment_intent.payment_failed → facture marquée "canceled"
+//   - Met à jour la table `factures`
+//   - Si une facture est liée à une mission, met aussi à jour `missions.status`
 //
-// Fonctionnement :
-// - Désactive bodyParser (Stripe exige le raw body pour vérifier la signature)
-// - Vérifie la signature Stripe via STRIPE_WEBHOOK_SECRET
-// - Gère les événements principaux :
-//    • checkout.session.completed → facture marquée comme "payée"
-//    • payment_intent.payment_failed → facture marquée comme "annulée"
-// - Met à jour la table `factures` dans Supabase
+// 📍 Endpoint :
+//   - POST /api/stripe/webhook
 //
-// Bonnes pratiques :
-// - Toujours logguer l’event type reçu
-// - Ne jamais répondre 200 si traitement échoue
-// - Conserver des logs clairs en cas de problème
+// 🔒 Accès :
+//   - Appel uniquement par Stripe (signature requise)
 //
+// ⚠️ Bonnes pratiques :
+//   - Toujours logguer les événements reçus
+//   - Ne pas renvoyer 200 si traitement échoue
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -29,7 +31,7 @@ import { supabaseAdmin } from "../_supabase.js";
 // -----------------------------
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
-// Stripe requiert l'accès au body brut
+// Stripe a besoin du raw body pour vérifier la signature
 export const config = {
   api: {
     bodyParser: false,
@@ -39,9 +41,6 @@ export const config = {
 // -----------------------------
 // Helpers
 // -----------------------------
-/**
- * Récupère le corps brut de la requête (sans parsing JSON).
- */
 function rawBody(req: VercelRequest): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Uint8Array[] = [];
@@ -66,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let event: Stripe.Event;
   try {
-    const buf = await rawBody(req); // ⚡ Récupère le body brut
+    const buf = await rawBody(req);
     event = stripe.webhooks.constructEvent(
       buf,
       sig,
@@ -86,20 +85,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const session = event.data.object as Stripe.Checkout.Session;
         const factureId = session.metadata?.facture_id;
 
-        if (factureId) {
-          await supabaseAdmin
-            .from("factures")
-            .update({
-              status: "payé",
-              stripe_session_id: session.id,
-              stripe_payment_intent: session.payment_intent,
-            })
-            .eq("id", factureId);
-
-          console.log(`✅ Facture ${factureId} marquée comme payée`);
-        } else {
+        if (!factureId) {
           console.error("❌ Facture ID manquant dans metadata");
+          break;
         }
+
+        // Récupération de la facture liée
+        const { data: facture, error: factureError } = await supabaseAdmin
+          .from("factures")
+          .select("id, mission_id")
+          .eq("id", factureId)
+          .single();
+
+        if (factureError || !facture) {
+          console.error("❌ Facture introuvable:", factureError);
+          break;
+        }
+
+        // Mise à jour facture → paid
+        const { error: updateError } = await supabaseAdmin
+          .from("factures")
+          .update({
+            status: "paid",
+            stripe_session_id: session.id,
+            stripe_payment_intent: session.payment_intent,
+          })
+          .eq("id", factureId);
+
+        if (updateError) {
+          console.error("❌ Erreur update facture:", updateError);
+          break;
+        }
+
+        console.log(`✅ Facture ${factureId} marquée comme paid`);
+
+        // 🔄 Si mission liée → passer mission en "paid"
+        if (facture.mission_id) {
+          const { error: missionError } = await supabaseAdmin
+            .from("missions")
+            .update({ status: "paid" })
+            .eq("id", facture.mission_id);
+
+          if (missionError) {
+            console.error(
+              `⚠️ Erreur mise à jour mission ${facture.mission_id}:`,
+              missionError
+            );
+          } else {
+            console.log(`✅ Mission ${facture.mission_id} marquée comme paid`);
+          }
+        }
+
         break;
       }
 
@@ -108,20 +144,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const intent = event.data.object as Stripe.PaymentIntent;
         const factureId = intent.metadata?.facture_id;
 
-        if (factureId) {
-          await supabaseAdmin
-            .from("factures")
-            .update({ status: "annulée" })
-            .eq("id", factureId);
-
-          console.log(`⚠️ Facture ${factureId} marquée comme annulée`);
-        } else {
+        if (!factureId) {
           console.error("❌ Facture ID manquant dans metadata");
+          break;
+        }
+
+        // Mise à jour facture → canceled
+        const { error } = await supabaseAdmin
+          .from("factures")
+          .update({ status: "canceled" })
+          .eq("id", factureId);
+
+        if (error) {
+          console.error("❌ Erreur update facture canceled:", error);
+        } else {
+          console.log(`⚠️ Facture ${factureId} marquée comme canceled`);
         }
         break;
       }
 
-      // 🔎 Autres events ignorés
       default:
         console.log(`ℹ️ Event ignoré: ${event.type}`);
     }
