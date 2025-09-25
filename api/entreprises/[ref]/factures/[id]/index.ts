@@ -3,22 +3,22 @@
 // Endpoint REST pour une facture spécifique
 // -------------------------------------------------------------
 //
-// Routes :
-// - GET    /api/entreprises/[ref]/factures/[id] → récupérer une facture
-// - PUT    /api/entreprises/[ref]/factures/[id] → mettre à jour une facture
-// - DELETE /api/entreprises/[ref]/factures/[id] → supprimer une facture
+// 📌 Description :
+//   - Récupère, met à jour ou supprime une facture
 //
-// Étapes :
-// 1. Vérifie l’authentification (JWT)
-// 2. Vérifie que le user est owner ou admin
-// 3. Exécute l’opération demandée sur la facture
+// 📍 Endpoints :
+//   - GET    /api/entreprises/[ref]/factures/[id] → récupérer une facture (+ mission + slots)
+//   - PUT    /api/entreprises/[ref]/factures/[id] → mettre à jour une facture
+//   - DELETE /api/entreprises/[ref]/factures/[id] → supprimer une facture
 //
-// ⚠️ Notes :
-// - ref = slug (string) ou id (number) de l’entreprise
-// - id  = id numérique de la facture
-// - Le numéro de facture doit être unique dans l’entreprise
-// - En prod, DELETE devrait être remplacé par un "annuler" logique
-// - Si la facture est marquée comme "paid", la mission liée passe aussi en "paid"
+// 🔒 Règles d’accès :
+//   - Authentification JWT obligatoire
+//   - Réservé au propriétaire de l’entreprise ou admin
+//
+// ⚠️ Remarques :
+//   - Le numéro de facture doit être unique dans l’entreprise
+//   - Si la facture passe en "paid", la mission liée passe aussi en "paid"
+//   - DELETE physique, mais en prod → à remplacer par un statut "cancelled"
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -79,14 +79,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: "Accès interdit" });
     }
 
+    const factureId = Number(id);
+    if (isNaN(factureId)) {
+      return res.status(400).json({ error: "ID facture invalide" });
+    }
+
     // ----------------------
     // GET → Lire facture
     // ----------------------
     if (req.method === "GET") {
       const { data: facture, error } = await supabaseAdmin
         .from("factures")
-        .select("*")
-        .eq("id", Number(id))
+        .select("*, missions(*, slots(*))") // inclut mission et slots
+        .eq("id", factureId)
         .eq("entreprise_id", entreprise.id)
         .single();
 
@@ -112,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: facture, error } = await supabaseAdmin
         .from("factures")
         .update(toUpdate)
-        .eq("id", Number(id))
+        .eq("id", factureId)
         .eq("entreprise_id", entreprise.id)
         .select()
         .single();
@@ -135,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (missionError) {
           console.error(
-            `⚠️ Erreur lors de la mise à jour de la mission liée à la facture ${facture.id}:`,
+            `⚠️ Erreur mise à jour mission liée à la facture ${facture.id}:`,
             missionError
           );
         }
@@ -151,11 +156,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { error } = await supabaseAdmin
         .from("factures")
         .delete()
-        .eq("id", Number(id))
+        .eq("id", factureId)
         .eq("entreprise_id", entreprise.id);
 
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(204).end();
+      return res.status(200).json({ message: "Facture supprimée" });
     }
 
     return res.status(405).json({ error: "Méthode non autorisée" });

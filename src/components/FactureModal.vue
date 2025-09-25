@@ -427,15 +427,33 @@ watch(
       contactName.value = m.contact_name || "";
       contactPhone.value = m.contact_phone || "";
       contactEmail.value = m.contact_email || "";
-      description.value = `Mission du ${new Date(m.date_slot).toLocaleString(
-        "fr-FR",
-        { dateStyle: "short", timeStyle: "short" }
-      )}`;
 
-      const start = new Date(m.date_slot);
-      const end = new Date(m.end_slot);
-      const diffMs = end.getTime() - start.getTime();
-      hours.value = diffMs > 0 ? diffMs / 1000 / 60 / 60 : 0;
+      // 📝 Description générique
+      if (m.slots?.length) {
+        const first = new Date(m.slots[0].start);
+        const last = new Date(m.slots[m.slots.length - 1].end);
+        description.value = `Mission du ${first.toLocaleDateString(
+          "fr-FR"
+        )} au ${last.toLocaleDateString("fr-FR")}`;
+      } else {
+        description.value = "Mission sans créneaux définis";
+      }
+
+      // ⏱️ Calcul heures totales à partir des slots
+      if (m.slots?.length) {
+        let totalHours = 0;
+        for (const slot of m.slots) {
+          const start = new Date(slot.start);
+          const end = new Date(slot.end);
+          const diffMs = end.getTime() - start.getTime();
+          if (diffMs > 0) {
+            totalHours += diffMs / 1000 / 60 / 60; // en heures
+          }
+        }
+        hours.value = totalHours;
+      } else {
+        hours.value = 0;
+      }
     }
   },
   { immediate: true }

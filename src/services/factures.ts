@@ -2,17 +2,22 @@
 // -------------------------------------------------------------
 // Services liés aux factures d'une entreprise
 //
-// Fonctions disponibles :
-// - listEntrepriseFactures(ref)              : lister les factures
-// - createEntrepriseFacture(ref, payload)    : créer une facture
-// - getEntrepriseFacture(ref, factureId)     : récupérer une facture
-// - updateEntrepriseFacture(ref, factureId)  : mettre à jour une facture
-// - deleteEntrepriseFacture(ref, factureId)  : supprimer une facture
-// - generateFacturePaymentLink(ref, id)      : générer un lien de paiement Stripe
+// 📌 Description :
+//   - CRUD des factures
+//   - Chaque facture peut être liée à une mission (via mission_id)
+//   - Les heures, le taux, le HT et TTC sont stockés en base pour générer le PDF
 //
-// ⚠️ Notes :
-// - ref = slug (string) ou id (number) de l’entreprise
-// - L’API applique les contrôles d’accès (JWT + RLS)
+// 📍 Endpoints :
+//   - GET    /api/entreprises/[ref]/factures
+//   - POST   /api/entreprises/[ref]/factures
+//   - GET    /api/entreprises/[ref]/factures/[id]
+//   - PUT    /api/entreprises/[ref]/factures/[id]
+//   - DELETE /api/entreprises/[ref]/factures/[id]
+//   - POST   /api/entreprises/[ref]/factures/[id]/payment-link
+//
+// 🔒 Règles d’accès :
+//   - Lecture publique (slug) / owner (id)
+//   - CRUD limité aux entreprises propriétaires
 // -------------------------------------------------------------
 
 import { request } from "./api";
@@ -39,12 +44,14 @@ export interface FacturePayload {
 
   // Prestation
   description?: string;
-  hours: number;
-  rate: number;
+
+  // Détails temps & tarifs
+  hours: number; // durée en heures
+  rate: number; // taux horaire appliqué
 
   // Montants
   montant_ht: number;
-  tva: number;
+  tva: number; // en pourcentage
   montant_ttc: number;
 
   // Mentions
@@ -53,7 +60,7 @@ export interface FacturePayload {
   penalites_retard?: string;
 
   // Lien mission
-  mission_id?: number; // optionnel
+  mission_id?: number;
 }
 
 export interface Facture extends FacturePayload {
@@ -81,19 +88,12 @@ export type FactureUpdate = Partial<FacturePayload> & {
 // ----------------------
 // Services Factures
 // ----------------------
-
-/**
- * 📜 Lister les factures d’une entreprise
- */
 export async function listEntrepriseFactures(
   ref: string | number
 ): Promise<{ factures: Facture[] }> {
   return request<{ factures: Facture[] }>(`/api/entreprises/${ref}/factures`);
 }
 
-/**
- * ➕ Créer une facture
- */
 export async function createEntrepriseFacture(
   ref: string | number,
   payload: FacturePayload
@@ -104,9 +104,6 @@ export async function createEntrepriseFacture(
   });
 }
 
-/**
- * 🔍 Lire une facture
- */
 export async function getEntrepriseFacture(
   ref: string | number,
   factureId: number
@@ -116,9 +113,6 @@ export async function getEntrepriseFacture(
   );
 }
 
-/**
- * ✏️ Mettre à jour une facture
- */
 export async function updateEntrepriseFacture(
   ref: string | number,
   factureId: number,
@@ -133,9 +127,6 @@ export async function updateEntrepriseFacture(
   );
 }
 
-/**
- * ❌ Supprimer une facture
- */
 export async function deleteEntrepriseFacture(
   ref: string | number,
   factureId: number
@@ -145,9 +136,6 @@ export async function deleteEntrepriseFacture(
   });
 }
 
-/**
- * 💳 Générer un lien de paiement Stripe pour une facture
- */
 export async function generateFacturePaymentLink(
   ref: string | number,
   factureId: number

@@ -1,20 +1,29 @@
 // src/services/missions.ts
 // -------------------------------------------------------------
 // Services liés aux missions d'une entreprise
+// -------------------------------------------------------------
 //
-// Fonctions disponibles :
-// - createEntrepriseMission(entrepriseId, payload) : créer une mission (owner uniquement)
-// - listEntrepriseMissions(ref, params?)           : lister les missions (public ou owner)
-// - updateEntrepriseMission(entrepriseId, missionId, updates) : mettre à jour une mission
-// - deleteEntrepriseMission(entrepriseId, missionId)          : supprimer une mission
+// 📌 Description :
+//   - Gestion CRUD des missions et de leurs créneaux (slots)
+//   - Les slots sont liés à la mission via mission_id
 //
-// ⚠️ Notes :
-// - Les routes API sont unifiées : /api/entreprises/[ref]/missions
-//   (ref = slug pour lecture publique, id pour accès owner).
-// - Les contrôles d'accès (public vs privé) sont gérés côté API.
+// 📍 Endpoints API :
+//   - POST   /api/entreprises/[ref]/missions        → créer une mission (+ slots)
+//   - GET    /api/entreprises/[ref]/missions        → lister les missions
+//   - PUT    /api/entreprises/[ref]/missions/[id]   → mettre à jour une mission
+//   - DELETE /api/entreprises/[ref]/missions/[id]   → supprimer une mission
+//
+// 🔒 Règles d’accès :
+//   - ref = slug (string) pour lecture publique, id (number) pour accès propriétaire
+//   - Les contrôles d’accès (public vs privé) sont appliqués côté API
+//
+// ⚠️ Remarques :
+//   - On ne stocke plus date_slot/end_slot directement dans mission
+//   - Les créneaux sont envoyés dans `slots` (table dédiée)
 // -------------------------------------------------------------
 
 import { request } from "./api";
+import type { Slot } from "./slots";
 
 // ----------------------
 // Types
@@ -37,11 +46,12 @@ export interface MissionPayload {
   // Infos mission
   instructions?: string;
   mode: "freelance" | "salarié";
-  date_slot: string; // format ISO
-  end_slot: string; // format ISO
+
+  // Créneaux liés
+  slots: Array<Pick<Slot, "start" | "end" | "title">>;
 }
 
-export interface Mission extends MissionPayload {
+export interface Mission extends Omit<MissionPayload, "slots"> {
   id: number;
   created_at: string;
   status:
@@ -52,6 +62,9 @@ export interface Mission extends MissionPayload {
     | "completed"
     | "refused"
     | "realized";
+
+  // Slots associés à la mission
+  slots?: Slot[];
 }
 
 export type MissionUpdate = Partial<MissionPayload> & {
@@ -64,6 +77,8 @@ export type MissionUpdate = Partial<MissionPayload> & {
 
 /**
  * ➕ Créer une mission (owner uniquement)
+ * @param entrepriseId - id numérique de l’entreprise
+ * @param payload - infos mission + slots
  */
 export async function createEntrepriseMission(
   entrepriseId: number,
@@ -81,6 +96,7 @@ export async function createEntrepriseMission(
 /**
  * 📜 Lister les missions d’une entreprise
  * @param ref - id (number) ou slug (string) de l’entreprise
+ * @param params - filtres optionnels (from, to, status)
  */
 export async function listEntrepriseMissions(
   ref: string | number,

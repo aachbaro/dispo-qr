@@ -3,7 +3,7 @@
  Carte d’une mission (MissionCard)
  ---------------------------------------------------------------
  📌 Description :
- - Affiche les détails d’une mission (contact, créneau, statut)
+ - Affiche les détails d’une mission (contact, slots, statut)
  - Permet d’accepter/refuser/mettre à jour le statut
  - Gère l’ouverture du FactureModal pour générer une facture
 
@@ -12,8 +12,8 @@
  - Actions réservées à l’owner entreprise
 
  ⚠️ Remarques :
+ - Les créneaux sont affichés depuis mission.slots[]
  - Charge l’entreprise via son slug pour alimenter FactureModal
- - Passe l’entreprise complète en prop au modal
  ------------------------------------------------------------- -->
 
 <template>
@@ -31,7 +31,7 @@
 
     <!-- Adresse établissement -->
     <div
-      v-if="mission.etablissement_adresse_ligne1 || mission.ville"
+      v-if="mission.etablissement_adresse_ligne1 || mission.etablissement_ville"
       class="text-sm text-gray-600"
     >
       📍
@@ -40,8 +40,9 @@
         , {{ mission.etablissement_adresse_ligne2 }}
       </span>
       <br />
-      {{ mission.code_postal || "" }} {{ mission.ville || "" }}
-      <span v-if="mission.pays">({{ mission.pays }})</span>
+      {{ mission.etablissement_code_postal || "" }}
+      {{ mission.etablissement_ville || "" }}
+      <span v-if="mission.etablissement_pays">({{ mission.etablissement_pays }})</span>
     </div>
 
     <!-- Contact -->
@@ -67,11 +68,12 @@
       </a>
     </p>
 
-    <!-- Créneau -->
-    <p class="text-sm text-gray-600">
-      📅 {{ formatDate(mission.date_slot) }} →
-      {{ formatDate(mission.end_slot) }}
-    </p>
+    <!-- Créneaux -->
+    <div v-if="mission.slots?.length" class="space-y-1 text-sm text-gray-600">
+      <p v-for="slot in mission.slots" :key="slot.start">
+        📅 {{ formatDate(slot.start) }} → {{ formatDate(slot.end) }}
+      </p>
+    </div>
 
     <!-- Instructions -->
     <p v-if="mission.instructions" class="text-sm italic text-gray-700">
@@ -241,9 +243,6 @@ async function markRealized() {
   );
 }
 
-// ----------------------
-// Generic updater
-// ----------------------
 async function updateStatus(status: Mission["status"], errorMsg: string) {
   loading.value = true;
   try {

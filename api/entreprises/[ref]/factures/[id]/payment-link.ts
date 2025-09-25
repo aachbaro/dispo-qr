@@ -17,16 +17,13 @@
 // ⚠️ Remarques :
 //   - Le statut de la facture passe en `pending_payment`
 //   - Le statut final sera confirmé par le webhook Stripe
-//
+//   - Ajout du mission_id dans metadata pour faciliter le suivi
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
 import { supabaseAdmin } from "../../../../_supabase.js";
 
-// -----------------------------
-// Initialisation Stripe
-// -----------------------------
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 // -----------------------------
@@ -67,11 +64,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 🔐 Vérification utilisateur
     const user = await getUserFromToken(req);
     if (!user) return res.status(401).json({ error: "Non authentifié" });
 
-    // 🔎 Récupération entreprise
+    // 🔎 Entreprise
     const { data: entreprise, error: errEntreprise } = await supabaseAdmin
       .from("entreprise")
       .select("*")
@@ -88,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: "Accès interdit" });
     }
 
-    // 🔎 Récupération facture
+    // 🔎 Facture
     const { data: facture, error: errFacture } = await supabaseAdmin
       .from("factures")
       .select("*")
@@ -100,9 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: "Facture introuvable" });
     }
 
-    console.log("💳 Création session Stripe pour facture:", facture.id);
-
-    // 💳 Création session Checkout Stripe
+    // 💳 Session Stripe
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_creation: "if_required",
@@ -114,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               name: `Facture ${facture.numero}`,
               description: facture.description || "Mission freelance",
             },
-            unit_amount: Math.round(Number(facture.montant_ttc) * 100), // en cents
+            unit_amount: Math.round(Number(facture.montant_ttc) * 100),
           },
           quantity: 1,
         },
@@ -124,22 +118,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       metadata: {
         facture_id: facture.id.toString(),
         entreprise_id: entreprise.id.toString(),
+        ...(facture.mission_id && {
+          mission_id: facture.mission_id.toString(),
+        }), // 👈 ajout mission_id si dispo
       },
     });
 
-    // 💾 Sauvegarde infos Stripe dans la facture
+    // 💾 Update facture
     const { error: errUpdate } = await supabaseAdmin
       .from("factures")
       .update({
         stripe_session_id: session.id,
         stripe_payment_intent: session.payment_intent,
         payment_link: session.url,
-        status: "pending_payment", // ✅ enum normalisé
+        status: "pending_payment",
       })
       .eq("id", facture.id);
 
     if (errUpdate) {
-      console.error("❌ Erreur update facture:", errUpdate);
       return res
         .status(500)
         .json({ error: "Impossible de sauvegarder le lien" });

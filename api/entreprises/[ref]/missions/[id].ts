@@ -5,9 +5,10 @@
 //
 // 📌 Description :
 //   - Permet de mettre à jour ou supprimer une mission
+//   - Supporte aussi la mise à jour des slots liés à cette mission
 //
 // 📍 Endpoints :
-//   - PUT    /api/entreprises/[ref]/missions/[id] → update mission
+//   - PUT    /api/entreprises/[ref]/missions/[id] → update mission + slots
 //   - DELETE /api/entreprises/[ref]/missions/[id] → delete mission
 //
 // 🔒 Règles d’accès :
@@ -18,7 +19,7 @@
 //   - ref = slug (string) ou id (number) de l’entreprise
 //   - id  = identifiant numérique de la mission
 //   - Les statuts possibles sont ceux définis dans l’ENUM mission_status
-//
+//   - Supprimer une mission supprime aussi ses slots (CASCADE)
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -67,13 +68,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 🔐 Vérifie user connecté
     const user = await getUserFromToken(req);
     if (!user) {
       return res.status(401).json({ error: "Non authentifié" });
     }
 
-    // 🔎 Récupère l’entreprise (id ou slug)
     const { data: entreprise, error: entrepriseError } = await findEntreprise(
       ref
     );
@@ -85,12 +84,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: "Entreprise non trouvée" });
     }
 
-    // 🔒 Vérifie les droits
     if (!canAccess(user, entreprise)) {
       return res.status(403).json({ error: "Accès interdit" });
     }
 
-    // 🔢 Cast mission id
     const missionId = Number(id);
     if (isNaN(missionId)) {
       return res.status(400).json({ error: "ID mission invalide" });
@@ -113,12 +110,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ----------------------
-    // PUT → Update mission
+    // PUT → Update mission (+ slots si fournis)
     // ----------------------
     if (req.method === "PUT") {
-      const updates = req.body;
+      const { slots, ...updates } = req.body;
 
-      // ✅ Forcer le statut dans l’ENUM (sécurité)
       if (
         updates.status &&
         ![
@@ -134,7 +130,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: "Statut invalide" });
       }
 
-      const { data, error } = await supabaseAdmin
+      // 1️⃣ Mise à jour mission
+      const { data: updatedMission, error: updateError } = await supabaseAdmin
         .from("missions")
         .update(updates)
         .eq("id", missionId)
@@ -142,8 +139,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select()
         .single();
 
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ mission: data });
+      if (updateError)
+        return res.status(500).json({ error: updateError.message });
+
+      // 2️⃣ Mise à jour des slots (si fournis)
+      if (Array.isArray(slots)) {
+        // On supprime les anciens slots
+        await supabaseAdmin.from("slots").delete().eq("mission_id", missionId);
+
+        // On insère les nouveaux
+        if (slots.length > 0) {
+          const insertSlots = slots.map((s) => ({
+            start: s.start,
+            end: s.end,
+            title: s.title || null,
+            mission_id: missionId,
+            entreprise_id: entreprise.id,
+          }));
+          const { error: slotError } = await supabaseAdmin
+            .from("slots")
+            .insert(insertSlots);
+
+          if (slotError) {
+            console.error("❌ Erreur update slots:", slotError.message);
+            return res.status(500).json({ error: slotError.message });
+          }
+        }
+      }
+
+      return res.status(200).json({ mission: updatedMission });
     }
 
     // ----------------------

@@ -5,9 +5,7 @@
 // - PUT    : Mettre à jour un slot existant
 // - DELETE : Supprimer un slot
 //
-// ⚠️ Accès réservé à l’owner de l’entreprise ou un admin
-// ⚠️ ref = id (bigint) ou slug de l’entreprise
-// ⚠️ id  = identifiant numérique du slot
+// 🔒 Accès réservé à l’owner de l’entreprise ou un admin
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -61,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: "Non authentifié" });
     }
 
-    // 🔍 Récupère entreprise (id numérique ou slug)
+    // 🔍 Vérifie entreprise
     const { data: entreprise, error: entrepriseError } = await findEntreprise(
       ref
     );
@@ -73,15 +71,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: "Entreprise non trouvée" });
     }
 
-    // 🔒 Vérifie droits
     if (!canAccessSensitive(user, entreprise)) {
       return res.status(403).json({ error: "Accès interdit" });
     }
 
-    // Cast slot id en number
     const slotId = Number(id);
     if (isNaN(slotId)) {
       return res.status(400).json({ error: "ID slot invalide" });
+    }
+
+    // 🔍 Vérifie que le slot appartient bien à l’entreprise
+    const { data: slot, error: slotError } = await supabaseAdmin
+      .from("slots")
+      .select("*")
+      .eq("id", slotId)
+      .eq("entreprise_id", entreprise.id)
+      .single();
+
+    if (slotError) {
+      console.error("❌ Erreur fetch slot:", slotError.message);
+      return res.status(500).json({ error: slotError.message });
+    }
+    if (!slot) {
+      return res.status(404).json({ error: "Slot non trouvé" });
     }
 
     // ----------------------
@@ -99,7 +111,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (error) return res.status(500).json({ error: error.message });
-      if (!data) return res.status(404).json({ error: "Slot non trouvé" });
 
       return res.status(200).json({ slot: data });
     }
@@ -116,7 +127,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (error) return res.status(500).json({ error: error.message });
 
-      return res.status(200).json({ message: "Slot supprimé" }); // 👈 au lieu de 204
+      return res.status(200).json({ message: "Slot supprimé" });
     }
 
     return res.status(405).json({ error: "Méthode non autorisée" });

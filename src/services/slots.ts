@@ -1,17 +1,27 @@
 // src/services/slots.ts
 // -------------------------------------------------------------
 // Services liés aux créneaux (slots) d'une entreprise
+// -------------------------------------------------------------
 //
-// Fonctions disponibles :
-// - getEntrepriseSlots(ref, params?)            : liste les slots d'une entreprise
-// - createEntrepriseSlot(entrepriseId, slot)    : créer un slot (owner uniquement)
-// - updateEntrepriseSlot(entrepriseId, id, updates) : mettre à jour un slot
-// - deleteEntrepriseSlot(entrepriseId, id)      : supprimer un slot
+// 📌 Description :
+//   - Gestion CRUD des créneaux (slots) associés à une entreprise
+//   - Les slots peuvent être liés à une mission (mission_id)
+//   - Permet la lecture publique (par slug) et la gestion propriétaire
 //
-// ⚠️ Notes :
-// - L’accès public se fait via le slug (string).
-// - L’accès propriétaire (CRUD complet) se fait via l’id numérique.
-// - Les contrôles d’accès sont gérés côté API.
+// 📍 Endpoints :
+//   - GET    /api/entreprises/[ref]/slots
+//   - POST   /api/entreprises/[id]/slots
+//   - PUT    /api/entreprises/[id]/slots/[id]
+//   - DELETE /api/entreprises/[id]/slots/[id]
+//
+// 🔒 Règles d’accès :
+//   - Lecture publique : via slug
+//   - CRUD complet : via id entreprise (owner uniquement)
+//
+// ⚠️ Remarques :
+//   - Le champ `title` devient optionnel (remplacé par mission.etablissement côté front)
+//   - Ajout de `mission_id` pour rattacher un slot à une mission
+//
 // -------------------------------------------------------------
 
 import { request } from "./api";
@@ -21,11 +31,12 @@ import { request } from "./api";
 // ----------------------
 export interface Slot {
   id: number;
-  start: string;
-  end: string;
-  title: string;
+  start: string; // ISO datetime
+  end: string; // ISO datetime
+  title?: string; // optionnel, peut être remplacé par mission.etablissement
   created_at: string;
   entreprise_id: number;
+  mission_id?: number; // nouveau champ
 }
 
 // ----------------------
@@ -55,7 +66,7 @@ export async function getEntrepriseSlots(
  */
 export async function createEntrepriseSlot(
   entrepriseId: number,
-  slot: Pick<Slot, "start" | "end" | "title">
+  slot: Pick<Slot, "start" | "end"> & { title?: string; mission_id?: number }
 ): Promise<{ slot: Slot }> {
   return request<{ slot: Slot }>(`/api/entreprises/${entrepriseId}/slots`, {
     method: "POST",

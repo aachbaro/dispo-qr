@@ -8,6 +8,10 @@
 
  🔒 Règles d’accès :
  - Actions réservées à l’owner entreprise
+
+ ⚠️ Remarques :
+ - Le champ `hours` n’existe plus (calcul côté backend via slots)
+ - Statut `pending_payment` affiché comme "Paiement en attente"
  ------------------------------------------------------------- -->
 
 <template>
@@ -99,13 +103,13 @@ const { removeFacture } = useFactures();
 // Status labels & styles
 // ----------------------
 const statusLabels: Record<string, string> = {
-  pending: "En attente",
+  pending_payment: "Paiement en attente",
   paid: "Payée",
   cancelled: "Annulée",
 };
 
 const statusClasses: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
+  pending_payment: "bg-yellow-100 text-yellow-800",
   paid: "bg-green-100 text-green-800",
   cancelled: "bg-red-100 text-red-800",
 };

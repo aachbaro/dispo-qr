@@ -95,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "GET") {
       const { data, error } = await supabaseAdmin
         .from("factures")
-        .select("*")
+        .select("*, missions(*, slots(*))") // 👈 inclut mission + slots liés
         .eq("entreprise_id", entreprise.id)
         .order("date_emission", { ascending: false });
 
@@ -111,12 +111,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const payload = req.body;
 
       // sécurité : toujours forcer entreprise_id depuis le ref
-      const toInsert = {
+      let toInsert: any = {
         ...payload,
         entreprise_id: entreprise.id,
         mission_id: payload.mission_id || null,
-        status: payload.status || "pending_payment", // ✅ statut par défaut cohérent
+        status: payload.status || "pending_payment", // ✅ statut par défaut
       };
+
+      // 🚀 Si la facture est liée à une mission → calcule heures & montants
+      if (payload.mission_id) {
+        const { data: slots, error: slotError } = await supabaseAdmin
+          .from("slots")
+          .select("start, end")
+          .eq("mission_id", payload.mission_id);
+
+        if (slotError) {
+          return res.status(500).json({ error: slotError.message });
+        }
+
+        let totalHours = 0;
+        for (const s of slots || []) {
+          const start = new Date(s.start).getTime();
+          const end = new Date(s.end).getTime();
+          totalHours += (end - start) / (1000 * 60 * 60); // en heures
+        }
+
+        toInsert.hours = totalHours;
+        toInsert.rate = entreprise.taux_horaire; // tarif de l’entreprise
+        toInsert.montant_ht = totalHours * entreprise.taux_horaire;
+        toInsert.tva = 0; // ou logique TVA si besoin
+        toInsert.montant_ttc = toInsert.montant_ht + toInsert.tva;
+      }
 
       const { data, error } = await supabaseAdmin
         .from("factures")

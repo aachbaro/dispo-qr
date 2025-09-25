@@ -1,4 +1,16 @@
-<!-- src/components/ClientPopup.vue -->
+// src/components/ClientPopup.vue //
+------------------------------------------------------------- // Popup client →
+création d’une mission avec plusieurs créneaux //
+------------------------------------------------------------- // // 📌
+Description : // - Affiche un formulaire complet (établissement, contact,
+instructions…) // - Ajout dynamique de plusieurs créneaux (date/heure début et
+fin) // - Garde le comportement scroll (heures par 15 min, dates par
+jour/sem/mois) // // 🔒 Règles d’accès : // - Public côté client (demande de
+mission) // - Validation finale côté backend // // ⚠️ Remarques : // - Le
+payload envoie maintenant un tableau `slots: [{ start, end }]` // - Le calcul
+des heures se fera côté backend/facture // //
+-------------------------------------------------------------
+
 <template>
   <Transition name="fade">
     <div
@@ -34,7 +46,7 @@
             />
           </div>
 
-          <!-- Adresse (ligne 1 et 2) -->
+          <!-- Adresse -->
           <div class="space-y-1">
             <label class="text-sm font-medium">Adresse</label>
             <input
@@ -139,57 +151,85 @@
             </select>
           </div>
 
-          <!-- Dates -->
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-sm font-medium">Date début</label>
-              <input
-                type="date"
-                v-model="startDate"
-                :min="minDate"
-                @wheel.prevent="onScrollDate($event, 'startDate')"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="text-sm font-medium">Date fin</label>
-              <input
-                type="date"
-                v-model="endDate"
-                :min="minDate"
-                @wheel.prevent="onScrollDate($event, 'endDate')"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
+          <!-- Créneaux -->
+          <div class="space-y-3">
+            <div
+              v-for="(slot, index) in slots"
+              :key="index"
+              class="border rounded-md p-3 space-y-2"
+            >
+              <div class="flex justify-between items-center">
+                <h3 class="text-sm font-semibold">Créneau {{ index + 1 }}</h3>
+                <button
+                  v-if="slots.length > 1"
+                  type="button"
+                  class="text-red-600 text-sm"
+                  @click="removeSlot(index)"
+                >
+                  Supprimer
+                </button>
+              </div>
 
-          <!-- Heures -->
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-sm font-medium">Heure début</label>
-              <input
-                type="time"
-                v-model="startTime"
-                step="900"
-                @wheel.prevent="onScrollTime($event, 'startTime')"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="text-sm font-medium">Heure fin</label>
-              <input
-                type="time"
-                v-model="endTime"
-                step="900"
-                @wheel.prevent="onScrollTime($event, 'endTime')"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-sm font-medium">Date début</label>
+                  <input
+                    type="date"
+                    v-model="slot.startDate"
+                    :min="minDate"
+                    @wheel.prevent="onScrollDate($event, slot, 'startDate')"
+                    class="w-full rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label class="text-sm font-medium">Date fin</label>
+                  <input
+                    type="date"
+                    v-model="slot.endDate"
+                    :min="minDate"
+                    @wheel.prevent="onScrollDate($event, slot, 'endDate')"
+                    class="w-full rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
 
-          <p v-if="isInvalid" class="text-sm text-red-600">
-            L'heure de début doit être antérieure à l'heure de fin.
-          </p>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-sm font-medium">Heure début</label>
+                  <input
+                    type="time"
+                    v-model="slot.startTime"
+                    step="900"
+                    @wheel.prevent="onScrollTime($event, slot, 'startTime')"
+                    class="w-full rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label class="text-sm font-medium">Heure fin</label>
+                  <input
+                    type="time"
+                    v-model="slot.endTime"
+                    step="900"
+                    @wheel.prevent="onScrollTime($event, slot, 'endTime')"
+                    class="w-full rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <p v-if="isSlotInvalid(slot)" class="text-sm text-red-600">
+                L'heure de début doit être antérieure à l'heure de fin.
+              </p>
+            </div>
+
+            <!-- Bouton ajout -->
+            <button
+              type="button"
+              class="px-3 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200"
+              @click="addSlot"
+            >
+              ➕ Ajouter un créneau
+            </button>
+          </div>
         </div>
 
         <!-- Footer -->
@@ -221,16 +261,12 @@ import { createEntrepriseMission } from "../services/missions";
 
 const props = defineProps({
   open: Boolean,
-  initialDate: String,
-  initialStart: String,
-  initialEnd: String,
   slug: String,
   required: true,
 });
-
 const emit = defineEmits(["close", "created"]);
 
-// Champs
+// Champs mission
 const etablissement = ref("");
 const adresseLigne1 = ref("");
 const adresseLigne2 = ref("");
@@ -243,13 +279,24 @@ const contactPhone = ref("");
 const instructions = ref("");
 const mode = ref("freelance");
 
-// Dates/heures
-const startDate = ref(props.initialDate || "");
-const endDate = ref(props.initialDate || "");
-const startTime = ref(props.initialStart || "12:00");
-const endTime = ref(props.initialEnd || "14:00");
+// Slots dynamiques
+const slots = ref([
+  { startDate: "", endDate: "", startTime: "12:00", endTime: "14:00" },
+]);
 
-// borne min (lundi semaine courante)
+function addSlot() {
+  slots.value.push({
+    startDate: "",
+    endDate: "",
+    startTime: "12:00",
+    endTime: "14:00",
+  });
+}
+function removeSlot(index) {
+  slots.value.splice(index, 1);
+}
+
+// Date utils
 function getWeekStart(d = new Date()) {
   const x = new Date(d);
   const day = x.getDay();
@@ -269,17 +316,18 @@ function parseYMD(s) {
 const minDate = toYMD(getWeekStart());
 
 // Validation
-const isInvalid = computed(() => {
-  if (!startDate.value || !endDate.value || !startTime.value || !endTime.value)
+function isSlotInvalid(slot) {
+  if (!slot.startDate || !slot.endDate || !slot.startTime || !slot.endTime)
     return true;
-  const s = new Date(`${startDate.value}T${startTime.value}`);
-  const e = new Date(`${endDate.value}T${endTime.value}`);
+  const s = new Date(`${slot.startDate}T${slot.startTime}`);
+  const e = new Date(`${slot.endDate}T${slot.endTime}`);
   return s >= e;
-});
+}
+const isInvalid = computed(() => slots.value.some(isSlotInvalid));
 
-// Scroll heures
-function onScrollTime(event, field) {
-  const val = field === "startTime" ? startTime.value : endTime.value;
+// Scroll time/date
+function onScrollTime(event, slot, field) {
+  const val = slot[field];
   const [h, m] = val.split(":").map(Number);
   let minutes = h * 60 + m;
   minutes += event.deltaY < 0 ? 15 : -15;
@@ -287,43 +335,31 @@ function onScrollTime(event, field) {
   if (minutes >= 24 * 60) minutes = 24 * 60 - 15;
   const newH = String(Math.floor(minutes / 60)).padStart(2, "0");
   const newM = String(minutes % 60).padStart(2, "0");
-  const newVal = `${newH}:${newM}`;
-  if (field === "startTime") startTime.value = newVal;
-  else endTime.value = newVal;
+  slot[field] = `${newH}:${newM}`;
 }
-
-// Scroll dates
-function onScrollDate(event, field) {
+function onScrollDate(event, slot, field) {
   let step = 1;
   if (event.shiftKey) step = 7;
   if (event.altKey) step = 30;
-
   const dir = event.deltaY < 0 ? +1 : -1;
-  const src = field === "startDate" ? startDate : endDate;
-
-  let base = parseYMD(src.value) || new Date();
+  let base = parseYMD(slot[field]) || new Date();
   base.setDate(base.getDate() + dir * step);
-
   const minDt = parseYMD(minDate);
   if (base < minDt) base = minDt;
-
-  src.value = toYMD(base);
-  if (endDate.value < startDate.value) endDate.value = startDate.value;
+  slot[field] = toYMD(base);
+  if (slot.endDate < slot.startDate) slot.endDate = slot.startDate;
 }
 
 // Actions
 function onCancel() {
   emit("close");
 }
-
 async function onConfirm() {
   if (isInvalid.value) return;
-
-  const startISO = new Date(
-    `${startDate.value}T${startTime.value}`
-  ).toISOString();
-  const endISO = new Date(`${endDate.value}T${endTime.value}`).toISOString();
-
+  const slotsPayload = slots.value.map((s) => ({
+    start: new Date(`${s.startDate}T${s.startTime}`).toISOString(),
+    end: new Date(`${s.endDate}T${s.endTime}`).toISOString(),
+  }));
   try {
     const { mission } = await createEntrepriseMission(props.slug, {
       etablissement: etablissement.value,
@@ -337,10 +373,8 @@ async function onConfirm() {
       contact_phone: contactPhone.value,
       instructions: instructions.value,
       mode: mode.value,
-      date_slot: startISO,
-      end_slot: endISO,
+      slots: slotsPayload,
     });
-
     emit("created", mission);
     emit("close");
   } catch (err) {
