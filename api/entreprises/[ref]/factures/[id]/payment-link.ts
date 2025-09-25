@@ -1,28 +1,37 @@
 // api/entreprises/[ref]/factures/[id]/payment-link.ts
 // -------------------------------------------------------------
 // Génère un lien de paiement Stripe pour une facture donnée
+// -------------------------------------------------------------
 //
 // Étapes :
-// - Vérifie l’authentification du user (JWT)
-// - Vérifie que le user est bien owner ou admin de l’entreprise
-// - Récupère la facture en base
-// - Crée une session Checkout Stripe avec montant TTC
-// - Sauvegarde session_id, payment_intent et lien de paiement
-// - Retourne { url } pour rediriger ou partager
+// 1. Vérifie l’authentification de l’utilisateur (JWT)
+// 2. Vérifie que le user est bien owner ou admin de l’entreprise
+// 3. Récupère la facture en base
+// 4. Crée une session Checkout Stripe avec le montant TTC
+// 5. Sauvegarde session_id, payment_intent et lien de paiement en base
+// 6. Retourne { url } pour rediriger ou partager
+//
+// ⚠️ Notes :
+// - Le statut de la facture est mis à jour en `paiement_en_attente`
+// - L’état final sera confirmé via le webhook Stripe
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
 import { supabaseAdmin } from "../../../../_supabase.js";
 
+// -----------------------------
+// Initialisation Stripe
+// -----------------------------
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
-// ----------------------
+// -----------------------------
 // Helpers
-// ----------------------
+// -----------------------------
 async function getUserFromToken(req: VercelRequest) {
   const auth = req.headers.authorization;
   if (!auth) return null;
+
   const token = auth.split(" ")[1];
   if (!token) return null;
 
@@ -39,9 +48,9 @@ function canAccess(user: any, entreprise: any) {
   return false;
 }
 
-// ----------------------
+// -----------------------------
 // Handler
-// ----------------------
+// -----------------------------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { ref, id } = req.query;
 
@@ -54,10 +63,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // 🔐 Vérification utilisateur
     const user = await getUserFromToken(req);
     if (!user) return res.status(401).json({ error: "Non authentifié" });
 
-    // 🔎 Récupère l’entreprise
+    // 🔎 Récupération entreprise
     const { data: entreprise, error: errEntreprise } = await supabaseAdmin
       .from("entreprise")
       .select("*")
@@ -74,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: "Accès interdit" });
     }
 
-    // 🔎 Récupère la facture
+    // 🔎 Récupération facture
     const { data: facture, error: errFacture } = await supabaseAdmin
       .from("factures")
       .select("*")
@@ -86,7 +96,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: "Facture introuvable" });
     }
 
-    // 💳 Crée la session Stripe Checkout
+    console.log("💳 Création session Stripe pour facture:", facture.id);
+
+    // 💳 Création session Checkout Stripe
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_creation: "if_required",
@@ -103,11 +115,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.APP_URL}/factures/${facture.id}?paid=1`,
-      cancel_url: `${process.env.APP_URL}/factures/${facture.id}?canceled=1`,
+      success_url: `${process.env.APP_URL}/entreprise/${entreprise.slug}/factures/${facture.id}?paid=1`,
+      cancel_url: `${process.env.APP_URL}/entreprise/${entreprise.slug}/factures/${facture.id}?canceled=1`,
+      metadata: {
+        facture_id: facture.id.toString(),
+        entreprise_id: entreprise.id.toString(),
+      },
     });
 
-    // 📦 Sauvegarde infos Stripe dans la facture
+    // 💾 Sauvegarde infos Stripe dans la facture
     const { error: errUpdate } = await supabaseAdmin
       .from("factures")
       .update({
