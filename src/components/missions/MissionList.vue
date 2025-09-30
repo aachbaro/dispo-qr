@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
-import { listEntrepriseMissions } from "../services/missions";
+import { listEntrepriseMissions } from "../../services/missions";
 import MissionCard from "./MissionCard.vue";
 
 const props = defineProps<{

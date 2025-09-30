@@ -328,7 +328,7 @@ le champ pour rappeler l’obligation légale // //
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { createEntrepriseFacture } from "../services/factures";
+import { createEntrepriseFacture } from "../../services/factures";
 
 const props = defineProps({
   open: Boolean,

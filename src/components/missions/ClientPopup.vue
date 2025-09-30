@@ -257,7 +257,7 @@ des heures se fera côté backend/facture // //
 
 <script setup>
 import { ref, computed } from "vue";
-import { createEntrepriseMission } from "../services/missions";
+import { createEntrepriseMission } from "../../services/missions";
 
 const props = defineProps({
   open: Boolean,

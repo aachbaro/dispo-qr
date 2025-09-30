@@ -16,78 +16,130 @@
 
 <template>
   <div
-    class="border rounded-lg p-4 shadow-sm bg-white flex justify-between items-start"
+    class="border rounded-lg p-4 shadow-sm bg-white cursor-pointer hover:shadow-md transition"
+    @click.stop="expanded = !expanded"
   >
-    <!-- Infos facture -->
-    <div class="space-y-1">
-      <h3 class="font-semibold">📄 Facture {{ facture.numero }}</h3>
-      <p class="text-sm text-gray-600">
-        Émise le {{ formatDate(facture.date_emission) }}
+    <!-- Vue compacte -->
+    <div class="flex justify-between items-center">
+      <h3 class="font-semibold text-lg">📄 {{ facture.numero }}</h3>
+      <p class="text-sm bg-gray-100 px-2 py-1 rounded-full">
+        <b>{{ facture.client_name }}</b>
       </p>
-
-      <!-- Client -->
-      <p class="text-sm">Client : {{ facture.client_name }}</p>
-      <div v-if="hasAddress" class="text-sm text-gray-700 ml-2">
-        📍
-        {{ facture.client_address_ligne1 }}
-        <span v-if="facture.client_address_ligne2">
-          , {{ facture.client_address_ligne2 }}
-        </span>
-        <br />
-        {{ facture.client_code_postal || "" }} {{ facture.client_ville || "" }}
-        <span v-if="facture.client_pays">({{ facture.client_pays }})</span>
-      </div>
-
-      <!-- Montant -->
-      <p class="text-sm font-bold mt-1">
-        Total TTC : {{ facture.montant_ttc.toFixed(2) }} €
-      </p>
-
-      <!-- Statut -->
       <span
-        class="inline-block px-2 py-1 text-xs rounded-full mt-1"
+        class="inline-block px-2 py-1 text-xs rounded-full"
         :class="statusClasses[facture.status]"
       >
         {{ statusLabels[facture.status] || facture.status }}
       </span>
+    </div>
 
-      <!-- Paiement -->
-      <div v-if="facture.payment_link" class="mt-2">
-        💳
-        <a
-          :href="facture.payment_link"
-          target="_blank"
-          class="text-blue-600 underline"
-        >
-          Lien de paiement
-        </a>
-        <button
-          class="ml-2 text-xs text-gray-600 underline"
-          @click="copyPaymentLink"
-        >
-          Copier
-        </button>
+    <!-- Vue détaillée -->
+    <transition name="fade">
+      <div v-if="expanded" class="mt-3 space-y-2">
+        <!-- Infos facture -->
+        <div class="flex justify-between items-center">
+          <p class="text-sm font-bold pl-4">
+            TTC : {{ facture.montant_ttc.toFixed(2) }} €
+          </p>
+          <p class="text-sm text-gray-600">
+            {{ formatDate(facture.date_emission) }}
+          </p>
+        </div>
+        <!-- Paiement -->
+        <div v-if="facture.payment_link" class="text-sm text-blue-600 hidden">
+          🔗 Lien paiement dispo
+        </div>
+
+        <!-- Actions -->
+        <div class="flex justify-between gap-2 pt-1">
+          <!-- Paiement -->
+          <div class="flex items-center gap-2">
+            <!-- Si lien dispo -->
+            <template v-if="facture.payment_link">
+              <!-- Lien cliquable -->
+              <a
+                :href="facture.payment_link"
+                target="_blank"
+                class="flex items-center gap-1 text-sm text-blue-600 px-2 py-1 rounded hover:bg-gray-100 transition"
+                @click.stop
+              >
+                <Icon name="link" class="w-4 h-4" />
+                Lien de paiement
+              </a>
+
+              <!-- Copier -->
+              <div class="relative group">
+                <button class="btn-primary p-1" @click.stop="copyPaymentLink">
+                  <Icon name="document-duplicate" class="w-4 h-4" />
+                </button>
+                <span
+                  class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 text-xs rounded bg-gray-800 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-75"
+                >
+                  Copier le lien
+                </span>
+              </div>
+
+              <!-- Régénérer -->
+              <div class="relative group">
+                <button class="btn-primary p-1" @click.stop="onPaymentLink">
+                  <Icon name="arrow-path" class="w-4 h-4" />
+                </button>
+                <span
+                  class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 text-xs rounded bg-gray-800 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-75"
+                >
+                  Régénérer lien
+                </span>
+              </div>
+            </template>
+
+            <!-- Si pas encore de lien -->
+            <template v-else>
+              <div class="relative group">
+                <button
+                  class="btn-primary p-0 px-3 text-sm"
+                  @click.stop="onPaymentLink"
+                >
+                  Générer un lien de paiement
+                </button>
+                <span
+                  class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 text-xs rounded bg-gray-800 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-75"
+                >
+                  Générer lien de paiement
+                </span>
+              </div>
+            </template>
+          </div>
+          <!-- action sur la facture -->
+          <div class="flex gap-2">
+            <button class="btn-primary p-1" @click.stop="downloadPdf">
+              <Icon name="download" class="w-4 h-4" />
+            </button>
+            <button
+              class="btn-primary p-1"
+              @click.stop="$emit('edit', facture)"
+            >
+              <Icon name="pencil" class="w-4 h-4" />
+            </button>
+            <button
+              class="btn-primary hover:bg-red-700 p-1"
+              @click.stop="onDelete"
+            >
+              <Icon name="trash" class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <!-- Actions -->
-    <div class="flex flex-col gap-2 items-end">
-      <button class="btn-secondary" @click="downloadPdf">⬇️ PDF</button>
-      <button class="btn-secondary" @click="$emit('edit', facture)">
-        ✏️ Modifier
-      </button>
-      <button class="btn-secondary" @click="onPaymentLink">💳 Paiement</button>
-      <button class="btn-danger" @click="onDelete">🗑️ Supprimer</button>
-    </div>
+    </transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { Facture } from "../../services/factures";
 import { useFactures } from "../../composables/useFactures";
 import { generateFacturePdf } from "../../utils/pdf/facturePdf";
 import { generateFacturePaymentLink } from "../../services/factures";
+import Icon from "../ui/Icon.vue";
 
 const props = defineProps<{
   facture: Facture;
@@ -98,6 +150,7 @@ const props = defineProps<{
 const emit = defineEmits(["edit", "deleted", "updated"]);
 
 const { removeFacture } = useFactures();
+const expanded = ref(false); // 👈 toggle vue détaillée
 
 // ----------------------
 // Status labels & styles
@@ -174,10 +227,12 @@ async function copyPaymentLink() {
 </script>
 
 <style scoped>
-.btn-secondary {
-  @apply px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-sm;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s;
 }
-.btn-danger {
-  @apply px-3 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-sm;
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

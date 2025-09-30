@@ -75,7 +75,7 @@
 import AgendaHeader from "./AgendaHeader.vue";
 import AgendaDayColumn from "./AgendaDayColumn.vue";
 import SelectionPopup from "../SelectionPopup.vue";
-import ClientPopup from "../ClientPopup.vue";
+import ClientPopup from "../missions/ClientPopup.vue";
 
 import { useAgendaNavigation } from "../../composables/agenda/useAgendaNavigation";
 import { useAgendaSlots } from "../../composables/agenda/useAgendaSlots";

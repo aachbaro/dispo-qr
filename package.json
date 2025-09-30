@@ -10,6 +10,7 @@
     "tailwind-init": "tailwindcss init -p"
   },
   "dependencies": {
+    "@heroicons/vue": "^2.2.0",
     "@supabase/supabase-js": "^2.57.1",
     "bcryptjs": "^3.0.2",
     "dayjs": "^1.11.18",

@@ -4,12 +4,13 @@
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - Liste toutes les factures d’une entreprise
+//   - Liste toutes les factures d’une entreprise (filtrables par mission_id)
 //   - Permet de créer une nouvelle facture
 //
 // 📍 Endpoints :
-//   - GET  /api/entreprises/[ref]/factures  → liste factures
-//   - POST /api/entreprises/[ref]/factures  → créer facture
+//   - GET  /api/entreprises/[ref]/factures           → liste factures
+//   - GET  /api/entreprises/[ref]/factures?mission_id=42 → liste factures d’une mission
+//   - POST /api/entreprises/[ref]/factures           → créer facture
 //
 // 🔒 Règles d’accès :
 //   - Authentification JWT requise
@@ -93,14 +94,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // GET → Liste factures
     // ----------------------
     if (req.method === "GET") {
-      const { data, error } = await supabaseAdmin
+      const { mission_id } = req.query;
+
+      let query = supabaseAdmin
         .from("factures")
-        .select("*, missions(*, slots(*))") // 👈 inclut mission + slots liés
+        .select("*, missions(*, slots(*))")
         .eq("entreprise_id", entreprise.id)
         .order("date_emission", { ascending: false });
 
-      if (error) return res.status(500).json({ error: error.message });
+      if (mission_id && !isNaN(Number(mission_id))) {
+        query = query.eq("mission_id", Number(mission_id));
+      }
 
+      const { data, error } = await query;
+
+      if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ factures: data });
     }
 
@@ -108,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // POST → Créer facture
     // ----------------------
     if (req.method === "POST") {
-      const payload = req.body;
+      const payload = req.body ? JSON.parse(req.body) : {};
 
       // sécurité : toujours forcer entreprise_id depuis le ref
       let toInsert: any = {

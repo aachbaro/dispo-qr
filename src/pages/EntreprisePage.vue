@@ -80,7 +80,7 @@ import { useAuth } from "../composables/useAuth";
 import { getEntreprise } from "../services/entreprises";
 
 import Agenda from "../components/agenda/Agenda.vue";
-import MissionList from "../components/MissionList.vue";
+import MissionList from "../components/missions/MissionList.vue";
 import EntrepriseInfos from "../components/EntrepriseInfos.vue";
 import FactureList from "../components/factures/FactureList.vue";
 

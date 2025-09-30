@@ -145,3 +145,16 @@ export async function generateFacturePaymentLink(
     { method: "POST" }
   );
 }
+
+// ----------------------
+// Factures par mission
+// ----------------------
+export async function listFacturesByMission(
+  ref: string | number,
+  missionId: number
+): Promise<Facture[]> {
+  const { factures } = await request<{ factures: Facture[] }>(
+    `/api/entreprises/${ref}/factures?mission_id=${missionId}`
+  );
+  return factures;
+}
