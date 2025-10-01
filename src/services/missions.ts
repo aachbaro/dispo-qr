@@ -20,55 +20,24 @@
 // ⚠️ Remarques :
 //   - On ne stocke plus date_slot/end_slot directement dans mission
 //   - Les créneaux sont envoyés dans `slots` (table dédiée)
+//   - Typage basé sur types/database.ts
 // -------------------------------------------------------------
 
 import { request } from "./api";
+import type { Tables, TablesInsert, TablesUpdate } from "../../types/database";
 import type { Slot } from "./slots";
 
 // ----------------------
 // Types
 // ----------------------
-export interface MissionPayload {
-  etablissement: string;
 
-  // Adresse normalisée
-  etablissement_adresse_ligne1: string;
-  etablissement_adresse_ligne2?: string;
-  etablissement_ville: string;
-  etablissement_code_postal: string;
-  etablissement_pays?: string;
+export type Mission = Tables<"missions">;
+export type MissionInsert = TablesInsert<"missions">;
+export type MissionUpdate = TablesUpdate<"missions">;
 
-  // Contact
-  contact_name?: string;
-  contact_email: string;
-  contact_phone: string;
-
-  // Infos mission
-  instructions?: string;
-  mode: "freelance" | "salarié";
-
-  // Créneaux liés
+// Payload enrichi côté frontend : ajoute les slots liés
+export type MissionPayload = MissionInsert & {
   slots: Array<Pick<Slot, "start" | "end" | "title">>;
-}
-
-export interface Mission extends Omit<MissionPayload, "slots"> {
-  id: number;
-  created_at: string;
-  status:
-    | "proposed"
-    | "validated"
-    | "pending_payment"
-    | "paid"
-    | "completed"
-    | "refused"
-    | "realized";
-
-  // Slots associés à la mission
-  slots?: Slot[];
-}
-
-export type MissionUpdate = Partial<MissionPayload> & {
-  status?: Mission["status"];
 };
 
 // ----------------------
@@ -77,14 +46,12 @@ export type MissionUpdate = Partial<MissionPayload> & {
 
 /**
  * ➕ Créer une mission (owner uniquement)
- * @param entrepriseId - id numérique de l’entreprise
- * @param payload - infos mission + slots
  */
 export async function createEntrepriseMission(
   entrepriseId: number,
   payload: MissionPayload
-): Promise<{ mission: Mission }> {
-  return request<{ mission: Mission }>(
+): Promise<{ mission: Mission & { slots?: Slot[] } }> {
+  return request<{ mission: Mission & { slots?: Slot[] } }>(
     `/api/entreprises/${entrepriseId}/missions`,
     {
       method: "POST",
@@ -95,18 +62,16 @@ export async function createEntrepriseMission(
 
 /**
  * 📜 Lister les missions d’une entreprise
- * @param ref - id (number) ou slug (string) de l’entreprise
- * @param params - filtres optionnels (from, to, status)
  */
 export async function listEntrepriseMissions(
   ref: string | number,
   params: { from?: string; to?: string; status?: Mission["status"] } = {}
-): Promise<{ missions: Mission[] }> {
+): Promise<{ missions: (Mission & { slots?: Slot[] })[] }> {
   const query = new URLSearchParams(
     params as Record<string, string>
   ).toString();
 
-  return request<{ missions: Mission[] }>(
+  return request<{ missions: (Mission & { slots?: Slot[] })[] }>(
     `/api/entreprises/${ref}/missions${query ? `?${query}` : ""}`
   );
 }
@@ -118,8 +83,8 @@ export async function updateEntrepriseMission(
   entrepriseId: number,
   missionId: number,
   updates: MissionUpdate
-): Promise<{ mission: Mission }> {
-  return request<{ mission: Mission }>(
+): Promise<{ mission: Mission & { slots?: Slot[] } }> {
+  return request<{ mission: Mission & { slots?: Slot[] } }>(
     `/api/entreprises/${entrepriseId}/missions/${missionId}`,
     {
       method: "PUT",

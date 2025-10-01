@@ -1,6 +1,7 @@
 // src/services/factures.ts
 // -------------------------------------------------------------
 // Services liés aux factures d'une entreprise
+// -------------------------------------------------------------
 //
 // 📌 Description :
 //   - CRUD des factures
@@ -18,85 +19,42 @@
 // 🔒 Règles d’accès :
 //   - Lecture publique (slug) / owner (id)
 //   - CRUD limité aux entreprises propriétaires
+//
+// ⚠️ Remarques :
+//   - Typage basé sur types/database.ts généré automatiquement
+//   - Pas de duplication manuelle des interfaces
 // -------------------------------------------------------------
 
 import { request } from "./api";
+import type { Tables, TablesInsert, TablesUpdate } from "../../types/database";
 
 // ----------------------
 // Types
 // ----------------------
-export interface FacturePayload {
-  numero: string;
-  date_emission: string;
 
-  // Infos client
-  client_name: string;
-  client_address_ligne1: string;
-  client_address_ligne2?: string;
-  client_ville: string;
-  client_code_postal: string;
-  client_pays?: string;
-
-  // Contact
-  contact_name?: string;
-  contact_phone?: string;
-  contact_email?: string;
-
-  // Prestation
-  description?: string;
-
-  // Détails temps & tarifs
-  hours: number; // durée en heures
-  rate: number; // taux horaire appliqué
-
-  // Montants
-  montant_ht: number;
-  tva: number; // en pourcentage
-  montant_ttc: number;
-
-  // Mentions
-  mention_tva?: string;
-  conditions_paiement?: string;
-  penalites_retard?: string;
-
-  // Lien mission
-  mission_id?: number;
-}
-
-export interface Facture extends FacturePayload {
-  id: number;
-  entreprise_id: number;
-  created_at: string;
-
-  // PDF généré
-  url?: string;
-
-  // Paiement Stripe
-  payment_link?: string;
-  stripe_session_id?: string;
-  stripe_payment_intent?: string;
-  status: "pending" | "pending_payment" | "paid" | "cancelled";
-}
-
-export type FactureUpdate = Partial<FacturePayload> & {
-  payment_link?: string;
-  stripe_session_id?: string;
-  stripe_payment_intent?: string;
-  status?: Facture["status"];
-};
+export type Facture = Tables<"factures">;
+export type FactureInsert = TablesInsert<"factures">;
+export type FactureUpdate = TablesUpdate<"factures">;
 
 // ----------------------
 // Services Factures
 // ----------------------
+
+/**
+ * 📋 Lister toutes les factures d'une entreprise
+ */
 export async function listEntrepriseFactures(
   ref: string | number
 ): Promise<{ factures: Facture[] }> {
   return request<{ factures: Facture[] }>(`/api/entreprises/${ref}/factures`);
 }
 
+/**
+ * ➕ Créer une facture
+ */
 export async function createEntrepriseFacture(
   ref: string | number,
-  payload: FacturePayload
+  payload: FactureInsert
 ): Promise<{ facture: Facture }> {
   return request<{ facture: Facture }>(`/api/entreprises/${ref}/factures`, {
     method: "POST",
@@ -104,6 +62,9 @@ export async function createEntrepriseFacture(
   });
 }
 
+/**
+ * 🔍 Récupérer une facture par son id
+ */
 export async function getEntrepriseFacture(
   ref: string | number,
   factureId: number
@@ -113,6 +74,9 @@ export async function getEntrepriseFacture(
   );
 }
 
+/**
+ * ✏️ Mettre à jour une facture
+ */
 export async function updateEntrepriseFacture(
   ref: string | number,
   factureId: number,
@@ -127,6 +91,9 @@ export async function updateEntrepriseFacture(
   );
 }
 
+/**
+ * ❌ Supprimer une facture
+ */
 export async function deleteEntrepriseFacture(
   ref: string | number,
   factureId: number
@@ -136,6 +103,9 @@ export async function deleteEntrepriseFacture(
   });
 }
 
+/**
+ * 🔗 Générer un lien de paiement pour une facture
+ */
 export async function generateFacturePaymentLink(
   ref: string | number,
   factureId: number
@@ -146,9 +116,9 @@ export async function generateFacturePaymentLink(
   );
 }
 
-// ----------------------
-// Factures par mission
-// ----------------------
+/**
+ * 📌 Récupérer toutes les factures liées à une mission
+ */
 export async function listFacturesByMission(
   ref: string | number,
   missionId: number

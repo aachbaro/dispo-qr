@@ -11,22 +11,24 @@
 //   - POST /api/entreprises/[ref]/missions → crée mission (+ slots)
 //
 // 🔒 Règles d’accès :
-//   - Authentification JWT obligatoire pour créer
+//   - Auth JWT obligatoire pour POST
 //   - GET :
-//       • Si owner/admin → accès complet
-//       • Sinon → accès limité (missions publiques seulement)
+//       • Owner/admin → accès complet
+//       • Public → missions validées/completed seulement
 //
 // ⚠️ Remarques :
-//   - ref = slug (string) ou id (number) de l’entreprise
-//   - id  = identifiant numérique de la mission
-//   - Statuts possibles → ENUM mission_status :
-//       • proposed, validated, pending_payment, paid, completed, refused, realized
-//   - Les slots liés sont insérés en cascade
+//   - ref = slug (string) ou id (number)
+//   - Statuts possibles = ENUM mission_status
+//   - Slots insérés en cascade
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../../../_supabase.js";
+import type { Tables } from "../../../../types/database.js";
 
+// ----------------------
+// Helpers
+// ----------------------
 async function getUserFromToken(req: VercelRequest) {
   const auth = req.headers.authorization;
   if (!auth) return null;
@@ -37,7 +39,10 @@ async function getUserFromToken(req: VercelRequest) {
   return data.user;
 }
 
-function canAccessSensitive(user: any, entreprise: any): boolean {
+function canAccessSensitive(
+  user: any,
+  entreprise: Tables<"entreprise">
+): boolean {
   if (!user) return false;
   if (user.id === entreprise.user_id) return true;
   if (user.app_metadata?.role === "admin") return true;
@@ -46,12 +51,9 @@ function canAccessSensitive(user: any, entreprise: any): boolean {
 
 async function findEntreprise(ref: string) {
   let query = supabaseAdmin.from("entreprise").select("*");
-  if (!isNaN(Number(ref))) {
-    query = query.eq("id", Number(ref));
-  } else {
-    query = query.eq("slug", ref);
-  }
-  return query.single();
+  if (!isNaN(Number(ref))) query = query.eq("id", Number(ref));
+  else query = query.eq("slug", ref);
+  return query.single<Tables<"entreprise">>();
 }
 
 // ----------------------
@@ -60,13 +62,13 @@ async function findEntreprise(ref: string) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { ref } = req.query;
   if (!ref || typeof ref !== "string") {
-    return res.status(400).json({ error: "Paramètre entreprise invalide" });
+    return res.status(400).json({ error: "❌ Paramètre entreprise invalide" });
   }
 
   try {
     const user = await getUserFromToken(req);
 
-    // 🔍 Récupère l’entreprise
+    // 🔍 Entreprise
     const { data: entreprise, error: entrepriseError } = await findEntreprise(
       ref
     );
@@ -74,17 +76,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("❌ Erreur fetch entreprise:", entrepriseError.message);
       return res.status(500).json({ error: entrepriseError.message });
     }
-    if (!entreprise) {
-      return res.status(404).json({ error: "Entreprise non trouvée" });
-    }
+    if (!entreprise)
+      return res.status(404).json({ error: "❌ Entreprise non trouvée" });
 
     // ----------------------
-    // GET → Liste missions (avec slots)
+    // GET → Liste missions (+ slots)
     // ----------------------
     if (req.method === "GET") {
       let query = supabaseAdmin
         .from("missions")
-        .select("*, slots(*)") // inclut les créneaux
+        .select("*, slots(*)")
         .eq("entreprise_id", entreprise.id)
         .order("created_at", { ascending: false });
 
@@ -99,27 +100,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ----------------------
-    // POST → Créer mission (+ slots liés)
+    // POST → Créer mission (+ slots)
     // ----------------------
     if (req.method === "POST") {
-      const { slots, ...payload } = req.body;
+      const { slots, ...payload } = req.body as Partial<Tables<"missions">> & {
+        slots?: Array<Pick<Tables<"slots">, "start" | "end" | "title">>;
+      };
 
-      // Crée la mission
+      // statut forcé si externe
+      const isOwnerOrAdmin = user && canAccessSensitive(user, entreprise);
+      const clientId = user ? user.id : null;
+
       const { data: mission, error: missionError } = await supabaseAdmin
         .from("missions")
         .insert({
           ...payload,
           entreprise_id: entreprise.id,
-          client_id: user ? user.id : null,
-          status: payload.status || "proposed",
+          client_id: clientId,
+          status: isOwnerOrAdmin ? payload.status || "proposed" : "proposed", // ⚠️ externes ne peuvent que proposer
         })
         .select()
-        .single();
+        .single<Tables<"missions">>();
 
       if (missionError)
         return res.status(500).json({ error: missionError.message });
 
-      // Ajoute les slots si fournis
       if (Array.isArray(slots) && slots.length > 0) {
         const insertSlots = slots.map((s) => ({
           start: s.start,
@@ -131,7 +136,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { error: slotError } = await supabaseAdmin
           .from("slots")
           .insert(insertSlots);
-
         if (slotError) {
           console.error("❌ Erreur création slots:", slotError.message);
           return res.status(500).json({ error: slotError.message });
@@ -141,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json({ mission });
     }
 
-    return res.status(405).json({ error: "Méthode non autorisée" });
+    return res.status(405).json({ error: "❌ Méthode non autorisée" });
   } catch (err: any) {
     console.error("❌ Exception handler missions:", err);
     return res.status(500).json({ error: "Erreur serveur" });

@@ -1,10 +1,21 @@
 // src/composables/useAuth.ts
 // -------------------------------------------------------------
 // Composable global d’authentification
+// -------------------------------------------------------------
 //
-// - Stocke user + token en réactif et dans localStorage
-// - Permet setUser / clearAuth
-// - Récupère automatiquement la session Supabase au démarrage
+// 📌 Description :
+//   - Gère l’état utilisateur (user + token) en réactif
+//   - Persiste dans localStorage (clé: "authUser", "authToken")
+//   - Fournit les actions : setUser, clearAuth, initAuth
+//   - Au démarrage, restaure la session depuis Supabase
+//
+// 🔒 Règles d’accès :
+//   - AuthUser contient id, email, role (+ slug si freelance)
+//   - Les vérifications de droits restent côté API
+//
+// ⚠️ Remarques :
+//   - Toute modif d’état met à jour localStorage
+//   - initAuth() doit être appelé une fois (hook global ou layout)
 // -------------------------------------------------------------
 
 import { ref, onMounted } from "vue";
@@ -14,6 +25,7 @@ import { getSession, getCurrentUser } from "../services/auth";
 // ----------------------
 // State global
 // ----------------------
+
 const storedUser = localStorage.getItem("authUser");
 const storedToken = localStorage.getItem("authToken");
 
@@ -23,9 +35,10 @@ const token = ref<string | null>(storedToken ?? null);
 // ----------------------
 // Composable
 // ----------------------
+
 export function useAuth() {
   /**
-   * ✅ Met à jour user + token
+   * ✅ Met à jour user + token (et localStorage)
    */
   function setUser(newUser: AuthUser | null, newToken?: string) {
     user.value = newUser;
@@ -43,7 +56,7 @@ export function useAuth() {
   }
 
   /**
-   * 🚪 Déconnexion locale
+   * 🚪 Déconnexion locale (reset + suppression storage)
    */
   function clearAuth() {
     user.value = null;
@@ -53,7 +66,7 @@ export function useAuth() {
   }
 
   /**
-   * 🔄 Initialise depuis Supabase (au montage)
+   * 🔄 Récupère la session Supabase et initialise user/token
    */
   async function initAuth() {
     const session = await getSession();
@@ -69,7 +82,7 @@ export function useAuth() {
     }
   }
 
-  // Exécuter au démarrage (1 seule fois)
+  // Exécuter une fois au montage global
   onMounted(initAuth);
 
   return { user, token, setUser, clearAuth, initAuth };

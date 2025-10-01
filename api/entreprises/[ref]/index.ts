@@ -1,19 +1,21 @@
 // api/entreprises/[ref]/index.ts
 // -------------------------------------------------------------
-// Route entreprise (publique ou privée) : /api/entreprises/[ref]
+// Gestion d’une entreprise (publique ou privée)
+// -------------------------------------------------------------
 //
-// - GET :
-//   -> Public : retourne uniquement les infos visibles publiquement
-//   -> Privé (owner ou admin) : retourne toutes les infos sensibles
+// 📍 Endpoints :
+//   - GET    /api/entreprises/[ref] → lecture publique ou privée
+//   - PUT    /api/entreprises/[ref] → mise à jour (owner/admin)
+//   - DELETE /api/entreprises/[ref] → suppression (owner/admin)
 //
-// - PUT : Mettre à jour une entreprise (owner ou admin uniquement)
-// - DELETE : Supprimer une entreprise (owner ou admin uniquement)
-//
-// ⚠️ Vérifie le token JWT pour différencier public vs privé
+// 🔒 Accès :
+//   - Public → GET limité aux champs non sensibles
+//   - Auth (owner/admin) → accès complet + update/delete
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../../_supabase.js";
+import type { Tables } from "../../../types/database.js";
 
 // ----------------------
 // Helpers
@@ -21,17 +23,17 @@ import { supabaseAdmin } from "../../_supabase.js";
 async function getUserFromToken(req: VercelRequest) {
   const auth = req.headers.authorization;
   if (!auth) return null;
-
   const token = auth.split(" ")[1];
   if (!token) return null;
-
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data?.user) return null;
-
   return data.user;
 }
 
-function canAccessSensitive(user: any, entreprise: any): boolean {
+function canAccessSensitive(
+  user: any,
+  entreprise: Tables<"entreprise">
+): boolean {
   if (!user) return false;
   if (user.id === entreprise.user_id) return true;
   if (user.app_metadata?.role === "admin") return true;
@@ -40,14 +42,9 @@ function canAccessSensitive(user: any, entreprise: any): boolean {
 
 async function findEntreprise(ref: string) {
   let query = supabaseAdmin.from("entreprise").select("*");
-
-  if (!isNaN(Number(ref))) {
-    query = query.eq("id", Number(ref));
-  } else {
-    query = query.eq("slug", ref);
-  }
-
-  return query.single();
+  if (!isNaN(Number(ref))) query = query.eq("id", Number(ref));
+  else query = query.eq("slug", ref);
+  return query.single<Tables<"entreprise">>();
 }
 
 // ----------------------
@@ -55,16 +52,15 @@ async function findEntreprise(ref: string) {
 // ----------------------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { ref } = req.query;
-
   if (!ref || typeof ref !== "string") {
-    return res.status(400).json({ error: "Référence entreprise invalide" });
+    return res.status(400).json({ error: "❌ Référence entreprise invalide" });
   }
 
   try {
     const user = await getUserFromToken(req);
 
     // ----------------------
-    // GET
+    // GET → Lecture entreprise
     // ----------------------
     if (req.method === "GET") {
       const { data: entreprise, error } = await findEntreprise(ref);
@@ -77,7 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Champs publics
-      let data: any = {
+      let data: Partial<Tables<"entreprise">> = {
         id: entreprise.id,
         slug: entreprise.slug,
         nom: entreprise.nom,
@@ -95,7 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         stripe_account_id: entreprise.stripe_account_id,
       };
 
-      // Champs privés si owner/admin
+      // Champs sensibles si owner/admin
       if (canAccessSensitive(user, entreprise)) {
         data = {
           ...data,
@@ -115,10 +111,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ----------------------
-    // PUT
+    // PUT → Mise à jour
     // ----------------------
     if (req.method === "PUT") {
-      if (!user) return res.status(401).json({ error: "Non authentifié" });
+      if (!user) return res.status(401).json({ error: "❌ Non authentifié" });
 
       const { data: entreprise } = await findEntreprise(ref);
       if (!entreprise) {
@@ -128,7 +124,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(403).json({ error: "Accès interdit" });
       }
 
-      const updates = req.body;
+      const updates =
+        typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+
       const { data, error } = await supabaseAdmin
         .from("entreprise")
         .update(updates)
@@ -141,10 +139,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ----------------------
-    // DELETE
+    // DELETE → Suppression
     // ----------------------
     if (req.method === "DELETE") {
-      if (!user) return res.status(401).json({ error: "Non authentifié" });
+      if (!user) return res.status(401).json({ error: "❌ Non authentifié" });
 
       const { data: entreprise } = await findEntreprise(ref);
       if (!entreprise) {
@@ -160,12 +158,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", entreprise.id);
 
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ message: "Entreprise supprimée" });
+      return res.status(200).json({ message: "✅ Entreprise supprimée" });
     }
 
-    return res.status(405).json({ error: "Méthode non autorisée" });
+    return res.status(405).json({ error: "❌ Méthode non autorisée" });
   } catch (err: any) {
-    console.error("❌ Exception handler entreprise:", err);
+    console.error("❌ Exception entreprise/index:", err);
     return res.status(500).json({ error: "Erreur serveur" });
   }
 }

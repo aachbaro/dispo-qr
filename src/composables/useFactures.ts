@@ -3,10 +3,19 @@
 // Composable de gestion des factures
 // -------------------------------------------------------------
 //
-// - Centralise les appels à src/services/factures.ts
-// - Fournit un état réactif (factures, loading, error)
-// - Utilisé dans les composants (FactureList, FactureModal, etc.)
+// 📌 Description :
+//   - Centralise les appels aux services (src/services/factures.ts)
+//   - Fournit un état réactif (factures, loading, error)
+//   - Expose des actions CRUD (fetch, create, update, remove)
+//   - Utilisé dans les composants : FactureList, FactureModal, etc.
 //
+// 🔒 Règles d’accès :
+//   - L’accès aux factures est contrôlé côté API (owner vs public)
+//   - Le composable ne fait que relayer les erreurs
+//
+// ⚠️ Remarques :
+//   - Les erreurs sont stockées dans `error` et loggées en console
+//   - Après suppression, la facture est retirée du state local
 // -------------------------------------------------------------
 
 import { ref } from "vue";
@@ -20,14 +29,17 @@ import {
   type FactureUpdate,
 } from "../services/factures";
 
+// ----------------------
+// Composable
+// ----------------------
 export function useFactures() {
   const factures = ref<Facture[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
-  // ----------------------
-  // Lister les factures
-  // ----------------------
+  /**
+   * 📜 Récupère la liste des factures d’une entreprise
+   */
   async function fetchFactures(refEntreprise: string | number) {
     loading.value = true;
     error.value = null;
@@ -42,9 +54,9 @@ export function useFactures() {
     }
   }
 
-  // ----------------------
-  // Créer une facture
-  // ----------------------
+  /**
+   * ➕ Crée une nouvelle facture
+   */
   async function createFacture(
     refEntreprise: string | number,
     payload: FacturePayload
@@ -53,7 +65,7 @@ export function useFactures() {
     error.value = null;
     try {
       const { facture } = await createEntrepriseFacture(refEntreprise, payload);
-      factures.value.unshift(facture); // ajoute en tête
+      factures.value.unshift(facture); // ajoute en tête de liste
       return facture;
     } catch (err: any) {
       console.error("❌ Erreur création facture:", err);
@@ -64,9 +76,9 @@ export function useFactures() {
     }
   }
 
-  // ----------------------
-  // Mettre à jour une facture
-  // ----------------------
+  /**
+   * ✏️ Met à jour une facture existante
+   */
   async function updateFacture(
     refEntreprise: string | number,
     factureId: number,
@@ -92,9 +104,9 @@ export function useFactures() {
     }
   }
 
-  // ----------------------
-  // Supprimer une facture
-  // ----------------------
+  /**
+   * ❌ Supprime une facture
+   */
   async function removeFacture(
     refEntreprise: string | number,
     factureId: number

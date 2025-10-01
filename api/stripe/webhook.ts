@@ -5,21 +5,12 @@
 //
 // 📌 Description :
 //   - Vérifie la signature Stripe
-//   - Gère les événements principaux :
-//       • checkout.session.completed → facture marquée "paid"
-//       • payment_intent.payment_failed → facture marquée "canceled"
-//   - Met à jour la table `factures`
-//   - Si une facture est liée à une mission, met aussi à jour `missions.status`
+//   - checkout.session.completed → facture = "paid"
+//   - payment_intent.payment_failed → facture = "canceled"
+//   - Met à jour aussi la mission si liée
 //
-// 📍 Endpoint :
-//   - POST /api/stripe/webhook
-//
-// 🔒 Accès :
-//   - Appel uniquement par Stripe (signature requise)
-//
-// ⚠️ Bonnes pratiques :
-//   - Toujours logguer les événements reçus
-//   - Ne pas renvoyer 200 si traitement échoue
+// 📍 Endpoint : POST /api/stripe/webhook
+// 🔒 Accès : uniquement Stripe (signature requise)
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -27,11 +18,11 @@ import Stripe from "stripe";
 import { supabaseAdmin } from "../_supabase.js";
 
 // -----------------------------
-// Initialisation Stripe
+// Init Stripe
 // -----------------------------
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
-// Stripe a besoin du raw body pour vérifier la signature
+// Stripe a besoin du raw body → désactive bodyParser
 export const config = {
   api: {
     bodyParser: false,
@@ -51,7 +42,7 @@ function rawBody(req: VercelRequest): Promise<Buffer> {
 }
 
 // -----------------------------
-// Handler principal
+// Handler
 // -----------------------------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -72,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       process.env.STRIPE_WEBHOOK_SECRET as string
     );
   } catch (err: any) {
-    console.error("❌ Erreur signature Stripe:", err.message);
+    console.error("❌ Erreur vérification signature Stripe:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -86,23 +77,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const factureId = session.metadata?.facture_id;
 
         if (!factureId) {
-          console.error("❌ Facture ID manquant dans metadata");
+          console.error("❌ Facture ID manquant (metadata)");
           break;
         }
 
-        // Récupération de la facture liée
+        // Vérifie facture
         const { data: facture, error: factureError } = await supabaseAdmin
           .from("factures")
           .select("id, mission_id")
           .eq("id", factureId)
-          .single();
+          .maybeSingle();
 
         if (factureError || !facture) {
-          console.error("❌ Facture introuvable:", factureError);
+          console.error("❌ Facture introuvable:", factureError?.message);
           break;
         }
 
-        // Mise à jour facture → paid
+        // Update facture
         const { error: updateError } = await supabaseAdmin
           .from("factures")
           .update({
@@ -113,13 +104,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("id", factureId);
 
         if (updateError) {
-          console.error("❌ Erreur update facture:", updateError);
+          console.error("❌ Erreur update facture:", updateError.message);
           break;
         }
 
-        console.log(`✅ Facture ${factureId} marquée comme paid`);
+        console.log(`✅ Facture ${factureId} → paid`);
 
-        // 🔄 Si mission liée → passer mission en "paid"
+        // Si mission liée → update mission
         if (facture.mission_id) {
           const { error: missionError } = await supabaseAdmin
             .from("missions")
@@ -128,14 +119,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           if (missionError) {
             console.error(
-              `⚠️ Erreur mise à jour mission ${facture.mission_id}:`,
-              missionError
+              `⚠️ Erreur update mission ${facture.mission_id}:`,
+              missionError.message
             );
           } else {
-            console.log(`✅ Mission ${facture.mission_id} marquée comme paid`);
+            console.log(`✅ Mission ${facture.mission_id} → paid`);
           }
         }
-
         break;
       }
 
@@ -145,20 +135,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const factureId = intent.metadata?.facture_id;
 
         if (!factureId) {
-          console.error("❌ Facture ID manquant dans metadata");
+          console.error("❌ Facture ID manquant (metadata)");
           break;
         }
 
-        // Mise à jour facture → canceled
         const { error } = await supabaseAdmin
           .from("factures")
           .update({ status: "canceled" })
           .eq("id", factureId);
 
         if (error) {
-          console.error("❌ Erreur update facture canceled:", error);
+          console.error("❌ Erreur update facture canceled:", error.message);
         } else {
-          console.log(`⚠️ Facture ${factureId} marquée comme canceled`);
+          console.log(`⚠️ Facture ${factureId} → canceled`);
         }
         break;
       }
@@ -168,8 +157,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.json({ received: true });
-  } catch (err) {
-    console.error("❌ Erreur traitement webhook:", err);
+  } catch (err: any) {
+    console.error("❌ Erreur traitement webhook:", err.message);
     return res.status(500).send("Erreur serveur webhook");
   }
 }

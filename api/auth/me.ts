@@ -1,12 +1,22 @@
 // api/auth/me.ts
 // -------------------------------------------------------------
 // Route : /api/auth/me
+// -------------------------------------------------------------
 //
-// - GET : Retourne les infos d'auth du user connecté
-//   • Données brutes de Supabase Auth (id, email, etc.)
-//   • Utile pour vérifier rapidement si un user est connecté
+// 📌 Description :
+//   - GET : Retourne les infos d’auth du user connecté
+//   - Données brutes de Supabase Auth (id, email, metadata…)
+//   - Utile pour vérifier rapidement si un user est connecté
 //
-// ⚠️ Auth obligatoire (JWT dans Authorization header)
+// 📍 Endpoints :
+//   - GET /api/auth/me → retourne { user }
+//
+// 🔒 Règles d’accès :
+//   - Auth obligatoire (JWT dans Authorization header)
+//
+// ⚠️ Remarques :
+//   - Réutilise supabaseAdmin pour valider le token
+//   - Retourne null si le token est invalide ou expiré
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -15,10 +25,6 @@ import { supabaseAdmin } from "../_supabase.js";
 // ----------------------
 // Helpers
 // ----------------------
-
-/**
- * ✅ Vérifie le token et retourne le user depuis Supabase Auth
- */
 async function getUserFromToken(req: VercelRequest) {
   const auth = req.headers.authorization;
   if (!auth) return null;
@@ -35,17 +41,16 @@ async function getUserFromToken(req: VercelRequest) {
 // ----------------------
 // Handler principal
 // ----------------------
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    if (req.method !== "GET") {
-      return res.status(405).json({ error: "Méthode non autorisée" });
-    }
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "❌ Méthode non autorisée" });
+  }
 
-    // ✅ Auth obligatoire
+  try {
+    // ✅ Vérifier auth
     const user = await getUserFromToken(req);
     if (!user) {
-      return res.status(401).json({ error: "Non authentifié" });
+      return res.status(401).json({ error: "❌ Non authentifié" });
     }
 
     return res.status(200).json({ user });

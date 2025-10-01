@@ -4,28 +4,27 @@
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - Liste toutes les factures d’une entreprise (filtrables par mission_id)
-//   - Permet de créer une nouvelle facture
+//   - Liste toutes les factures d’une entreprise
+//   - Création d’une facture (liée ou non à une mission)
 //
 // 📍 Endpoints :
-//   - GET  /api/entreprises/[ref]/factures           → liste factures
-//   - GET  /api/entreprises/[ref]/factures?mission_id=42 → liste factures d’une mission
-//   - POST /api/entreprises/[ref]/factures           → créer facture
+//   - GET  /api/entreprises/[ref]/factures
+//   - GET  /api/entreprises/[ref]/factures?mission_id=42
+//   - POST /api/entreprises/[ref]/factures
 //
 // 🔒 Règles d’accès :
-//   - Authentification JWT requise
+//   - Auth JWT obligatoire
 //   - Réservé au propriétaire de l’entreprise ou admin
 //
 // ⚠️ Remarques :
-//   - Le numéro de facture doit être unique dans l’entreprise
-//   - Une facture peut être liée ou non à une mission
-//   - Le tri se fait par date d’émission décroissante
-//   - Les statuts possibles sont définis dans l’ENUM facture_status
-//
+//   - Numéro de facture unique dans une entreprise
+//   - Statut par défaut = "pending_payment"
+//   - Si mission liée → calcule heures & montants
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../../../_supabase.js";
+import type { Tables } from "../../../../types/database.js";
 
 // ----------------------
 // Helpers
@@ -45,17 +44,15 @@ async function getUserFromToken(req: VercelRequest) {
 
 async function findEntreprise(ref: string) {
   let query = supabaseAdmin.from("entreprise").select("*");
-
   if (!isNaN(Number(ref))) {
     query = query.eq("id", Number(ref));
   } else {
     query = query.eq("slug", ref);
   }
-
-  return query.single();
+  return query.single<Tables<"entreprise">>();
 }
 
-function canAccess(user: any, entreprise: any): boolean {
+function canAccess(user: any, entreprise: Tables<"entreprise">): boolean {
   if (!user) return false;
   if (user.id === entreprise.user_id) return true;
   if (user.app_metadata?.role === "admin") return true;
@@ -69,13 +66,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { ref } = req.query;
 
   if (!ref || typeof ref !== "string") {
-    return res.status(400).json({ error: "Paramètre entreprise invalide" });
+    return res.status(400).json({ error: "❌ Paramètre entreprise invalide" });
   }
 
   try {
+    // 🔐 Auth
     const user = await getUserFromToken(req);
 
-    // 🔍 Récupération entreprise
+    // 🔎 Entreprise
     const { data: entreprise, error: entrepriseError } = await findEntreprise(
       ref
     );
@@ -83,11 +81,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: entrepriseError.message });
     }
     if (!entreprise) {
-      return res.status(404).json({ error: "Entreprise non trouvée" });
+      return res.status(404).json({ error: "❌ Entreprise introuvable" });
     }
-
     if (!canAccess(user, entreprise)) {
-      return res.status(403).json({ error: "Accès interdit" });
+      return res.status(403).json({ error: "❌ Accès interdit" });
     }
 
     // ----------------------
@@ -107,8 +104,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const { data, error } = await query;
-
       if (error) return res.status(500).json({ error: error.message });
+
       return res.status(200).json({ factures: data });
     }
 
@@ -118,15 +115,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "POST") {
       const payload = req.body ? JSON.parse(req.body) : {};
 
-      // sécurité : toujours forcer entreprise_id depuis le ref
-      let toInsert: any = {
+      // sécurité : forcer entreprise_id
+      const toInsert: Partial<Tables<"factures">> = {
         ...payload,
         entreprise_id: entreprise.id,
         mission_id: payload.mission_id || null,
-        status: payload.status || "pending_payment", // ✅ statut par défaut
+        status: payload.status || "pending_payment",
       };
 
-      // 🚀 Si la facture est liée à une mission → calcule heures & montants
+      // 🚀 Si mission liée → calcule heures & montants
       if (payload.mission_id) {
         const { data: slots, error: slotError } = await supabaseAdmin
           .from("slots")
@@ -141,14 +138,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         for (const s of slots || []) {
           const start = new Date(s.start).getTime();
           const end = new Date(s.end).getTime();
-          totalHours += (end - start) / (1000 * 60 * 60); // en heures
+          totalHours += (end - start) / (1000 * 60 * 60);
         }
 
         toInsert.hours = totalHours;
-        toInsert.rate = entreprise.taux_horaire; // tarif de l’entreprise
+        toInsert.rate = entreprise.taux_horaire;
         toInsert.montant_ht = totalHours * entreprise.taux_horaire;
-        toInsert.tva = 0; // ou logique TVA si besoin
-        toInsert.montant_ttc = toInsert.montant_ht + toInsert.tva;
+        toInsert.tva = 0; // TODO: gérer TVA plus tard
+        toInsert.montant_ttc = toInsert.montant_ht + (toInsert.tva || 0);
       }
 
       const { data, error } = await supabaseAdmin
@@ -161,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (error.code === "23505") {
           return res
             .status(400)
-            .json({ error: "Numéro de facture déjà utilisé." });
+            .json({ error: "❌ Numéro de facture déjà utilisé" });
         }
         return res.status(500).json({ error: error.message });
       }
@@ -169,9 +166,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json({ facture: data });
     }
 
-    return res.status(405).json({ error: "Méthode non autorisée" });
+    return res.status(405).json({ error: "❌ Méthode non autorisée" });
   } catch (err: any) {
-    console.error("❌ Exception handler factures:", err);
+    console.error("❌ Exception factures/index:", err);
     return res.status(500).json({ error: "Erreur serveur" });
   }
 }

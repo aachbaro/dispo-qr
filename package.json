@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vue-tsc -p tsconfig.app.json --noEmit && vite build",
     "preview": "vite preview",
-    "tailwind-init": "tailwindcss init -p"
+    "tailwind-init": "tailwindcss init -p",
+    "db:types": "supabase gen types typescript --project-id zoojscjpdakwxukkhele --schema public > types/database.ts"
   },
   "dependencies": {
     "@heroicons/vue": "^2.2.0",

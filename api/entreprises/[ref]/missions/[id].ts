@@ -4,12 +4,12 @@
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - Permet de mettre à jour ou supprimer une mission
-//   - Supporte aussi la mise à jour des slots liés à cette mission
+//   - Met à jour ou supprime une mission
+//   - Gère aussi la mise à jour des slots liés
 //
 // 📍 Endpoints :
-//   - PUT    /api/entreprises/[ref]/missions/[id] → update mission + slots
-//   - DELETE /api/entreprises/[ref]/missions/[id] → delete mission
+//   - PUT    /api/entreprises/[ref]/missions/[id]
+//   - DELETE /api/entreprises/[ref]/missions/[id]
 //
 // 🔒 Règles d’accès :
 //   - Authentification JWT obligatoire
@@ -17,13 +17,14 @@
 //
 // ⚠️ Remarques :
 //   - ref = slug (string) ou id (number) de l’entreprise
-//   - id  = identifiant numérique de la mission
-//   - Les statuts possibles sont ceux définis dans l’ENUM mission_status
-//   - Supprimer une mission supprime aussi ses slots (CASCADE)
+//   - id  = identifiant numérique mission
+//   - Statuts valides = ENUM mission_status
+//   - DELETE → cascade supprime les slots liés
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../../../_supabase.js";
+import type { Tables } from "../../../../types/database.js";
 
 // ----------------------
 // Helpers
@@ -40,7 +41,7 @@ async function getUserFromToken(req: VercelRequest) {
   return data.user;
 }
 
-function canAccess(user: any, entreprise: any): boolean {
+function canAccess(user: any, entreprise: Tables<"entreprise">): boolean {
   if (!user) return false;
   if (user.id === entreprise.user_id) return true;
   if (user.app_metadata?.role === "admin") return true;
@@ -49,12 +50,9 @@ function canAccess(user: any, entreprise: any): boolean {
 
 async function findEntreprise(ref: string) {
   let query = supabaseAdmin.from("entreprise").select("*");
-  if (!isNaN(Number(ref))) {
-    query = query.eq("id", Number(ref));
-  } else {
-    query = query.eq("slug", ref);
-  }
-  return query.single();
+  if (!isNaN(Number(ref))) query = query.eq("id", Number(ref));
+  else query = query.eq("slug", ref);
+  return query.single<Tables<"entreprise">>();
 }
 
 // ----------------------
@@ -64,15 +62,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { ref, id } = req.query;
 
   if (!ref || typeof ref !== "string" || !id || typeof id !== "string") {
-    return res.status(400).json({ error: "Paramètres invalides" });
+    return res.status(400).json({ error: "❌ Paramètres invalides" });
   }
 
   try {
+    // 🔐 Auth
     const user = await getUserFromToken(req);
-    if (!user) {
-      return res.status(401).json({ error: "Non authentifié" });
-    }
+    if (!user) return res.status(401).json({ error: "❌ Non authentifié" });
 
+    // 🔎 Entreprise
     const { data: entreprise, error: entrepriseError } = await findEntreprise(
       ref
     );
@@ -80,40 +78,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("❌ Erreur fetch entreprise:", entrepriseError.message);
       return res.status(500).json({ error: entrepriseError.message });
     }
-    if (!entreprise) {
-      return res.status(404).json({ error: "Entreprise non trouvée" });
-    }
+    if (!entreprise)
+      return res.status(404).json({ error: "❌ Entreprise introuvable" });
+    if (!canAccess(user, entreprise))
+      return res.status(403).json({ error: "❌ Accès interdit" });
 
-    if (!canAccess(user, entreprise)) {
-      return res.status(403).json({ error: "Accès interdit" });
-    }
-
+    // 🔎 Mission
     const missionId = Number(id);
-    if (isNaN(missionId)) {
-      return res.status(400).json({ error: "ID mission invalide" });
-    }
+    if (isNaN(missionId))
+      return res.status(400).json({ error: "❌ ID mission invalide" });
 
-    // 🔎 Vérifie que la mission existe
     const { data: mission, error: missionError } = await supabaseAdmin
       .from("missions")
       .select("*")
       .eq("id", missionId)
       .eq("entreprise_id", entreprise.id)
-      .single();
+      .single<Tables<"missions">>();
 
     if (missionError) {
       console.error("❌ Erreur fetch mission:", missionError.message);
       return res.status(500).json({ error: missionError.message });
     }
-    if (!mission) {
-      return res.status(404).json({ error: "Mission non trouvée" });
-    }
+    if (!mission)
+      return res.status(404).json({ error: "❌ Mission introuvable" });
 
     // ----------------------
-    // PUT → Update mission (+ slots si fournis)
+    // PUT → Update mission + slots
     // ----------------------
     if (req.method === "PUT") {
-      const { slots, ...updates } = req.body;
+      const { slots, ...updates } = req.body as Partial<Tables<"missions">> & {
+        slots?: Array<Pick<Tables<"slots">, "start" | "end" | "title">>;
+      };
 
       if (
         updates.status &&
@@ -127,7 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           "realized",
         ].includes(updates.status)
       ) {
-        return res.status(400).json({ error: "Statut invalide" });
+        return res.status(400).json({ error: "❌ Statut invalide" });
       }
 
       // 1️⃣ Mise à jour mission
@@ -137,17 +132,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", missionId)
         .eq("entreprise_id", entreprise.id)
         .select()
-        .single();
+        .single<Tables<"missions">>();
 
       if (updateError)
         return res.status(500).json({ error: updateError.message });
 
-      // 2️⃣ Mise à jour des slots (si fournis)
+      // 2️⃣ Mise à jour slots si fournis
       if (Array.isArray(slots)) {
-        // On supprime les anciens slots
         await supabaseAdmin.from("slots").delete().eq("mission_id", missionId);
 
-        // On insère les nouveaux
         if (slots.length > 0) {
           const insertSlots = slots.map((s) => ({
             start: s.start,
@@ -159,7 +152,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { error: slotError } = await supabaseAdmin
             .from("slots")
             .insert(insertSlots);
-
           if (slotError) {
             console.error("❌ Erreur update slots:", slotError.message);
             return res.status(500).json({ error: slotError.message });
@@ -171,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ----------------------
-    // DELETE → Delete mission
+    // DELETE → Supprimer mission
     // ----------------------
     if (req.method === "DELETE") {
       const { error } = await supabaseAdmin
@@ -181,12 +173,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("entreprise_id", entreprise.id);
 
       if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ message: "Mission supprimée" });
+      return res.status(200).json({ message: "✅ Mission supprimée" });
     }
 
-    return res.status(405).json({ error: "Méthode non autorisée" });
+    return res.status(405).json({ error: "❌ Méthode non autorisée" });
   } catch (err: any) {
-    console.error("❌ Exception handler mission:", err);
+    console.error("❌ Exception mission/[id]:", err);
     return res.status(500).json({ error: "Erreur serveur" });
   }
 }

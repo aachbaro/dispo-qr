@@ -19,25 +19,21 @@
 //   - CRUD complet : via id entreprise (owner uniquement)
 //
 // ⚠️ Remarques :
-//   - Le champ `title` devient optionnel (remplacé par mission.etablissement côté front)
-//   - Ajout de `mission_id` pour rattacher un slot à une mission
+//   - Le champ `title` est optionnel (remplacé par mission.etablissement côté front)
+//   - mission_id permet de rattacher un slot à une mission
 //
 // -------------------------------------------------------------
 
 import { request } from "./api";
+import type { Tables, TablesInsert, TablesUpdate } from "../../types/database";
 
 // ----------------------
 // Types
 // ----------------------
-export interface Slot {
-  id: number;
-  start: string; // ISO datetime
-  end: string; // ISO datetime
-  title?: string; // optionnel, peut être remplacé par mission.etablissement
-  created_at: string;
-  entreprise_id: number;
-  mission_id?: number; // nouveau champ
-}
+
+export type Slot = Tables<"slots">;
+export type SlotInsert = TablesInsert<"slots">;
+export type SlotUpdate = TablesUpdate<"slots">;
 
 // ----------------------
 // Services Slots
@@ -66,7 +62,10 @@ export async function getEntrepriseSlots(
  */
 export async function createEntrepriseSlot(
   entrepriseId: number,
-  slot: Pick<Slot, "start" | "end"> & { title?: string; mission_id?: number }
+  slot: Pick<SlotInsert, "start" | "end"> & {
+    title?: string;
+    mission_id?: number;
+  }
 ): Promise<{ slot: Slot }> {
   return request<{ slot: Slot }>(`/api/entreprises/${entrepriseId}/slots`, {
     method: "POST",
@@ -80,7 +79,7 @@ export async function createEntrepriseSlot(
 export async function updateEntrepriseSlot(
   entrepriseId: number,
   id: number,
-  updates: Partial<Slot>
+  updates: SlotUpdate
 ): Promise<{ slot: Slot }> {
   return request<{ slot: Slot }>(
     `/api/entreprises/${entrepriseId}/slots/${id}`,

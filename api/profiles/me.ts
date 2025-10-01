@@ -1,30 +1,27 @@
 // api/profiles/me.ts
 // -------------------------------------------------------------
-// Route profil utilisateur connecté : /api/profiles/me
+// Profil utilisateur connecté
+// -------------------------------------------------------------
 //
-// - GET : Récupère les infos du profil lié au user connecté
-//   • Combine auth.users (email) et profiles (role, etc.)
+// 📍 Endpoints :
+//   - GET /api/profiles/me → récupère profil + email
+//   - PUT /api/profiles/me → met à jour le profil
 //
-// - PUT : Met à jour le profil du user connecté
-//   • Exemple : mise à jour du rôle
-//
-// ⚠️ Auth obligatoire (JWT dans Authorization header)
+// 🔒 Auth obligatoire (JWT dans Authorization header)
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../_supabase.js";
+import type { Tables } from "../../types/database.js";
+
+type Profile = Tables<"profiles">;
 
 // ----------------------
 // Helpers
 // ----------------------
-
-/**
- * ✅ Vérifie le token et retourne le user
- */
 async function getUserFromToken(req: VercelRequest) {
   const auth = req.headers.authorization;
   if (!auth) return null;
-
   const token = auth.split(" ")[1];
   if (!token) return null;
 
@@ -35,39 +32,49 @@ async function getUserFromToken(req: VercelRequest) {
 }
 
 // ----------------------
-// Handler principal
+// Handler
 // ----------------------
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    // ✅ Auth obligatoire
     const user = await getUserFromToken(req);
     if (!user) {
-      return res.status(401).json({ error: "Non authentifié" });
+      return res.status(401).json({ error: "❌ Non authentifié" });
     }
 
+    // ----------------------
+    // GET → Lire profil
+    // ----------------------
     if (req.method === "GET") {
-      // 🔍 Récupère le profil lié
       const { data: profile, error } = await supabaseAdmin
         .from("profiles")
         .select("id, role, created_at")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        console.error("❌ Erreur fetch profil:", error.message);
+        return res.status(500).json({ error: error.message });
+      }
 
       return res.status(200).json({
         profile: {
           id: user.id,
           email: user.email,
-          role: profile?.role,
-          created_at: profile?.created_at,
+          role: profile?.role ?? null,
+          created_at: profile?.created_at ?? null,
         },
       });
     }
 
+    // ----------------------
+    // PUT → Update profil
+    // ----------------------
     if (req.method === "PUT") {
-      const updates = req.body;
+      const { role } = req.body || {};
+
+      // 🚨 whitelist : on n’autorise que certains champs
+      const updates: Partial<Profile> = {};
+      if (role) updates.role = role;
 
       const { data, error } = await supabaseAdmin
         .from("profiles")
@@ -76,14 +83,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select()
         .single();
 
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        console.error("❌ Erreur update profil:", error.message);
+        return res.status(500).json({ error: error.message });
+      }
 
       return res.status(200).json({ profile: data });
     }
 
     return res.status(405).json({ error: "Méthode non autorisée" });
   } catch (err: any) {
-    console.error("❌ Exception profil me:", err);
+    console.error("❌ Exception profil/me:", err);
     return res.status(500).json({ error: "Erreur serveur" });
   }
 }
