@@ -20,8 +20,8 @@
 
 import { ref } from "vue";
 import {
-  listEntrepriseFactures,
-  createEntrepriseFacture,
+  listFactures,
+  createFacture as createFactureService,
   updateEntrepriseFacture,
   deleteEntrepriseFacture,
   type Facture,
@@ -40,11 +40,11 @@ export function useFactures() {
   /**
    * 📜 Récupère la liste des factures d’une entreprise
    */
-  async function fetchFactures(refEntreprise: string | number) {
+  async function fetchFactures(_refEntreprise?: string | number) {
     loading.value = true;
     error.value = null;
     try {
-      const { factures: data } = await listEntrepriseFactures(refEntreprise);
+      const { factures: data } = await listFactures();
       factures.value = data;
     } catch (err: any) {
       console.error("❌ Erreur fetch factures:", err);
@@ -58,13 +58,13 @@ export function useFactures() {
    * ➕ Crée une nouvelle facture
    */
   async function createFacture(
-    refEntreprise: string | number,
+    _refEntreprise: string | number,
     payload: FacturePayload
   ) {
     loading.value = true;
     error.value = null;
     try {
-      const { facture } = await createEntrepriseFacture(refEntreprise, payload);
+      const { facture } = await createFactureService(payload);
       factures.value.unshift(facture); // ajoute en tête de liste
       return facture;
     } catch (err: any) {
