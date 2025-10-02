@@ -35,7 +35,6 @@
         v-for="f in factures"
         :key="f.id"
         :facture="f"
-        :ref-entreprise="refEntreprise"
         :entreprise="entreprise"
         :readonly="readonly"
         @edit="onEdit"
@@ -47,12 +46,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
+import { onMounted } from "vue";
 import { useFactures } from "../../composables/useFactures";
 import FactureCard from "./FactureCard.vue";
 
 const props = defineProps<{
-  refEntreprise?: string | number | null;
   entreprise?: any; // ⚠️ doit contenir infos de l’entreprise (iban, bic…)
   readonly?: boolean; // 👈 nouveau mode lecture seule
 }>();
@@ -63,22 +61,8 @@ const { factures, loading, fetchFactures } = useFactures();
 
 // Charger au montage
 onMounted(() => {
-  if (!props.readonly && props.refEntreprise) {
-    // ⚡ Mode entreprise → filtrer par refEntreprise
-    fetchFactures(props.refEntreprise);
-  } else if (props.readonly) {
-    // ⚡ Mode client → backend filtre automatiquement
-    fetchFactures();
-  }
+  fetchFactures();
 });
-
-// Recharger si refEntreprise change (mode entreprise uniquement)
-watch(
-  () => props.refEntreprise,
-  (newRef) => {
-    if (!props.readonly && newRef) fetchFactures(newRef);
-  }
-);
 
 function onEdit(facture: any) {
   emit("edit", facture);

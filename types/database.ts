@@ -50,6 +50,24 @@ export type Database = {
           },
         ]
       }
+      clients: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id: string
+          role?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: string | null
+        }
+        Relationships: []
+      }
       entreprise: {
         Row: {
           adresse_ligne1: string

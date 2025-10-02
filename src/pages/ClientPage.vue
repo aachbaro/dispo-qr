@@ -51,7 +51,6 @@
           v-for="mission in missions"
           :key="mission.id"
           :mission="mission"
-          :slug="mission.entreprise_slug ?? null"
           readonly
         />
       </div>

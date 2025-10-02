@@ -21,6 +21,8 @@ import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
 
 const ENTREPRISE_ROLES = new Set(["entreprise", "freelance", "admin"]);
+const MISSION_SELECT =
+  "*, slots(*), entreprise:entreprise_id(*), client:client_id(*)";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query;
@@ -46,11 +48,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: missionRecord, error: missionFetchError } = await supabaseAdmin
       .from("missions")
-      .select("*, entreprise:entreprise_id(*)")
+      .select(MISSION_SELECT)
       .eq("id", missionId)
-      .single<{
-        entreprise?: Tables<"entreprise"> | null;
-      } & Tables<"missions">>();
+      .single<
+        Tables<"missions"> & {
+          entreprise?: Tables<"entreprise"> | null;
+          client?: Tables<"clients"> | null;
+          slots?: Tables<"slots">[];
+        }
+      >();
 
     if (missionFetchError) {
       console.error("❌ Erreur fetch mission:", missionFetchError.message);
@@ -97,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "GET") {
       const { data: mission, error: missionError } = await supabaseAdmin
         .from("missions")
-        .select("*, slots(*), entreprise:entreprise_id(slug)")
+        .select(MISSION_SELECT)
         .eq("id", missionId)
         .single();
 
@@ -110,16 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: "❌ Mission introuvable" });
       }
 
-      const { slots, entreprise: missionEntreprise, ...rest } = mission as any;
-      const payload: any = {
-        ...rest,
-        ...(Array.isArray(slots) ? { slots } : {}),
-      };
-      if (missionEntreprise?.slug) {
-        payload.entreprise_slug = missionEntreprise.slug;
-      }
-
-      return res.status(200).json({ mission: payload });
+      return res.status(200).json({ mission });
     }
 
     if (req.method === "PUT") {
@@ -151,13 +148,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: "❌ Statut invalide" });
       }
 
-      const { data: updatedMission, error: updateError } = await supabaseAdmin
+      const { error: updateError } = await supabaseAdmin
         .from("missions")
         .update(updates)
         .eq("id", missionId)
         .eq("entreprise_id", missionRecord.entreprise_id)
-        .select()
-        .single<Tables<"missions">>();
+        .select();
 
       if (updateError) {
         console.error("❌ Erreur update mission:", updateError.message);
@@ -187,7 +183,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      return res.status(200).json({ mission: updatedMission });
+      const { data: missionWithRelations, error: fetchUpdatedError } =
+        await supabaseAdmin
+          .from("missions")
+          .select(MISSION_SELECT)
+          .eq("id", missionId)
+          .single();
+
+      if (fetchUpdatedError) {
+        console.error(
+          "❌ Erreur récupération mission mise à jour:",
+          fetchUpdatedError.message
+        );
+        return res.status(500).json({ error: fetchUpdatedError.message });
+      }
+
+      return res.status(200).json({ mission: missionWithRelations });
     }
 
     if (req.method === "DELETE") {

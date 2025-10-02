@@ -21,6 +21,8 @@ import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
 
 const ENTREPRISE_ROLES = new Set(["entreprise", "freelance", "admin"]);
+const FACTURE_SELECT =
+  "*, missions(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query;
@@ -46,14 +48,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: factureRecord, error: factureFetchError } = await supabaseAdmin
       .from("factures")
-      .select(
-        "*, entreprise:entreprise_id(*), mission:mission_id(client_id)"
-      )
+      .select(FACTURE_SELECT)
       .eq("id", factureId)
       .single<
         Tables<"factures"> & {
-          entreprise?: Tables<"entreprise"> | null;
-          mission?: Pick<Tables<"missions">, "client_id"> | null;
+          missions?: (Tables<"missions"> & {
+            entreprise?: Tables<"entreprise"> | null;
+            client?: Tables<"clients"> | null;
+          }) | null;
         }
       >();
 
@@ -69,9 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: "❌ Facture introuvable" });
     }
 
-    const entreprise = factureRecord.entreprise || null;
-    const hasEntrepriseAccess =
-      entreprise && canAccessSensitive(user, entreprise as Tables<"entreprise">);
+    let entreprise = factureRecord.missions?.entreprise || null;
 
     if (ENTREPRISE_ROLES.has(role ?? "")) {
       if (!entreprise) {
@@ -87,11 +87,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!entrepriseById || !canAccessSensitive(user, entrepriseById)) {
           return res.status(403).json({ error: "❌ Accès interdit" });
         }
-      } else if (!hasEntrepriseAccess) {
+        entreprise = entrepriseById;
+      } else if (!canAccessSensitive(user, entreprise as Tables<"entreprise">)) {
         return res.status(403).json({ error: "❌ Accès interdit" });
       }
     } else if (role === "client") {
-      if (factureRecord.mission?.client_id !== user.id) {
+      if (factureRecord.missions?.client_id !== user.id) {
         return res.status(403).json({ error: "❌ Accès interdit" });
       }
     } else {
@@ -101,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "GET") {
       const { data: facture, error } = await supabaseAdmin
         .from("factures")
-        .select("*, missions:mission_id(*, slots(*))")
+        .select(FACTURE_SELECT)
         .eq("id", factureId)
         .single();
 
@@ -162,7 +163,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      return res.status(200).json({ facture });
+      const { data: factureWithRelations, error: fetchUpdatedError } =
+        await supabaseAdmin
+          .from("factures")
+          .select(FACTURE_SELECT)
+          .eq("id", factureId)
+          .single();
+
+      if (fetchUpdatedError) {
+        console.error(
+          "❌ Erreur récupération facture mise à jour:",
+          fetchUpdatedError.message
+        );
+        return res.status(500).json({ error: fetchUpdatedError.message });
+      }
+
+      return res.status(200).json({ facture: factureWithRelations });
     }
 
     if (req.method === "DELETE") {

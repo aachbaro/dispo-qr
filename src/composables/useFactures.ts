@@ -24,23 +24,23 @@ import {
   createFacture as createFactureService,
   updateEntrepriseFacture,
   deleteEntrepriseFacture,
-  type Facture,
   type FacturePayload,
   type FactureUpdate,
+  type FactureWithRelations,
 } from "../services/factures";
 
 // ----------------------
 // Composable
 // ----------------------
 export function useFactures() {
-  const factures = ref<Facture[]>([]);
+  const factures = ref<FactureWithRelations[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
 
   /**
    * 📜 Récupère la liste des factures d’une entreprise
    */
-  async function fetchFactures(_refEntreprise?: string | number) {
+  async function fetchFactures() {
     loading.value = true;
     error.value = null;
     try {
@@ -57,10 +57,7 @@ export function useFactures() {
   /**
    * ➕ Crée une nouvelle facture
    */
-  async function createFacture(
-    _refEntreprise: string | number,
-    payload: FacturePayload
-  ) {
+  async function createFacture(payload: FacturePayload) {
     loading.value = true;
     error.value = null;
     try {
@@ -80,18 +77,13 @@ export function useFactures() {
    * ✏️ Met à jour une facture existante
    */
   async function updateFacture(
-    refEntreprise: string | number,
     factureId: number,
     updates: FactureUpdate
   ) {
     loading.value = true;
     error.value = null;
     try {
-      const { facture } = await updateEntrepriseFacture(
-        refEntreprise,
-        factureId,
-        updates
-      );
+      const { facture } = await updateEntrepriseFacture(factureId, updates);
       const idx = factures.value.findIndex((f) => f.id === facture.id);
       if (idx !== -1) factures.value[idx] = facture;
       return facture;
@@ -107,14 +99,11 @@ export function useFactures() {
   /**
    * ❌ Supprime une facture
    */
-  async function removeFacture(
-    refEntreprise: string | number,
-    factureId: number
-  ) {
+  async function removeFacture(factureId: number) {
     loading.value = true;
     error.value = null;
     try {
-      await deleteEntrepriseFacture(refEntreprise, factureId);
+      await deleteEntrepriseFacture(factureId);
       factures.value = factures.value.filter((f) => f.id !== factureId);
     } catch (err: any) {
       console.error("❌ Erreur suppression facture:", err);

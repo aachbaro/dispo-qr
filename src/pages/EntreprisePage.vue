@@ -60,8 +60,6 @@
     <div class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg">
       <MissionList
         v-if="entreprise"
-        :ref-id="entreprise.id"
-        :slug="entreprise.slug"
         :is-owner="isOwner"
       />
     </div>
@@ -72,7 +70,6 @@
       class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg"
     >
       <FactureList
-        :ref-entreprise="entreprise.id"
         :entreprise="entreprise"
         @edit="onEditFacture"
         @deleted="onDeletedFacture"
