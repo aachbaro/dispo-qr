@@ -6,15 +6,15 @@
 // 📌 Description :
 //   - Liste les factures selon le rôle connecté (entreprise/client)
 //   - Création/édition/suppression pour l'entreprise propriétaire
-//   - Génération de liens de paiement conservée sur les routes historiques
+//   - Génération de liens de paiement via /api/factures/[id]/payment-link
 //
 // 📍 Endpoints :
 //   - GET    /api/factures
 //   - POST   /api/factures
-//   - GET    /api/entreprises/[ref]/factures/[id]
-//   - PUT    /api/entreprises/[ref]/factures/[id]
-//   - DELETE /api/entreprises/[ref]/factures/[id]
-//   - POST   /api/entreprises/[ref]/factures/[id]/payment-link
+//   - GET    /api/factures/[id]
+//   - PUT    /api/factures/[id]
+//   - DELETE /api/factures/[id]
+//   - POST   /api/factures/[id]/payment-link
 //
 // 🔒 Règles d’accès :
 //   - Clients : lecture seule sur leurs missions
@@ -82,11 +82,11 @@ export async function createFacture(
  * 🔍 Récupérer une facture par son id
  */
 export async function getEntrepriseFacture(
-  ref: string | number,
+  _ref: string | number,
   factureId: number
 ): Promise<{ facture: Facture }> {
   return request<{ facture: Facture }>(
-    `/api/entreprises/${ref}/factures/${factureId}`
+    `/api/factures/${factureId}`
   );
 }
 
@@ -94,12 +94,12 @@ export async function getEntrepriseFacture(
  * ✏️ Mettre à jour une facture
  */
 export async function updateEntrepriseFacture(
-  ref: string | number,
+  _ref: string | number,
   factureId: number,
   updates: FactureUpdate
 ): Promise<{ facture: Facture }> {
   return request<{ facture: Facture }>(
-    `/api/entreprises/${ref}/factures/${factureId}`,
+    `/api/factures/${factureId}`,
     {
       method: "PUT",
       body: JSON.stringify(updates),
@@ -111,10 +111,10 @@ export async function updateEntrepriseFacture(
  * ❌ Supprimer une facture
  */
 export async function deleteEntrepriseFacture(
-  ref: string | number,
+  _ref: string | number,
   factureId: number
 ): Promise<void> {
-  await request(`/api/entreprises/${ref}/factures/${factureId}`, {
+  await request(`/api/factures/${factureId}`, {
     method: "DELETE",
   });
 }
@@ -123,11 +123,11 @@ export async function deleteEntrepriseFacture(
  * 🔗 Générer un lien de paiement pour une facture
  */
 export async function generateFacturePaymentLink(
-  ref: string | number,
+  _ref: string | number,
   factureId: number
 ): Promise<{ url: string }> {
   return request<{ url: string }>(
-    `/api/entreprises/${ref}/factures/${factureId}/payment-link`,
+    `/api/factures/${factureId}/payment-link`,
     { method: "POST" }
   );
 }
