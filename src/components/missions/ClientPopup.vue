@@ -246,10 +246,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { createEntrepriseMission } from "../../services/missions";
+import { createMission } from "../../services/missions";
 import { listTemplates, type MissionTemplate } from "../../services/templates";
 
-const props = defineProps<{ open: boolean; slug: string }>();
+defineProps<{ open: boolean; slug?: string }>();
 const emit = defineEmits(["close", "created"]);
 
 // Templates
@@ -292,7 +292,7 @@ const contactName = ref("");
 const contactEmail = ref("");
 const contactPhone = ref("");
 const instructions = ref("");
-const mode = ref("freelance");
+const mode = ref<"freelance" | "salarié">("freelance");
 
 // Slots dynamiques
 const slots = ref([
@@ -373,9 +373,10 @@ async function onConfirm() {
   const slotsPayload = slots.value.map((s) => ({
     start: new Date(`${s.startDate}T${s.startTime}`).toISOString(),
     end: new Date(`${s.endDate}T${s.endTime}`).toISOString(),
+    title: null,
   }));
   try {
-    const { mission } = await createEntrepriseMission(props.slug, {
+    const { mission } = await createMission({
       etablissement: etablissement.value,
       etablissement_adresse_ligne1: adresseLigne1.value,
       etablissement_adresse_ligne2: adresseLigne2.value || null,

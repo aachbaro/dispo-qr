@@ -27,7 +27,7 @@
     <div class="flex justify-between items-center">
       <h3 class="font-bold text-lg">{{ mission.etablissement }}</h3>
       <p v-if="mission.slots?.length" class="text-sm text-gray-600">
-        {{ formatDate(mission.slots[0].start) }}
+        {{ formatDate(mission.slots?.[0]?.start) }}
       </p>
       <!-- Status -->
       <span
@@ -88,7 +88,10 @@
           v-if="mission.slots?.length"
           class="space-y-1 text-sm text-gray-600"
         >
-          <p v-for="slot in mission.slots" :key="slot.start">
+          <p
+            v-for="slot in mission.slots"
+            :key="slot.id ?? slot.start ?? slot.end ?? slot.title ?? slot.created_at"
+          >
             📅 {{ formatDate(slot.start) }} → {{ formatDate(slot.end) }}
           </p>
         </div>
@@ -173,7 +176,10 @@
         </div>
 
         <!-- Facturation -->
-        <div v-if="mission.status === 'realized'" class="mt-4 border-t pt-3">
+        <div
+          v-if="mission.status === 'realized' && !props.readonly"
+          class="mt-4 border-t pt-3"
+        >
           <h4 class="text-md font-semibold mb-2">📑 Facturation</h4>
 
           <!-- Si pas encore de facture -->
@@ -187,7 +193,7 @@
           </div>
 
           <!-- Si une facture existe -->
-          <div v-else>
+          <div v-else-if="slug">
             <FactureCard
               :facture="facture"
               :ref-entreprise="slug"
@@ -215,16 +221,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { updateEntrepriseMission } from "../../services/missions";
+import { updateMission } from "../../services/missions";
 import { getEntreprise } from "../../services/entreprises";
 import { listFacturesByMission } from "../../services/factures";
 import FactureModal from "../factures/FactureModal.vue";
 import FactureCard from "../factures/FactureCard.vue";
-import type { Mission } from "../../services/missions";
+import type { MissionWithRelations } from "../../services/missions";
 
 const props = defineProps<{
-  mission: Mission;
-  slug: string;
+  mission: MissionWithRelations;
+  slug: string | null;
   readonly?: boolean;
 }>();
 
@@ -262,6 +268,7 @@ const statusClasses: Record<string, string> = {
 // Lifecycle
 // ----------------------
 onMounted(async () => {
+  if (!props.slug) return;
   try {
     // ⚡ on force l’auth pour récupérer les champs sensibles (siret, tva, etc.)
     const { entreprise: e } = await getEntreprise(props.slug, {
@@ -270,7 +277,7 @@ onMounted(async () => {
     entreprise.value = e;
 
     // Charger facture liée
-    const factures = await listFacturesByMission(props.slug, props.mission.id);
+    const factures = await listFacturesByMission(props.mission.id);
     facture.value = factures.length ? factures[0] : null;
   } catch (err) {
     console.error("❌ Erreur récupération données :", err);
@@ -280,8 +287,8 @@ onMounted(async () => {
 // ----------------------
 // Utils & actions
 // ----------------------
-function formatDate(dateStr: string) {
-  if (!dateStr) return "";
+function formatDate(dateStr: string | null | undefined) {
+  if (!dateStr) return "—";
   return new Date(dateStr).toLocaleString("fr-FR", {
     dateStyle: "short",
     timeStyle: "short",
@@ -301,10 +308,14 @@ async function markRealized() {
   );
 }
 
-async function updateStatus(status: Mission["status"], errorMsg: string) {
+async function updateStatus(
+  status: MissionWithRelations["status"],
+  errorMsg: string
+) {
   loading.value = true;
   try {
-    await updateEntrepriseMission(props.slug, props.mission.id, { status });
+    if (!props.slug) throw new Error("Slug entreprise manquant");
+    await updateMission(props.slug, props.mission.id, { status });
     emit("updated");
   } catch (err) {
     console.error(errorMsg, err);
@@ -335,9 +346,6 @@ function handleFactureUpdated(f: any) {
 }
 function handleFactureEdit(f: any) {
   console.log("✏️ Edit facture :", f);
-}
-function sendPaymentLink() {
-  console.log("💳 Envoyer lien de paiement pour mission", props.mission.id);
 }
 function markPaid() {
   console.log("💰 Marquer mission comme payée", props.mission.id);

@@ -1,28 +1,28 @@
 // src/services/factures.ts
 // -------------------------------------------------------------
-// Services liés aux factures d'une entreprise
+// Services liés aux factures (entreprise & client)
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - CRUD des factures
-//   - Chaque facture peut être liée à une mission (via mission_id)
-//   - Les heures, le taux, le HT et TTC sont stockés en base pour générer le PDF
+//   - Liste les factures selon le rôle connecté (entreprise/client)
+//   - Création/édition/suppression pour l'entreprise propriétaire
+//   - Génération de liens de paiement conservée sur les routes historiques
 //
 // 📍 Endpoints :
-//   - GET    /api/entreprises/[ref]/factures
-//   - POST   /api/entreprises/[ref]/factures
+//   - GET    /api/factures
+//   - POST   /api/factures
 //   - GET    /api/entreprises/[ref]/factures/[id]
 //   - PUT    /api/entreprises/[ref]/factures/[id]
 //   - DELETE /api/entreprises/[ref]/factures/[id]
 //   - POST   /api/entreprises/[ref]/factures/[id]/payment-link
 //
 // 🔒 Règles d’accès :
-//   - Lecture publique (slug) / owner (id)
-//   - CRUD limité aux entreprises propriétaires
+//   - Clients : lecture seule sur leurs missions
+//   - Entreprises/Admin : accès complet + création/mise à jour
 //
 // ⚠️ Remarques :
 //   - Typage basé sur types/database.ts généré automatiquement
-//   - Pas de duplication manuelle des interfaces
+//   - Les montants restent calculés côté backend (API `/api/factures`)
 // -------------------------------------------------------------
 
 import { request } from "./api";
@@ -35,6 +35,16 @@ import type { Tables, TablesInsert, TablesUpdate } from "../../types/database";
 export type Facture = Tables<"factures">;
 export type FactureInsert = TablesInsert<"factures">;
 export type FactureUpdate = TablesUpdate<"factures">;
+export type FacturePayload = FactureInsert;
+
+export type FactureWithRelations = Facture & {
+  missions?:
+    | (Tables<"missions"> & {
+        slots?: Tables<"slots">[];
+        entreprise_slug?: string | null;
+      })
+    | null;
+};
 
 // ----------------------
 // Services Factures
@@ -43,20 +53,25 @@ export type FactureUpdate = TablesUpdate<"factures">;
 /**
  * 📋 Lister toutes les factures d'une entreprise
  */
-export async function listEntrepriseFactures(
-  ref: string | number
-): Promise<{ factures: Facture[] }> {
-  return request<{ factures: Facture[] }>(`/api/entreprises/${ref}/factures`);
+export async function listFactures(
+  params: { missionId?: number } = {}
+): Promise<{ factures: FactureWithRelations[] }> {
+  const searchParams = new URLSearchParams();
+  if (params.missionId) searchParams.set("mission_id", params.missionId.toString());
+  const query = searchParams.toString();
+
+  return request<{ factures: FactureWithRelations[] }>(
+    `/api/factures${query ? `?${query}` : ""}`
+  );
 }
 
 /**
  * ➕ Créer une facture
  */
-export async function createEntrepriseFacture(
-  ref: string | number,
-  payload: FactureInsert
+export async function createFacture(
+  payload: FacturePayload
 ): Promise<{ facture: Facture }> {
-  return request<{ facture: Facture }>(`/api/entreprises/${ref}/factures`, {
+  return request<{ facture: Facture }>(`/api/factures`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -120,11 +135,10 @@ export async function generateFacturePaymentLink(
  * 📌 Récupérer toutes les factures liées à une mission
  */
 export async function listFacturesByMission(
-  ref: string | number,
   missionId: number
 ): Promise<Facture[]> {
   const { factures } = await request<{ factures: Facture[] }>(
-    `/api/entreprises/${ref}/factures?mission_id=${missionId}`
+    `/api/factures?mission_id=${missionId}`
   );
   return factures;
 }

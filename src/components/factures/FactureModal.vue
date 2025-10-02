@@ -311,7 +311,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
-import { createEntrepriseFacture } from "../../services/factures";
+import { createFacture } from "../../services/factures";
 
 const props = defineProps({
   open: Boolean,
@@ -489,10 +489,7 @@ async function generate() {
       penalites_retard: entPenalites.value,
     };
 
-    const { facture } = await createEntrepriseFacture(
-      props.entreprise.id,
-      payload
-    );
+    const { facture } = await createFacture(payload);
 
     emit("created", facture);
     emit("close");

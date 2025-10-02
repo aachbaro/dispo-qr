@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
-import { listEntrepriseMissions } from "../../services/missions";
+import { listMissions, type MissionWithRelations } from "../../services/missions";
 import MissionCard from "./MissionCard.vue";
 
 const props = defineProps<{
@@ -29,14 +29,14 @@ const props = defineProps<{
   isOwner: boolean; // indique si l’utilisateur est admin de cette entreprise
 }>();
 
-const missions = ref<any[]>([]);
+const missions = ref<MissionWithRelations[]>([]);
 const loading = ref(false);
 
 async function fetchMissions() {
   if (!props.slug) return;
   loading.value = true;
   try {
-    const { missions: data } = await listEntrepriseMissions(props.slug);
+    const { missions: data } = await listMissions();
     missions.value = data;
   } catch (err) {
     console.error("❌ Erreur récupération missions:", err);
@@ -45,11 +45,17 @@ async function fetchMissions() {
   }
 }
 
-// 🔄 recharge quand le slug change
-watch(() => props.slug, fetchMissions, { immediate: true });
+// 🔄 recharge quand le slug change (owner uniquement)
+watch(
+  () => props.slug,
+  () => {
+    if (props.isOwner) fetchMissions();
+  },
+  { immediate: true }
+);
 
 onMounted(() => {
-  if (props.isOwner) {
+  if (props.isOwner && missions.value.length === 0) {
     fetchMissions();
   }
 });
