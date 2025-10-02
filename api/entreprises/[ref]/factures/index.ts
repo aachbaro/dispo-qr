@@ -25,39 +25,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../../../_supabase.js";
 import type { Tables } from "../../../../types/database.js";
-
-// ----------------------
-// Helpers
-// ----------------------
-async function getUserFromToken(req: VercelRequest) {
-  const auth = req.headers.authorization;
-  if (!auth) return null;
-
-  const token = auth.split(" ")[1];
-  if (!token) return null;
-
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) return null;
-
-  return data.user;
-}
-
-async function findEntreprise(ref: string) {
-  let query = supabaseAdmin.from("entreprise").select("*");
-  if (!isNaN(Number(ref))) {
-    query = query.eq("id", Number(ref));
-  } else {
-    query = query.eq("slug", ref);
-  }
-  return query.single<Tables<"entreprise">>();
-}
-
-function canAccess(user: any, entreprise: Tables<"entreprise">): boolean {
-  if (!user) return false;
-  if (user.id === entreprise.user_id) return true;
-  if (user.app_metadata?.role === "admin") return true;
-  return false;
-}
+import { getUserFromToken } from "../../../utils/auth.js";
+import {
+  canAccessSensitive,
+  findEntreprise,
+} from "../../../_lib/entreprise.js";
 
 // ----------------------
 // Handler
@@ -83,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!entreprise) {
       return res.status(404).json({ error: "❌ Entreprise introuvable" });
     }
-    if (!canAccess(user, entreprise)) {
+    if (!canAccessSensitive(user, entreprise)) {
       return res.status(403).json({ error: "❌ Accès interdit" });
     }
 
@@ -113,7 +85,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // POST → Créer facture
     // ----------------------
     if (req.method === "POST") {
-      const payload = req.body ? JSON.parse(req.body) : {};
+      const payload =
+        typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
       // sécurité : forcer entreprise_id
       const toInsert: Partial<Tables<"factures">> = {
@@ -143,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         toInsert.hours = totalHours;
         toInsert.rate = entreprise.taux_horaire;
-        toInsert.montant_ht = totalHours * entreprise.taux_horaire;
+        toInsert.montant_ht = totalHours * (entreprise.taux_horaire || 0);
         toInsert.tva = 0; // TODO: gérer TVA plus tard
         toInsert.montant_ttc = toInsert.montant_ht + (toInsert.tva || 0);
       }

@@ -1,15 +1,21 @@
-// src/components/ClientPopup.vue //
-------------------------------------------------------------- // Popup client →
-création d’une mission avec plusieurs créneaux //
-------------------------------------------------------------- // // 📌
-Description : // - Affiche un formulaire complet (établissement, contact,
-instructions…) // - Ajout dynamique de plusieurs créneaux (date/heure début et
-fin) // - Garde le comportement scroll (heures par 15 min, dates par
-jour/sem/mois) // // 🔒 Règles d’accès : // - Public côté client (demande de
-mission) // - Validation finale côté backend // // ⚠️ Remarques : // - Le
-payload envoie maintenant un tableau `slots: [{ start, end }]` // - Le calcul
-des heures se fera côté backend/facture // //
--------------------------------------------------------------
+<!-- src/components/ClientPopup.vue -->
+<!-- -------------------------------------------------------------
+ Popup client → création d’une mission avec plusieurs créneaux
+---------------------------------------------------------------
+📌 Description :
+ - Affiche un formulaire complet (établissement, contact, instructions…)
+ - Ajout dynamique de plusieurs créneaux (date/heure début et fin)
+ - Supporte la sélection d’un modèle de mission (mission_templates)
+ - Garde le comportement scroll (heures par 15 min, dates par jour/sem/mois)
+
+🔒 Règles d’accès :
+ - Public côté client (demande de mission)
+ - Validation finale côté backend
+
+⚠️ Remarques :
+ - Le payload envoie maintenant un tableau `slots: [{ start, end }]`
+ - Le calcul des heures se fait côté backend/facture
+--------------------------------------------------------------- -->
 
 <template>
   <Transition name="fade">
@@ -34,6 +40,21 @@ des heures se fera côté backend/facture // //
 
         <!-- Body -->
         <div class="px-5 py-4 space-y-4">
+          <!-- Sélecteur de modèle -->
+          <div class="space-y-1">
+            <label class="text-sm font-medium">Utiliser un modèle</label>
+            <select
+              v-model="selectedTemplateId"
+              @change="applyTemplate"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2"
+            >
+              <option value="">-- Aucun --</option>
+              <option v-for="t in templates" :key="t.id" :value="t.id">
+                {{ t.nom }}
+              </option>
+            </select>
+          </div>
+
           <!-- Établissement -->
           <div class="space-y-1">
             <label class="text-sm font-medium">Établissement</label>
@@ -54,13 +75,13 @@ des heures se fera côté backend/facture // //
               type="text"
               required
               placeholder="Adresse (ligne 1)"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
             <input
               v-model="adresseLigne2"
               type="text"
               placeholder="Complément d’adresse (ligne 2)"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
           </div>
 
@@ -71,85 +92,66 @@ des heures se fera côté backend/facture // //
               type="text"
               required
               placeholder="Code postal"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border px-3 py-2"
             />
             <input
               v-model="ville"
               type="text"
               required
               placeholder="Ville"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border px-3 py-2"
             />
           </div>
 
           <!-- Pays -->
-          <div class="space-y-1">
+          <div>
             <input
               v-model="pays"
               type="text"
               required
               placeholder="Pays"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              class="w-full rounded-lg border px-3 py-2"
             />
           </div>
 
           <!-- Contact -->
           <div class="grid grid-cols-2 gap-3">
-            <div class="space-y-1">
-              <label class="text-sm font-medium">Téléphone</label>
-              <input
-                v-model="contactPhone"
-                type="tel"
-                required
-                placeholder="+33 6 12 34 56 78"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div class="space-y-1">
-              <label class="text-sm font-medium">Email</label>
-              <input
-                v-model="contactEmail"
-                type="email"
-                required
-                placeholder="contact@restaurant.com"
-                class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <!-- Nom du contact -->
-          <div class="space-y-1">
-            <label class="text-sm font-medium">Nom du contact</label>
             <input
-              v-model="contactName"
-              type="text"
-              placeholder="ex: Responsable salle"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
+              v-model="contactPhone"
+              type="tel"
+              required
+              placeholder="+33 6 12 34 56 78"
+              class="w-full rounded-lg border px-3 py-2"
+            />
+            <input
+              v-model="contactEmail"
+              type="email"
+              required
+              placeholder="contact@restaurant.com"
+              class="w-full rounded-lg border px-3 py-2"
             />
           </div>
 
+          <input
+            v-model="contactName"
+            type="text"
+            placeholder="Nom du contact (ex: Responsable salle)"
+            class="w-full rounded-lg border px-3 py-2"
+          />
+
           <!-- Instructions -->
-          <div class="space-y-1">
-            <label class="text-sm font-medium">Instructions</label>
-            <textarea
-              v-model="instructions"
-              rows="3"
-              placeholder="Précisions sur la mission..."
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
-            ></textarea>
-          </div>
+          <textarea
+            v-model="instructions"
+            rows="3"
+            placeholder="Précisions sur la mission..."
+            class="w-full rounded-lg border px-3 py-2"
+          ></textarea>
 
           <!-- Mode -->
-          <div class="space-y-1">
-            <label class="text-sm font-medium">Mode</label>
-            <select
-              v-model="mode"
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="freelance">Freelance (auto-entrepreneur)</option>
-              <option value="salarié">Salarié (contrat d'extra)</option>
-            </select>
-          </div>
+          <select v-model="mode" class="w-full rounded-lg border px-3 py-2">
+            <option value="freelance">Freelance (auto-entrepreneur)</option>
+            <option value="salarié">Salarié (contrat d'extra)</option>
+          </select>
 
           <!-- Créneaux -->
           <div class="space-y-3">
@@ -171,49 +173,37 @@ des heures se fera côté backend/facture // //
               </div>
 
               <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="text-sm font-medium">Date début</label>
-                  <input
-                    type="date"
-                    v-model="slot.startDate"
-                    :min="minDate"
-                    @wheel.prevent="onScrollDate($event, slot, 'startDate')"
-                    class="w-full rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label class="text-sm font-medium">Date fin</label>
-                  <input
-                    type="date"
-                    v-model="slot.endDate"
-                    :min="minDate"
-                    @wheel.prevent="onScrollDate($event, slot, 'endDate')"
-                    class="w-full rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <input
+                  type="date"
+                  v-model="slot.startDate"
+                  :min="minDate"
+                  @wheel.prevent="onScrollDate($event, slot, 'startDate')"
+                  class="w-full rounded-lg border px-3 py-2"
+                />
+                <input
+                  type="date"
+                  v-model="slot.endDate"
+                  :min="minDate"
+                  @wheel.prevent="onScrollDate($event, slot, 'endDate')"
+                  class="w-full rounded-lg border px-3 py-2"
+                />
               </div>
 
               <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="text-sm font-medium">Heure début</label>
-                  <input
-                    type="time"
-                    v-model="slot.startTime"
-                    step="900"
-                    @wheel.prevent="onScrollTime($event, slot, 'startTime')"
-                    class="w-full rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label class="text-sm font-medium">Heure fin</label>
-                  <input
-                    type="time"
-                    v-model="slot.endTime"
-                    step="900"
-                    @wheel.prevent="onScrollTime($event, slot, 'endTime')"
-                    class="w-full rounded-lg border px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <input
+                  type="time"
+                  v-model="slot.startTime"
+                  step="900"
+                  @wheel.prevent="onScrollTime($event, slot, 'startTime')"
+                  class="w-full rounded-lg border px-3 py-2"
+                />
+                <input
+                  type="time"
+                  v-model="slot.endTime"
+                  step="900"
+                  @wheel.prevent="onScrollTime($event, slot, 'endTime')"
+                  class="w-full rounded-lg border px-3 py-2"
+                />
               </div>
 
               <p v-if="isSlotInvalid(slot)" class="text-sm text-red-600">
@@ -221,7 +211,6 @@ des heures se fera côté backend/facture // //
               </p>
             </div>
 
-            <!-- Bouton ajout -->
             <button
               type="button"
               class="px-3 py-2 text-sm rounded bg-gray-100 hover:bg-gray-200"
@@ -255,16 +244,42 @@ des heures se fera côté backend/facture // //
   </Transition>
 </template>
 
-<script setup>
-import { ref, computed } from "vue";
+<script setup lang="ts">
+import { ref, computed, onMounted } from "vue";
 import { createEntrepriseMission } from "../../services/missions";
+import { listTemplates, type MissionTemplate } from "../../services/templates";
 
-const props = defineProps({
-  open: Boolean,
-  slug: String,
-  required: true,
-});
+const props = defineProps<{ open: boolean; slug: string }>();
 const emit = defineEmits(["close", "created"]);
+
+// Templates
+const templates = ref<MissionTemplate[]>([]);
+const selectedTemplateId = ref<number | "">("");
+
+onMounted(async () => {
+  try {
+    const { templates: data } = await listTemplates();
+    templates.value = data;
+  } catch (err) {
+    console.error("❌ Erreur chargement templates:", err);
+  }
+});
+
+function applyTemplate() {
+  const t = templates.value.find((x) => x.id === selectedTemplateId.value);
+  if (!t) return;
+  etablissement.value = t.etablissement;
+  adresseLigne1.value = t.etablissement_adresse_ligne1 || "";
+  adresseLigne2.value = t.etablissement_adresse_ligne2 || "";
+  codePostal.value = t.etablissement_code_postal || "";
+  ville.value = t.etablissement_ville || "";
+  pays.value = t.etablissement_pays || "";
+  contactName.value = t.contact_name || "";
+  contactEmail.value = t.contact_email || "";
+  contactPhone.value = t.contact_phone || "";
+  instructions.value = t.instructions || "";
+  mode.value = t.mode || "freelance";
+}
 
 // Champs mission
 const etablissement = ref("");
@@ -283,7 +298,6 @@ const mode = ref("freelance");
 const slots = ref([
   { startDate: "", endDate: "", startTime: "12:00", endTime: "14:00" },
 ]);
-
 function addSlot() {
   slots.value.push({
     startDate: "",
@@ -292,7 +306,7 @@ function addSlot() {
     endTime: "14:00",
   });
 }
-function removeSlot(index) {
+function removeSlot(index: number) {
   slots.value.splice(index, 1);
 }
 
@@ -305,10 +319,10 @@ function getWeekStart(d = new Date()) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
-function toYMD(dt) {
+function toYMD(dt: Date) {
   return dt.toISOString().slice(0, 10);
 }
-function parseYMD(s) {
+function parseYMD(s: string) {
   if (!s) return null;
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
@@ -316,7 +330,7 @@ function parseYMD(s) {
 const minDate = toYMD(getWeekStart());
 
 // Validation
-function isSlotInvalid(slot) {
+function isSlotInvalid(slot: any) {
   if (!slot.startDate || !slot.endDate || !slot.startTime || !slot.endTime)
     return true;
   const s = new Date(`${slot.startDate}T${slot.startTime}`);
@@ -326,7 +340,7 @@ function isSlotInvalid(slot) {
 const isInvalid = computed(() => slots.value.some(isSlotInvalid));
 
 // Scroll time/date
-function onScrollTime(event, slot, field) {
+function onScrollTime(event: WheelEvent, slot: any, field: string) {
   const val = slot[field];
   const [h, m] = val.split(":").map(Number);
   let minutes = h * 60 + m;
@@ -337,14 +351,14 @@ function onScrollTime(event, slot, field) {
   const newM = String(minutes % 60).padStart(2, "0");
   slot[field] = `${newH}:${newM}`;
 }
-function onScrollDate(event, slot, field) {
+function onScrollDate(event: WheelEvent, slot: any, field: string) {
   let step = 1;
   if (event.shiftKey) step = 7;
   if (event.altKey) step = 30;
   const dir = event.deltaY < 0 ? +1 : -1;
   let base = parseYMD(slot[field]) || new Date();
   base.setDate(base.getDate() + dir * step);
-  const minDt = parseYMD(minDate);
+  const minDt = parseYMD(minDate)!;
   if (base < minDt) base = minDt;
   slot[field] = toYMD(base);
   if (slot.endDate < slot.startDate) slot.endDate = slot.startDate;

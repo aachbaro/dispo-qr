@@ -13,23 +13,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../_supabase.js";
 import type { Tables } from "../../types/database.js";
+import { getUserFromToken } from "../utils/auth.js";
 
 type Profile = Tables<"profiles">;
-
-// ----------------------
-// Helpers
-// ----------------------
-async function getUserFromToken(req: VercelRequest) {
-  const auth = req.headers.authorization;
-  if (!auth) return null;
-  const token = auth.split(" ")[1];
-  if (!token) return null;
-
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) return null;
-
-  return data.user;
-}
 
 // ----------------------
 // Handler

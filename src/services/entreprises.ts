@@ -62,10 +62,11 @@ export async function createEntreprise(
  * 🔍 Récupérer une entreprise (slug public, id privé)
  */
 export async function getEntreprise(
-  ref: string | number
+  ref: string | number,
+  opts: { forceAuth?: boolean } = {}
 ): Promise<{ entreprise: Entreprise }> {
   return request<{ entreprise: Entreprise }>(`/api/entreprises/${ref}`, {
-    skipAuth: typeof ref === "string", // slug → accès public
+    skipAuth: !opts.forceAuth && typeof ref === "string",
   });
 }
 

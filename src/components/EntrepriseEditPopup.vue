@@ -138,7 +138,8 @@ watch(
   () => props.open,
   (val) => {
     if (val && props.entreprise) {
-      form.value = { ...props.entreprise };
+      // Bien cloner tous les champs
+      form.value = JSON.parse(JSON.stringify(props.entreprise));
     }
   },
   { immediate: true }

@@ -9,9 +9,9 @@
  - Factures (owner uniquement)
  
  ⚠️ Règles :
- - Si l’utilisateur connecté est owner (slug correspond) → accès complet
- - Sinon → accès en lecture publique
- ------------------------------------------------------------- -->
+ - Côté frontend → toujours passer le slug
+ - Côté backend → décide si infos sensibles (owner/admin) ou publiques
+--------------------------------------------------------------- -->
 
 <template>
   <div class="w-full flex flex-col items-center justify-center px-4 mx-4 pb-5">
@@ -34,6 +34,14 @@
         :is-owner="isOwner"
         @updated="entreprise = $event"
       />
+
+      <!-- Bouton ajouter en contact (si client et pas owner) -->
+      <div
+        v-if="user?.role === 'client' && !isOwner && entreprise"
+        class="mt-4"
+      >
+        <AddContactButton :entreprise-id="entreprise.id" />
+      </div>
     </div>
 
     <!-- Agenda -->
@@ -83,18 +91,15 @@ import Agenda from "../components/agenda/Agenda.vue";
 import MissionList from "../components/missions/MissionList.vue";
 import EntrepriseInfos from "../components/EntrepriseInfos.vue";
 import FactureList from "../components/factures/FactureList.vue";
+import AddContactButton from "../components/AddContactButton.vue";
 
-// ----------------------
-// State
-// ----------------------
 const route = useRoute();
 const entreprise = ref<any>(null);
 const loading = ref(true);
 
-// 👤 Utilisateur connecté
 const { user } = useAuth();
 
-// 👇 Vérifie si le user connecté est propriétaire
+// 👇 Vérifie si le user connecté est propriétaire (même slug)
 const isOwner = computed(() => user.value?.slug === route.params.slug);
 
 // ----------------------
@@ -102,7 +107,16 @@ const isOwner = computed(() => user.value?.slug === route.params.slug);
 // ----------------------
 onMounted(async () => {
   try {
-    const { entreprise: e } = await getEntreprise(route.params.slug as string);
+    let e;
+    if (isOwner.value) {
+      // 🔑 Si owner → on force l’auth → backend renverra aussi les champs sensibles
+      ({ entreprise: e } = await getEntreprise(route.params.slug as string, {
+        forceAuth: true,
+      }));
+    } else {
+      // 👤 Sinon → accès public
+      ({ entreprise: e } = await getEntreprise(route.params.slug as string));
+    }
     entreprise.value = e;
   } catch (err) {
     console.error("❌ Erreur chargement entreprise :", err);
@@ -116,7 +130,6 @@ onMounted(async () => {
 // ----------------------
 function onEditFacture(facture: any) {
   console.log("✏️ Éditer facture", facture);
-  // TODO: ouvrir modal édition facture
 }
 
 function onDeletedFacture(id: number) {

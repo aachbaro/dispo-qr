@@ -14,35 +14,12 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
 import { supabaseAdmin } from "../../_supabase.js";
 import type { Tables } from "../../../types/database.js";
+import { getUserFromToken } from "../../utils/auth.js";
+import { canAccessSensitive, findEntreprise} from "../../_lib/entreprise.js";
+
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
-// ----------------------
-// Helpers
-// ----------------------
-async function getUserFromToken(req: VercelRequest) {
-  const auth = req.headers.authorization;
-  if (!auth) return null;
-  const token = auth.split(" ")[1];
-  if (!token) return null;
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) return null;
-  return data.user;
-}
-
-function canAccess(user: any, entreprise: Tables<"entreprise">) {
-  if (!user) return false;
-  if (user.id === entreprise.user_id) return true;
-  if (user.app_metadata?.role === "admin") return true;
-  return false;
-}
-
-async function findEntreprise(ref: string) {
-  let query = supabaseAdmin.from("entreprise").select("*");
-  if (!isNaN(Number(ref))) query = query.eq("id", Number(ref));
-  else query = query.eq("slug", ref);
-  return query.single<Tables<"entreprise">>();
-}
 
 // ----------------------
 // Handler principal
@@ -68,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (error || !entreprise) {
       return res.status(404).json({ error: "❌ Entreprise non trouvée" });
     }
-    if (!canAccess(user, entreprise)) {
+    if (!canAccessSensitive(user, entreprise)) {
       return res.status(403).json({ error: "❌ Accès interdit" });
     }
 

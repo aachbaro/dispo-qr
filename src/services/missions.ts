@@ -80,7 +80,7 @@ export async function listEntrepriseMissions(
  * ✏️ Mettre à jour une mission (owner uniquement)
  */
 export async function updateEntrepriseMission(
-  entrepriseId: number,
+  entrepriseId: number | string,
   missionId: number,
   updates: MissionUpdate
 ): Promise<{ mission: Mission & { slots?: Slot[] } }> {

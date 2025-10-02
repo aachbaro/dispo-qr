@@ -104,7 +104,7 @@
         </p>
 
         <!-- Actions -->
-        <div class="flex gap-2 mt-3 justify-center">
+        <div v-if="!props.readonly" class="flex gap-2 mt-3 justify-center">
           <!-- Proposed -->
           <template v-if="mission.status === 'proposed'">
             <button
@@ -192,9 +192,9 @@
               :facture="facture"
               :ref-entreprise="slug"
               :entreprise="entreprise"
-              @deleted="handleFactureDeleted"
-              @updated="handleFactureUpdated"
-              @edit="handleFactureEdit"
+              @deleted="!props.readonly && handleFactureDeleted"
+              @updated="!props.readonly && handleFactureUpdated"
+              @edit="!props.readonly && handleFactureEdit"
             />
           </div>
         </div>
@@ -217,7 +217,7 @@
 import { ref, onMounted } from "vue";
 import { updateEntrepriseMission } from "../../services/missions";
 import { getEntreprise } from "../../services/entreprises";
-import { listFacturesByMission } from "../../services/factures"; // ⚡ à créer
+import { listFacturesByMission } from "../../services/factures";
 import FactureModal from "../factures/FactureModal.vue";
 import FactureCard from "../factures/FactureCard.vue";
 import type { Mission } from "../../services/missions";
@@ -225,6 +225,7 @@ import type { Mission } from "../../services/missions";
 const props = defineProps<{
   mission: Mission;
   slug: string;
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits(["updated"]);
@@ -262,8 +263,11 @@ const statusClasses: Record<string, string> = {
 // ----------------------
 onMounted(async () => {
   try {
-    const response = await getEntreprise(props.slug);
-    entreprise.value = response.data || response.entreprise || response;
+    // ⚡ on force l’auth pour récupérer les champs sensibles (siret, tva, etc.)
+    const { entreprise: e } = await getEntreprise(props.slug, {
+      forceAuth: true,
+    });
+    entreprise.value = e;
 
     // Charger facture liée
     const factures = await listFacturesByMission(props.slug, props.mission.id);

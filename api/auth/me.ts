@@ -21,22 +21,7 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../_supabase.js";
-
-// ----------------------
-// Helpers
-// ----------------------
-async function getUserFromToken(req: VercelRequest) {
-  const auth = req.headers.authorization;
-  if (!auth) return null;
-
-  const token = auth.split(" ")[1];
-  if (!token) return null;
-
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) return null;
-
-  return data.user;
-}
+import { getUserFromToken } from "../utils/auth.js";
 
 // ----------------------
 // Handler principal

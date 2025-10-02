@@ -1,16 +1,3 @@
-// src/components/FactureModal.vue //
-------------------------------------------------------------- // Modal de
-génération de facture //
-------------------------------------------------------------- // // 📌
-Description : // - Permet à une entreprise connectée de générer une facture // -
-Pré-remplit les infos de l’entreprise et de la mission // - Calcule
-automatiquement heures travaillées, HT, TTC // // 🔒 Règles d’accès : // -
-Accessible uniquement aux entreprises connectées // - Les infos entreprise
-proviennent de la table entreprise // // ⚠️ Remarques : // - Le numéro de
-facture est saisi manuellement (format YYYY-NNNN) // - Message explicatif sous
-le champ pour rappeler l’obligation légale // //
--------------------------------------------------------------
-
 <!-- src/components/FactureModal.vue -->
 <template>
   <Transition name="fade">
@@ -27,7 +14,6 @@ le champ pour rappeler l’obligation légale // //
         class="relative w-full max-w-2xl rounded-lg bg-white shadow-lg ring-1 ring-black/5 overflow-y-auto max-h-[90vh]"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="popup-title"
       >
         <!-- Header -->
         <div class="px-5 py-4 border-b">
@@ -55,7 +41,6 @@ le champ pour rappeler l’obligation légale // //
                 placeholder="Prénom"
               />
 
-              <!-- Adresse -->
               <input
                 v-model="entAdresseLigne1"
                 type="text"
@@ -88,7 +73,6 @@ le champ pour rappeler l’obligation légale // //
                 placeholder="Pays"
               />
 
-              <!-- Contact -->
               <input
                 v-model="entEmail"
                 type="email"
@@ -102,7 +86,6 @@ le champ pour rappeler l’obligation légale // //
                 placeholder="Téléphone"
               />
 
-              <!-- Infos légales -->
               <input
                 v-model="entSiret"
                 type="text"
@@ -155,8 +138,8 @@ le champ pour rappeler l’obligation légale // //
                 required
               />
               <p class="text-xs text-gray-700 mt-1">
-                ⚖️ <b>Attention :</b> le numéro de facture doit être
-                <b>unique, chronologique et sans trou</b>.
+                ⚖️
+                <b>Le numéro doit être unique, chronologique et sans trou.</b>
               </p>
               <p v-if="invoiceError" class="text-sm text-red-600 mt-1">
                 {{ invoiceError }}
@@ -338,7 +321,9 @@ const props = defineProps({
 
 const emit = defineEmits(["close", "created"]);
 
-// Émetteur
+// ----------------------
+// State émetteur (entreprise)
+// ----------------------
 const entNom = ref("");
 const entPrenom = ref("");
 const entAdresseLigne1 = ref("");
@@ -354,7 +339,9 @@ const entMentionTva = ref("");
 const entConditions = ref("");
 const entPenalites = ref("");
 
-// Client
+// ----------------------
+// State client (mission)
+// ----------------------
 const clientName = ref("");
 const clientAdresseLigne1 = ref("");
 const clientAdresseLigne2 = ref("");
@@ -366,7 +353,9 @@ const contactPhone = ref("");
 const contactEmail = ref("");
 const description = ref("");
 
+// ----------------------
 // Facture
+// ----------------------
 const invoiceNumber = ref("");
 const invoiceDate = ref(new Date().toISOString().slice(0, 10));
 const invoiceError = ref("");
@@ -383,12 +372,9 @@ const totalTtc = computed(() => {
   return (ht * (1 + tva / 100)).toFixed(2);
 });
 
-// ✅ validation format facture
-function validateInvoiceNumber(num: string): boolean {
-  return /^\d{4}-\d{1,}$/.test(num);
-}
-
-// ✅ Pré-remplissage entreprise
+// ----------------------
+// Préremplissages
+// ----------------------
 watch(
   () => props.entreprise,
   (e) => {
@@ -413,7 +399,6 @@ watch(
   { immediate: true }
 );
 
-// ✅ Pré-remplissage mission
 watch(
   () => props.mission,
   (m) => {
@@ -428,30 +413,23 @@ watch(
       contactPhone.value = m.contact_phone || "";
       contactEmail.value = m.contact_email || "";
 
-      // 📝 Description générique
       if (m.slots?.length) {
         const first = new Date(m.slots[0].start);
         const last = new Date(m.slots[m.slots.length - 1].end);
         description.value = `Mission du ${first.toLocaleDateString(
           "fr-FR"
         )} au ${last.toLocaleDateString("fr-FR")}`;
-      } else {
-        description.value = "Mission sans créneaux définis";
-      }
 
-      // ⏱️ Calcul heures totales à partir des slots
-      if (m.slots?.length) {
         let totalHours = 0;
         for (const slot of m.slots) {
           const start = new Date(slot.start);
           const end = new Date(slot.end);
           const diffMs = end.getTime() - start.getTime();
-          if (diffMs > 0) {
-            totalHours += diffMs / 1000 / 60 / 60; // en heures
-          }
+          if (diffMs > 0) totalHours += diffMs / 1000 / 60 / 60;
         }
         hours.value = totalHours;
       } else {
+        description.value = "Mission sans créneaux définis";
         hours.value = 0;
       }
     }
@@ -459,26 +437,25 @@ watch(
   { immediate: true }
 );
 
+// ----------------------
+// Handlers
+// ----------------------
 function onCancel() {
   emit("close");
 }
 
-// ✅ Génération facture
+function validateInvoiceNumber(num: string): boolean {
+  return /^\d{4}-\d{1,}$/.test(num);
+}
+
 async function generate() {
   invoiceError.value = "";
-  if (!invoiceNumber.value) {
-    invoiceError.value = "Numéro de facture obligatoire.";
-    return;
-  }
   if (!validateInvoiceNumber(invoiceNumber.value)) {
     invoiceError.value = "Format invalide. Utiliser AAAA-NNNN (ex: 2025-0001).";
     return;
   }
-
   if (!clientName.value || !hours.value || !rate.value) {
-    alert(
-      "Merci de vérifier les infos du client, le nombre d'heures et le taux."
-    );
+    alert("Merci de vérifier les infos client, heures et taux.");
     return;
   }
 
@@ -490,7 +467,6 @@ async function generate() {
       entreprise_id: props.entreprise.id,
       mission_id: props.mission?.id ?? null,
 
-      // Client
       client_name: clientName.value,
       client_address_ligne1: clientAdresseLigne1.value,
       client_address_ligne2: clientAdresseLigne2.value,
