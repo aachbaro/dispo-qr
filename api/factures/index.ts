@@ -14,8 +14,7 @@
 //   - Clients en lecture seule
 //
 // ⚠️ Remarques :
-//   - Conserve la logique de calcul des montants si mission liée
-//   - Réutilise findEntreprise/canAccessSensitive pour contrôler l'accès
+//   - Inclut les infos complètes de l’entreprise côté client
 //   - Retourne mission + slots pour compatibilité frontend
 // -------------------------------------------------------------
 
@@ -26,7 +25,10 @@ import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
 
 interface FactureWithRelations extends Tables<"factures"> {
-  missions?: Tables<"missions"> & { slots?: Tables<"slots">[] };
+  missions?: Tables<"missions"> & {
+    slots?: Tables<"slots">[];
+    entreprise?: Tables<"entreprise">; // ⚡ entreprise complète
+  };
 }
 
 const ENTREPRISE_ROLES = new Set(["entreprise", "freelance", "admin"]);
@@ -42,11 +44,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (user.user_metadata?.role as string | undefined) ||
       (user.app_metadata?.role as string | undefined);
 
+    // ---------------- GET ----------------
     if (req.method === "GET") {
       if (!role) {
         return res.status(403).json({ error: "❌ Rôle utilisateur manquant" });
       }
 
+      // ----- Entreprise / Freelance / Admin -----
       if (ENTREPRISE_ROLES.has(role)) {
         const entrepriseLookup =
           (req.query.entreprise_ref as string | undefined) ||
@@ -54,22 +58,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           user.user_metadata?.entreprise_id ||
           user.id;
 
-        const {
-          data: entreprise,
-          error: entrepriseError,
-        } = await findEntreprise(entrepriseLookup);
+        const { data: entreprise, error: entrepriseError } =
+          await findEntreprise(entrepriseLookup);
 
         if (entrepriseError) {
           console.error("❌ Erreur fetch entreprise:", entrepriseError.message);
           return res.status(500).json({ error: entrepriseError.message });
         }
-
         if (!entreprise) {
           return res
             .status(404)
             .json({ error: "❌ Entreprise associée introuvable" });
         }
-
         if (!canAccessSensitive(user, entreprise)) {
           return res.status(403).json({ error: "❌ Accès interdit" });
         }
@@ -86,26 +86,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const { data, error } = await query;
-        if (error) {
-          return res.status(500).json({ error: error.message });
-        }
+        if (error) return res.status(500).json({ error: error.message });
 
         return res
           .status(200)
           .json({ factures: data as FactureWithRelations[] });
       }
 
+      // ----- Client -----
       if (role === "client") {
         const { data, error } = await supabaseAdmin
           .from("factures")
-          .select("*, missions(*, slots(*), entreprise:entreprise_id(slug))")
-          .not("mission_id", "is", null)
+          .select("*, missions!inner(*, slots(*), entreprise:entreprise_id(*))") // ⚡ ici on ramène toute l’entreprise
           .eq("missions.client_id", user.id)
           .order("date_emission", { ascending: false });
 
-        if (error) {
-          return res.status(500).json({ error: error.message });
-        }
+        if (error) return res.status(500).json({ error: error.message });
 
         const factures = (data || []).map((facture: any) => {
           if (facture.missions) {
@@ -113,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             facture.missions = {
               ...missionRest,
               slots: facture.missions.slots,
-              entreprise_slug: entreprise?.slug ?? null,
+              entreprise, // ⚡ entreprise complète dispo
             } as any;
           }
           return facture as FactureWithRelations;
@@ -125,38 +121,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: "❌ Rôle non autorisé" });
     }
 
+    // ---------------- POST ----------------
     if (req.method === "POST") {
       if (!role || !ENTREPRISE_ROLES.has(role)) {
-        return res.status(403).json({ error: "❌ Accès réservé aux entreprises" });
+        return res
+          .status(403)
+          .json({ error: "❌ Accès réservé aux entreprises" });
       }
 
       const payload =
         typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-      const {
-        data: entreprise,
-        error: entrepriseError,
-      } = await findEntreprise(
+      const { data: entreprise, error: entrepriseError } = await findEntreprise(
         (payload?.entreprise_id as string | number | undefined) ??
           user.user_metadata?.entreprise_id ??
-          user.id,
+          user.id
       );
-
       if (entrepriseError) {
         console.error("❌ Erreur fetch entreprise:", entrepriseError.message);
         return res.status(500).json({ error: entrepriseError.message });
       }
-
       if (!entreprise) {
         return res
           .status(404)
           .json({ error: "❌ Entreprise associée introuvable" });
       }
-
       if (!canAccessSensitive(user, entreprise)) {
         return res.status(403).json({ error: "❌ Accès interdit" });
       }
 
+      // 📦 Construction facture
       const toInsert: Partial<Tables<"factures">> = {
         ...payload,
         entreprise_id: entreprise.id,
@@ -164,16 +158,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status: payload.status || "pending_payment",
       };
 
+      // ⏳ Si mission liée → calcul heures & montant
       if (payload.mission_id) {
         const { data: slots, error: slotError } = await supabaseAdmin
           .from("slots")
           .select("start, end")
           .eq("mission_id", payload.mission_id);
 
-        if (slotError) {
-          console.error("❌ Erreur récupération slots:", slotError.message);
+        if (slotError)
           return res.status(500).json({ error: slotError.message });
-        }
 
         let totalHours = 0;
         for (const slot of slots || []) {

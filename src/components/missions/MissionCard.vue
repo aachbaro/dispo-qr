@@ -90,7 +90,9 @@
         >
           <p
             v-for="slot in mission.slots"
-            :key="slot.id ?? slot.start ?? slot.end ?? slot.title ?? slot.created_at"
+            :key="
+              slot.id ?? slot.start ?? slot.end ?? slot.title ?? slot.created_at
+            "
           >
             📅 {{ formatDate(slot.start) }} → {{ formatDate(slot.end) }}
           </p>
@@ -176,33 +178,41 @@
         </div>
 
         <!-- Facturation -->
-        <div
-          v-if="mission.status === 'realized' && !props.readonly"
-          class="mt-4 border-t pt-3"
-        >
+        <div v-if="mission.status === 'realized'" class="mt-4 border-t pt-3">
           <h4 class="text-md font-semibold mb-2">📑 Facturation</h4>
 
-          <!-- Si pas encore de facture -->
-          <div v-if="!facture">
-            <button
-              class="btn-primary hover:bg-green-700"
-              @click.stop="createFacture"
-            >
-              Générer une facture
-            </button>
-          </div>
+          <!-- Entreprise : générer ou gérer facture -->
+          <template v-if="!props.readonly">
+            <!-- Si pas encore de facture -->
+            <div v-if="!facture">
+              <button
+                class="btn-primary hover:bg-green-700"
+                @click.stop="createFacture"
+              >
+                Générer une facture
+              </button>
+            </div>
 
-          <!-- Si une facture existe -->
-          <div v-else-if="slug">
-            <FactureCard
-              :facture="facture"
-              :ref-entreprise="slug"
-              :entreprise="entreprise"
-              @deleted="!props.readonly && handleFactureDeleted"
-              @updated="!props.readonly && handleFactureUpdated"
-              @edit="!props.readonly && handleFactureEdit"
-            />
-          </div>
+            <!-- Si une facture existe -->
+            <div v-else-if="slug">
+              <FactureCard
+                :facture="facture"
+                :ref-entreprise="slug"
+                :entreprise="entreprise"
+                @deleted="handleFactureDeleted"
+                @updated="handleFactureUpdated"
+                @edit="handleFactureEdit"
+              />
+            </div>
+          </template>
+
+          <!-- Client (readonly) : voir facture si elle existe -->
+          <template v-else>
+            <FactureCard v-if="facture" :facture="facture" readonly />
+            <p v-else class="text-sm text-gray-500 italic">
+              Aucune facture encore générée pour cette mission.
+            </p>
+          </template>
         </div>
       </div>
     </transition>

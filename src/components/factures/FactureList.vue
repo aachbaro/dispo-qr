@@ -1,4 +1,17 @@
 <!-- src/components/factures/FactureList.vue -->
+<!-- -------------------------------------------------------------
+ Liste des factures (FactureList)
+ ---------------------------------------------------------------
+ 📌 Description :
+ - Affiche une liste de FactureCard
+ - Mode entreprise : édition, suppression, génération lien
+ - Mode client (readonly) : lecture seule, téléchargement PDF, lien paiement
+
+ 🔒 Règles d’accès :
+ - Entreprise/admin : accès complet
+ - Client (readonly) : lecture seule
+ ------------------------------------------------------------- -->
+
 <template>
   <div class="space-y-4 mt-8">
     <!-- Titre -->
@@ -24,8 +37,10 @@
         :facture="f"
         :ref-entreprise="refEntreprise"
         :entreprise="entreprise"
+        :readonly="readonly"
         @edit="onEdit"
         @deleted="onDeleted"
+        @updated="onUpdated"
       />
     </div>
   </div>
@@ -37,24 +52,31 @@ import { useFactures } from "../../composables/useFactures";
 import FactureCard from "./FactureCard.vue";
 
 const props = defineProps<{
-  refEntreprise: string | number;
-  entreprise: any; // ⚠️ doit contenir infos de l’entreprise (iban, bic…)
+  refEntreprise?: string | number | null;
+  entreprise?: any; // ⚠️ doit contenir infos de l’entreprise (iban, bic…)
+  readonly?: boolean; // 👈 nouveau mode lecture seule
 }>();
 
-const emit = defineEmits(["edit", "deleted"]);
+const emit = defineEmits(["edit", "deleted", "updated"]);
 
 const { factures, loading, fetchFactures } = useFactures();
 
 // Charger au montage
 onMounted(() => {
-  fetchFactures(props.refEntreprise);
+  if (!props.readonly && props.refEntreprise) {
+    // ⚡ Mode entreprise → filtrer par refEntreprise
+    fetchFactures(props.refEntreprise);
+  } else if (props.readonly) {
+    // ⚡ Mode client → backend filtre automatiquement
+    fetchFactures();
+  }
 });
 
-// Recharger si refEntreprise change
+// Recharger si refEntreprise change (mode entreprise uniquement)
 watch(
   () => props.refEntreprise,
   (newRef) => {
-    if (newRef) fetchFactures(newRef);
+    if (!props.readonly && newRef) fetchFactures(newRef);
   }
 );
 
@@ -64,5 +86,9 @@ function onEdit(facture: any) {
 
 function onDeleted(id: number) {
   emit("deleted", id);
+}
+
+function onUpdated(facture: any) {
+  emit("updated", facture);
 }
 </script>

@@ -38,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!user) {
       return res.status(401).json({ error: "❌ Authentification requise" });
     }
+    console.log("✅ User authenticated:", user.id);
 
     const role =
       (user.user_metadata?.role as string | undefined) ||
@@ -55,10 +56,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           user.user_metadata?.entreprise_id ||
           user.id;
 
-        const {
-          data: entreprise,
-          error: entrepriseError,
-        } = await findEntreprise(entrepriseLookup);
+        const { data: entreprise, error: entrepriseError } =
+          await findEntreprise(entrepriseLookup);
 
         if (entrepriseError) {
           console.error("❌ Erreur fetch entreprise:", entrepriseError.message);
@@ -105,14 +104,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(500).json({ error: error.message });
         }
 
-        const missions: MissionWithSlots[] = (data || []).map((mission: any) => {
-          const { entreprise, ...rest } = mission;
-          return {
-            ...rest,
-            slots: mission.slots,
-            entreprise_slug: entreprise?.slug ?? null,
-          } as MissionWithSlots;
-        });
+        const missions: MissionWithSlots[] = (data || []).map(
+          (mission: any) => {
+            const { entreprise, ...rest } = mission;
+            return {
+              ...rest,
+              slots: mission.slots,
+              entreprise_slug: entreprise?.slug ?? null,
+            } as MissionWithSlots;
+          }
+        );
 
         return res.status(200).json({ missions });
       }
@@ -122,23 +123,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === "POST") {
       if (!role || !ENTREPRISE_ROLES.has(role)) {
-        return res.status(403).json({ error: "❌ Accès réservé aux entreprises" });
+        return res
+          .status(403)
+          .json({ error: "❌ Accès réservé aux entreprises" });
       }
 
       const payload =
         typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
 
-      const { slots, ...missionPayload } = payload as Partial<Tables<"missions">> & {
+      const { slots, ...missionPayload } = payload as Partial<
+        Tables<"missions">
+      > & {
         slots?: Array<Pick<Tables<"slots">, "start" | "end" | "title">>;
       };
 
-      const {
-        data: entreprise,
-        error: entrepriseError,
-      } = await findEntreprise(
+      const { data: entreprise, error: entrepriseError } = await findEntreprise(
         (payload?.entreprise_id as string | number | undefined) ??
           user.user_metadata?.entreprise_id ??
-          user.id,
+          user.id
       );
 
       if (entrepriseError) {

@@ -4,14 +4,12 @@
  ---------------------------------------------------------------
  📌 Description :
  - Affiche les détails d’une facture (client, montant, statut, lien paiement)
- - Permet de générer PDF, modifier, générer lien de paiement, supprimer
+ - En mode entreprise : peut éditer, supprimer, générer lien paiement
+ - En mode client (readonly) : peut télécharger PDF et voir lien de paiement
 
  🔒 Règles d’accès :
- - Actions réservées à l’owner entreprise
-
- ⚠️ Remarques :
- - Le champ `hours` n’existe plus (calcul côté backend via slots)
- - Statut `pending_payment` affiché comme "Paiement en attente"
+ - Actions sensibles (edit/delete/lien) → owner uniquement
+ - Client → lecture seule
  ------------------------------------------------------------- -->
 
 <template>
@@ -45,74 +43,39 @@
             {{ formatDate(facture.date_emission) }}
           </p>
         </div>
+
         <!-- Paiement -->
-        <div v-if="facture.payment_link" class="text-sm text-blue-600 hidden">
-          🔗 Lien paiement dispo
+        <div v-if="facture.payment_link" class="text-sm mt-2">
+          <a
+            :href="facture.payment_link"
+            target="_blank"
+            class="flex items-center gap-1 text-blue-600 hover:underline"
+            @click.stop
+          >
+            <Icon name="link" class="w-4 h-4" />
+            Accéder au paiement
+          </a>
         </div>
 
         <!-- Actions -->
-        <div class="flex justify-between gap-2 pt-1">
-          <!-- Paiement -->
-          <div class="flex items-center gap-2">
-            <!-- Si lien dispo -->
-            <template v-if="facture.payment_link">
-              <!-- Lien cliquable -->
-              <a
-                :href="facture.payment_link"
-                target="_blank"
-                class="flex items-center gap-1 text-sm text-blue-600 px-2 py-1 rounded hover:bg-gray-100 transition"
-                @click.stop
-              >
-                <Icon name="link" class="w-4 h-4" />
-                Lien de paiement
-              </a>
+        <div class="flex justify-between gap-2 pt-3">
+          <!-- Toujours dispo : téléchargement PDF -->
+          <button class="btn-primary p-1" @click.stop="downloadPdf">
+            <Icon name="download" class="w-4 h-4" />
+          </button>
 
-              <!-- Copier -->
-              <div class="relative group">
-                <button class="btn-primary p-1" @click.stop="copyPaymentLink">
-                  <Icon name="document-duplicate" class="w-4 h-4" />
-                </button>
-                <span
-                  class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 text-xs rounded bg-gray-800 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-75"
-                >
-                  Copier le lien
-                </span>
-              </div>
-
-              <!-- Régénérer -->
-              <div class="relative group">
-                <button class="btn-primary p-1" @click.stop="onPaymentLink">
-                  <Icon name="arrow-path" class="w-4 h-4" />
-                </button>
-                <span
-                  class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 text-xs rounded bg-gray-800 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-75"
-                >
-                  Régénérer lien
-                </span>
-              </div>
-            </template>
-
-            <!-- Si pas encore de lien -->
-            <template v-else>
-              <div class="relative group">
-                <button
-                  class="btn-primary p-0 px-3 text-sm"
-                  @click.stop="onPaymentLink"
-                >
-                  Générer un lien de paiement
-                </button>
-                <span
-                  class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 text-xs rounded bg-gray-800 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-75"
-                >
-                  Générer lien de paiement
-                </span>
-              </div>
-            </template>
-          </div>
-          <!-- action sur la facture -->
-          <div class="flex gap-2">
-            <button class="btn-primary p-1" @click.stop="downloadPdf">
-              <Icon name="download" class="w-4 h-4" />
+          <!-- Actions sensibles : uniquement si !readonly -->
+          <div v-if="!readonly" class="flex gap-2">
+            <!-- Gestion du lien paiement -->
+            <button
+              v-if="!facture.payment_link"
+              class="btn-primary p-1 text-sm"
+              @click.stop="onPaymentLink"
+            >
+              Générer lien
+            </button>
+            <button v-else class="btn-primary p-1" @click.stop="onPaymentLink">
+              <Icon name="arrow-path" class="w-4 h-4" />
             </button>
             <button
               class="btn-primary p-1"
@@ -134,23 +97,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import type { Facture } from "../../services/factures";
+import { ref, computed } from "vue";
+import type { FactureWithRelations } from "../../services/factures";
 import { useFactures } from "../../composables/useFactures";
 import { generateFacturePdf } from "../../utils/pdf/facturePdf";
 import { generateFacturePaymentLink } from "../../services/factures";
 import Icon from "../ui/Icon.vue";
 
 const props = defineProps<{
-  facture: Facture;
-  refEntreprise: string | number;
-  entreprise: any; // ⚠️ doit contenir iban, bic, infos émetteur
+  facture: FactureWithRelations;
+  refEntreprise?: string | number | null;
+  entreprise?: any;
+  readonly?: boolean; // 👈 permet de basculer client vs entreprise
 }>();
 
 const emit = defineEmits(["edit", "deleted", "updated"]);
 
 const { removeFacture } = useFactures();
-const expanded = ref(false); // 👈 toggle vue détaillée
+const expanded = ref(false);
 
 // ----------------------
 // Status labels & styles
@@ -167,33 +131,20 @@ const statusClasses: Record<string, string> = {
   cancelled: "bg-red-100 text-red-800",
 };
 
+const entrepriseForPdf = computed(() => {
+  return props.entreprise || props.facture.missions?.entreprise || {};
+});
+
+// ----------------------
+// Utils
+// ----------------------
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString("fr-FR");
 }
 
-const hasAddress = computed(
-  () =>
-    props.facture.client_address_ligne1 ||
-    props.facture.client_address_ligne2 ||
-    props.facture.client_code_postal ||
-    props.facture.client_ville ||
-    props.facture.client_pays
-);
-
-async function onDelete() {
-  if (!confirm("Supprimer cette facture ?")) return;
-  try {
-    await removeFacture(props.refEntreprise, props.facture.id);
-    emit("deleted", props.facture.id);
-  } catch (err) {
-    alert("❌ Erreur lors de la suppression de la facture");
-    console.error(err);
-  }
-}
-
 function downloadPdf() {
   try {
-    generateFacturePdf(props.facture, props.entreprise);
+    generateFacturePdf(props.facture, entrepriseForPdf.value);
   } catch (err) {
     console.error("❌ Erreur génération PDF:", err);
     alert("Impossible de générer le PDF.");
@@ -201,6 +152,7 @@ function downloadPdf() {
 }
 
 async function onPaymentLink() {
+  if (props.readonly || !props.refEntreprise) return;
   try {
     const { url } = await generateFacturePaymentLink(
       props.refEntreprise,
@@ -214,14 +166,15 @@ async function onPaymentLink() {
   }
 }
 
-async function copyPaymentLink() {
-  if (!props.facture.payment_link) return;
+async function onDelete() {
+  if (props.readonly || !props.refEntreprise) return;
+  if (!confirm("Supprimer cette facture ?")) return;
   try {
-    await navigator.clipboard.writeText(props.facture.payment_link);
-    alert("Lien copié dans le presse-papier ✅");
+    await removeFacture(props.refEntreprise, props.facture.id);
+    emit("deleted", props.facture.id);
   } catch (err) {
-    console.error("❌ Erreur copie lien:", err);
-    alert("Impossible de copier le lien");
+    console.error("❌ Erreur suppression facture:", err);
+    alert("Erreur lors de la suppression");
   }
 }
 </script>

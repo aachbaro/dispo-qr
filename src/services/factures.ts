@@ -41,7 +41,7 @@ export type FactureWithRelations = Facture & {
   missions?:
     | (Tables<"missions"> & {
         slots?: Tables<"slots">[];
-        entreprise_slug?: string | null;
+        entreprise?: Tables<"entreprise"> | null; // ⚡ entreprise complète
       })
     | null;
 };
@@ -57,7 +57,8 @@ export async function listFactures(
   params: { missionId?: number } = {}
 ): Promise<{ factures: FactureWithRelations[] }> {
   const searchParams = new URLSearchParams();
-  if (params.missionId) searchParams.set("mission_id", params.missionId.toString());
+  if (params.missionId)
+    searchParams.set("mission_id", params.missionId.toString());
   const query = searchParams.toString();
 
   return request<{ factures: FactureWithRelations[] }>(
