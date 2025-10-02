@@ -6,13 +6,14 @@
 // 📌 Description :
 //   - Liste les missions de l'utilisateur connecté (entreprise/client)
 //   - Créé de nouvelles missions pour l'entreprise propriétaire
-//   - Opérations de mise à jour/suppression conservées sur les routes historiques
+//   - Mise à jour / suppression via l'endpoint unifié /api/missions/[id]
 //
 // 📍 Endpoints API :
-//   - GET    /api/missions                       → missions de l'utilisateur
-//   - POST   /api/missions                       → créer une mission (+ slots)
-//   - PUT    /api/entreprises/[ref]/missions/[id]   → mettre à jour une mission
-//   - DELETE /api/entreprises/[ref]/missions/[id]   → supprimer une mission
+//   - GET    /api/missions             → missions de l'utilisateur
+//   - POST   /api/missions             → créer une mission (+ slots)
+//   - GET    /api/missions/[id]        → récupérer une mission
+//   - PUT    /api/missions/[id]        → mettre à jour une mission
+//   - DELETE /api/missions/[id]        → supprimer une mission
 //
 // 🔒 Règles d’accès :
 //   - Clients : lecture seule (missions où client_id = user.id)
@@ -81,12 +82,12 @@ export async function listMissions(
  * ✏️ Mettre à jour une mission (owner uniquement)
  */
 export async function updateMission(
-  entrepriseId: number | string,
+  _entrepriseId: number | string,
   missionId: number,
   updates: MissionUpdate
 ): Promise<{ mission: Mission & { slots?: Slot[] } }> {
   return request<{ mission: Mission & { slots?: Slot[] } }>(
-    `/api/entreprises/${entrepriseId}/missions/${missionId}`,
+    `/api/missions/${missionId}`,
     {
       method: "PUT",
       body: JSON.stringify(updates),
@@ -98,10 +99,10 @@ export async function updateMission(
  * ❌ Supprimer une mission (owner uniquement)
  */
 export async function deleteMission(
-  entrepriseId: number,
+  _entrepriseId: number,
   missionId: number
 ): Promise<void> {
-  await request(`/api/entreprises/${entrepriseId}/missions/${missionId}`, {
+  await request(`/api/missions/${missionId}`, {
     method: "DELETE",
   });
 }
