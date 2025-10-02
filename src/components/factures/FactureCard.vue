@@ -106,7 +106,6 @@ import Icon from "../ui/Icon.vue";
 
 const props = defineProps<{
   facture: FactureWithRelations;
-  refEntreprise?: string | number | null;
   entreprise?: any;
   readonly?: boolean; // 👈 permet de basculer client vs entreprise
 }>();
@@ -152,12 +151,9 @@ function downloadPdf() {
 }
 
 async function onPaymentLink() {
-  if (props.readonly || !props.refEntreprise) return;
+  if (props.readonly) return;
   try {
-    const { url } = await generateFacturePaymentLink(
-      props.refEntreprise,
-      props.facture.id
-    );
+    const { url } = await generateFacturePaymentLink(props.facture.id);
     emit("updated", { ...props.facture, payment_link: url });
     alert("✅ Lien de paiement généré !");
   } catch (err) {
@@ -167,10 +163,10 @@ async function onPaymentLink() {
 }
 
 async function onDelete() {
-  if (props.readonly || !props.refEntreprise) return;
+  if (props.readonly) return;
   if (!confirm("Supprimer cette facture ?")) return;
   try {
-    await removeFacture(props.refEntreprise, props.facture.id);
+    await removeFacture(props.facture.id);
     emit("deleted", props.facture.id);
   } catch (err) {
     console.error("❌ Erreur suppression facture:", err);

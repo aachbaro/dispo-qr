@@ -16,7 +16,7 @@
 // ⚠️ Remarques :
 //   - Réutilise findEntreprise / canAccessSensitive pour vérifier les droits
 //   - Retourne toujours les slots associés (mission.slots[])
-//   - Ajoute entreprise_slug pour les clients (MissionCard côté front)
+//   - Expose systématiquement entreprise et client liés via Supabase
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -27,10 +27,13 @@ import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
 
 interface MissionWithSlots extends Tables<"missions"> {
   slots?: Tables<"slots">[];
-  entreprise_slug?: string | null;
+  entreprise?: Tables<"entreprise"> | null;
+  client?: Tables<"clients"> | null;
 }
 
 const ENTREPRISE_ROLES = new Set(["entreprise", "freelance", "admin"]);
+const MISSION_SELECT =
+  "*, slots(*), entreprise:entreprise_id(*), client:client_id(*)";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -77,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { status } = req.query;
         let query = supabaseAdmin
           .from("missions")
-          .select("*, slots(*)")
+          .select(MISSION_SELECT)
           .eq("entreprise_id", entreprise.id)
           .order("created_at", { ascending: false });
 
@@ -96,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (role === "client") {
         const { data, error } = await supabaseAdmin
           .from("missions")
-          .select("*, slots(*), entreprise:entreprise_id(slug)")
+          .select(MISSION_SELECT)
           .eq("client_id", user.id)
           .order("created_at", { ascending: false });
 
@@ -104,18 +107,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(500).json({ error: error.message });
         }
 
-        const missions: MissionWithSlots[] = (data || []).map(
-          (mission: any) => {
-            const { entreprise, ...rest } = mission;
-            return {
-              ...rest,
-              slots: mission.slots,
-              entreprise_slug: entreprise?.slug ?? null,
-            } as MissionWithSlots;
-          }
-        );
-
-        return res.status(200).json({ missions });
+        return res.status(200).json({ missions: data as MissionWithSlots[] });
       }
 
       return res.status(403).json({ error: "❌ Rôle non autorisé" });
@@ -196,9 +188,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         createdSlots = slotData as Tables<"slots">[];
       }
 
+      const { data: missionWithRelations, error: fetchCreatedError } =
+        await supabaseAdmin
+          .from("missions")
+          .select(MISSION_SELECT)
+          .eq("id", mission.id)
+          .single<MissionWithSlots>();
+
+      if (fetchCreatedError) {
+        console.error(
+          "❌ Erreur récupération mission créée:",
+          fetchCreatedError.message
+        );
+        return res.status(500).json({ error: fetchCreatedError.message });
+      }
+
       const missionWithSlots: MissionWithSlots = {
-        ...mission,
-        slots: createdSlots,
+        ...missionWithRelations!,
+        slots: missionWithRelations?.slots ?? createdSlots,
       };
 
       return res.status(201).json({ mission: missionWithSlots });

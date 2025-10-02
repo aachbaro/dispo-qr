@@ -38,7 +38,8 @@ export type MissionUpdate = TablesUpdate<"missions">;
 
 export type MissionWithRelations = Mission & {
   slots?: Slot[];
-  entreprise_slug?: string | null;
+  entreprise?: Tables<"entreprise"> | null;
+  client?: Tables<"clients"> | null;
 };
 
 // Payload enrichi côté frontend : ajoute les slots liés
@@ -82,11 +83,10 @@ export async function listMissions(
  * ✏️ Mettre à jour une mission (owner uniquement)
  */
 export async function updateMission(
-  _entrepriseId: number | string,
   missionId: number,
   updates: MissionUpdate
-): Promise<{ mission: Mission & { slots?: Slot[] } }> {
-  return request<{ mission: Mission & { slots?: Slot[] } }>(
+): Promise<{ mission: MissionWithRelations }> {
+  return request<{ mission: MissionWithRelations }>(
     `/api/missions/${missionId}`,
     {
       method: "PUT",

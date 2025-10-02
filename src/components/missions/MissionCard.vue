@@ -15,7 +15,7 @@
 
  ⚠️ Remarques :
  - Les créneaux sont affichés depuis mission.slots[]
- - Charge l’entreprise via son slug pour alimenter FactureModal
+ - Utilise directement les relations Supabase (mission.entreprise / mission.client)
  ------------------------------------------------------------- -->
 
 <template>
@@ -194,16 +194,14 @@
             </div>
 
             <!-- Si une facture existe -->
-            <div v-else-if="slug">
-              <FactureCard
-                :facture="facture"
-                :ref-entreprise="slug"
-                :entreprise="entreprise"
-                @deleted="handleFactureDeleted"
-                @updated="handleFactureUpdated"
-                @edit="handleFactureEdit"
-              />
-            </div>
+            <FactureCard
+              v-else
+              :facture="facture"
+              :entreprise="mission.entreprise"
+              @deleted="handleFactureDeleted"
+              @updated="handleFactureUpdated"
+              @edit="handleFactureEdit"
+            />
           </template>
 
           <!-- Client (readonly) : voir facture si elle existe -->
@@ -223,7 +221,7 @@
     v-if="showFactureModal"
     :open="showFactureModal"
     :mission="mission"
-    :entreprise="entreprise || {}"
+    :entreprise="mission.entreprise || {}"
     @close="showFactureModal = false"
     @generated="handleFactureGenerated"
   />
@@ -232,24 +230,21 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { updateMission } from "../../services/missions";
-import { getEntreprise } from "../../services/entreprises";
-import { listFacturesByMission } from "../../services/factures";
+import { listFacturesByMission, type FactureWithRelations } from "../../services/factures";
 import FactureModal from "../factures/FactureModal.vue";
 import FactureCard from "../factures/FactureCard.vue";
 import type { MissionWithRelations } from "../../services/missions";
 
 const props = defineProps<{
   mission: MissionWithRelations;
-  slug: string | null;
   readonly?: boolean;
 }>();
 
 const emit = defineEmits(["updated"]);
 const loading = ref(false);
 const showFactureModal = ref(false);
-const entreprise = ref<any>(null);
 const expanded = ref(false);
-const facture = ref<any>(null);
+const facture = ref<FactureWithRelations | null>(null);
 
 // ----------------------
 // Status labels & styles
@@ -278,14 +273,7 @@ const statusClasses: Record<string, string> = {
 // Lifecycle
 // ----------------------
 onMounted(async () => {
-  if (!props.slug) return;
   try {
-    // ⚡ on force l’auth pour récupérer les champs sensibles (siret, tva, etc.)
-    const { entreprise: e } = await getEntreprise(props.slug, {
-      forceAuth: true,
-    });
-    entreprise.value = e;
-
     // Charger facture liée
     const factures = await listFacturesByMission(props.mission.id);
     facture.value = factures.length ? factures[0] : null;
@@ -324,8 +312,7 @@ async function updateStatus(
 ) {
   loading.value = true;
   try {
-    if (!props.slug) throw new Error("Slug entreprise manquant");
-    await updateMission(props.slug, props.mission.id, { status });
+    await updateMission(props.mission.id, { status });
     emit("updated");
   } catch (err) {
     console.error(errorMsg, err);
@@ -344,17 +331,17 @@ function createDevis() {
 function createFacture() {
   showFactureModal.value = true;
 }
-function handleFactureGenerated(f: any) {
+function handleFactureGenerated(f: FactureWithRelations) {
   facture.value = f;
   showFactureModal.value = false;
 }
 function handleFactureDeleted() {
   facture.value = null;
 }
-function handleFactureUpdated(f: any) {
+function handleFactureUpdated(f: FactureWithRelations) {
   facture.value = f;
 }
-function handleFactureEdit(f: any) {
+function handleFactureEdit(f: FactureWithRelations) {
   console.log("✏️ Edit facture :", f);
 }
 function markPaid() {

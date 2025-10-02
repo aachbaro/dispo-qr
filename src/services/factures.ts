@@ -41,7 +41,8 @@ export type FactureWithRelations = Facture & {
   missions?:
     | (Tables<"missions"> & {
         slots?: Tables<"slots">[];
-        entreprise?: Tables<"entreprise"> | null; // ⚡ entreprise complète
+        entreprise?: Tables<"entreprise"> | null;
+        client?: Tables<"clients"> | null;
       })
     | null;
 };
@@ -71,8 +72,8 @@ export async function listFactures(
  */
 export async function createFacture(
   payload: FacturePayload
-): Promise<{ facture: Facture }> {
-  return request<{ facture: Facture }>(`/api/factures`, {
+): Promise<{ facture: FactureWithRelations }> {
+  return request<{ facture: FactureWithRelations }>(`/api/factures`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -82,10 +83,9 @@ export async function createFacture(
  * 🔍 Récupérer une facture par son id
  */
 export async function getEntrepriseFacture(
-  _ref: string | number,
   factureId: number
-): Promise<{ facture: Facture }> {
-  return request<{ facture: Facture }>(
+): Promise<{ facture: FactureWithRelations }> {
+  return request<{ facture: FactureWithRelations }>(
     `/api/factures/${factureId}`
   );
 }
@@ -94,11 +94,10 @@ export async function getEntrepriseFacture(
  * ✏️ Mettre à jour une facture
  */
 export async function updateEntrepriseFacture(
-  _ref: string | number,
   factureId: number,
   updates: FactureUpdate
-): Promise<{ facture: Facture }> {
-  return request<{ facture: Facture }>(
+): Promise<{ facture: FactureWithRelations }> {
+  return request<{ facture: FactureWithRelations }>(
     `/api/factures/${factureId}`,
     {
       method: "PUT",
@@ -111,7 +110,6 @@ export async function updateEntrepriseFacture(
  * ❌ Supprimer une facture
  */
 export async function deleteEntrepriseFacture(
-  _ref: string | number,
   factureId: number
 ): Promise<void> {
   await request(`/api/factures/${factureId}`, {
@@ -123,7 +121,6 @@ export async function deleteEntrepriseFacture(
  * 🔗 Générer un lien de paiement pour une facture
  */
 export async function generateFacturePaymentLink(
-  _ref: string | number,
   factureId: number
 ): Promise<{ url: string }> {
   return request<{ url: string }>(
@@ -137,8 +134,8 @@ export async function generateFacturePaymentLink(
  */
 export async function listFacturesByMission(
   missionId: number
-): Promise<Facture[]> {
-  const { factures } = await request<{ factures: Facture[] }>(
+): Promise<FactureWithRelations[]> {
+  const { factures } = await request<{ factures: FactureWithRelations[] }>(
     `/api/factures?mission_id=${missionId}`
   );
   return factures;

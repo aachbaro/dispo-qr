@@ -12,7 +12,6 @@
         v-for="mission in missions"
         :key="mission.id"
         :mission="mission"
-        :slug="slug"
         @updated="fetchMissions"
       />
     </div>
@@ -25,7 +24,6 @@ import { listMissions, type MissionWithRelations } from "../../services/missions
 import MissionCard from "./MissionCard.vue";
 
 const props = defineProps<{
-  slug: string; // slug de l’entreprise (depuis EntreprisePage)
   isOwner: boolean; // indique si l’utilisateur est admin de cette entreprise
 }>();
 
@@ -33,7 +31,6 @@ const missions = ref<MissionWithRelations[]>([]);
 const loading = ref(false);
 
 async function fetchMissions() {
-  if (!props.slug) return;
   loading.value = true;
   try {
     const { missions: data } = await listMissions();
@@ -45,11 +42,11 @@ async function fetchMissions() {
   }
 }
 
-// 🔄 recharge quand le slug change (owner uniquement)
+// 🔄 recharge quand les droits changent (owner uniquement)
 watch(
-  () => props.slug,
-  () => {
-    if (props.isOwner) fetchMissions();
+  () => props.isOwner,
+  (isOwner) => {
+    if (isOwner) fetchMissions();
   },
   { immediate: true }
 );

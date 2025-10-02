@@ -25,13 +25,16 @@ import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
 
 interface FactureWithRelations extends Tables<"factures"> {
-  missions?: Tables<"missions"> & {
+  missions?: (Tables<"missions"> & {
     slots?: Tables<"slots">[];
-    entreprise?: Tables<"entreprise">; // ⚡ entreprise complète
-  };
+    entreprise?: Tables<"entreprise"> | null;
+    client?: Tables<"clients"> | null;
+  }) | null;
 }
 
 const ENTREPRISE_ROLES = new Set(["entreprise", "freelance", "admin"]);
+const FACTURE_SELECT =
+  "*, missions(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -77,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { mission_id } = req.query;
         let query = supabaseAdmin
           .from("factures")
-          .select("*, missions(*, slots(*))")
+          .select(FACTURE_SELECT)
           .eq("entreprise_id", entreprise.id)
           .order("date_emission", { ascending: false });
 
@@ -95,27 +98,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // ----- Client -----
       if (role === "client") {
-        const { data, error } = await supabaseAdmin
+        const { mission_id } = req.query;
+        let clientQuery = supabaseAdmin
           .from("factures")
-          .select("*, missions!inner(*, slots(*), entreprise:entreprise_id(*))") // ⚡ ici on ramène toute l’entreprise
+          .select(
+            "*, missions!inner(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))"
+          )
           .eq("missions.client_id", user.id)
           .order("date_emission", { ascending: false });
 
+        if (mission_id && !Number.isNaN(Number(mission_id))) {
+          clientQuery = clientQuery.eq("mission_id", Number(mission_id));
+        }
+
+        const { data, error } = await clientQuery;
+
         if (error) return res.status(500).json({ error: error.message });
 
-        const factures = (data || []).map((facture: any) => {
-          if (facture.missions) {
-            const { entreprise, ...missionRest } = facture.missions;
-            facture.missions = {
-              ...missionRest,
-              slots: facture.missions.slots,
-              entreprise, // ⚡ entreprise complète dispo
-            } as any;
-          }
-          return facture as FactureWithRelations;
-        });
-
-        return res.status(200).json({ factures });
+        return res
+          .status(200)
+          .json({ factures: data as FactureWithRelations[] });
       }
 
       return res.status(403).json({ error: "❌ Rôle non autorisé" });
@@ -200,7 +202,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ error: error.message });
       }
 
-      return res.status(201).json({ facture: data });
+      const { data: factureWithRelations, error: fetchCreatedError } =
+        await supabaseAdmin
+          .from("factures")
+          .select(FACTURE_SELECT)
+          .eq("id", data.id)
+          .single<FactureWithRelations>();
+
+      if (fetchCreatedError) {
+        console.error(
+          "❌ Erreur récupération facture créée:",
+          fetchCreatedError.message
+        );
+        return res.status(500).json({ error: fetchCreatedError.message });
+      }
+
+      return res.status(201).json({ facture: factureWithRelations });
     }
 
     return res.status(405).json({ error: "❌ Méthode non autorisée" });
