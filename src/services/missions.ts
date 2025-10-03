@@ -45,6 +45,7 @@ export type MissionWithRelations = Mission & {
 // Payload enrichi côté frontend : ajoute les slots liés
 export type MissionPayload = MissionInsert & {
   slots: Array<Pick<Slot, "start" | "end" | "title">>;
+  entreprise_ref?: string; // ⚡ permet de passer le slug d'entreprise
 };
 
 // ----------------------

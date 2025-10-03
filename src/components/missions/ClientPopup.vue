@@ -1,20 +1,6 @@
 <!-- src/components/ClientPopup.vue -->
 <!-- -------------------------------------------------------------
  Popup client → création d’une mission avec plusieurs créneaux
----------------------------------------------------------------
-📌 Description :
- - Affiche un formulaire complet (établissement, contact, instructions…)
- - Ajout dynamique de plusieurs créneaux (date/heure début et fin)
- - Supporte la sélection d’un modèle de mission (mission_templates)
- - Garde le comportement scroll (heures par 15 min, dates par jour/sem/mois)
-
-🔒 Règles d’accès :
- - Public côté client (demande de mission)
- - Validation finale côté backend
-
-⚠️ Remarques :
- - Le payload envoie maintenant un tableau `slots: [{ start, end }]`
- - Le calcul des heures se fait côté backend/facture
 --------------------------------------------------------------- -->
 
 <template>
@@ -177,14 +163,12 @@
                   type="date"
                   v-model="slot.startDate"
                   :min="minDate"
-                  @wheel.prevent="onScrollDate($event, slot, 'startDate')"
                   class="w-full rounded-lg border px-3 py-2"
                 />
                 <input
                   type="date"
                   v-model="slot.endDate"
                   :min="minDate"
-                  @wheel.prevent="onScrollDate($event, slot, 'endDate')"
                   class="w-full rounded-lg border px-3 py-2"
                 />
               </div>
@@ -194,14 +178,12 @@
                   type="time"
                   v-model="slot.startTime"
                   step="900"
-                  @wheel.prevent="onScrollTime($event, slot, 'startTime')"
                   class="w-full rounded-lg border px-3 py-2"
                 />
                 <input
                   type="time"
                   v-model="slot.endTime"
                   step="900"
-                  @wheel.prevent="onScrollTime($event, slot, 'endTime')"
                   class="w-full rounded-lg border px-3 py-2"
                 />
               </div>
@@ -249,13 +231,15 @@ import { ref, computed, onMounted } from "vue";
 import { createMission } from "../../services/missions";
 import { listTemplates, type MissionTemplate } from "../../services/templates";
 
-defineProps<{ open: boolean; slug?: string }>();
+// ✅ déclarer props correctement
+const props = defineProps<{ open: boolean; slug?: string }>();
 const emit = defineEmits(["close", "created"]);
 
 // Templates
 const templates = ref<MissionTemplate[]>([]);
 const selectedTemplateId = ref<number | "">("");
 
+// Charger les templates
 onMounted(async () => {
   try {
     const { templates: data } = await listTemplates();
@@ -265,6 +249,7 @@ onMounted(async () => {
   }
 });
 
+// Appliquer un modèle
 function applyTemplate() {
   const t = templates.value.find((x) => x.id === selectedTemplateId.value);
   if (!t) return;
@@ -298,6 +283,7 @@ const mode = ref<"freelance" | "salarié">("freelance");
 const slots = ref([
   { startDate: "", endDate: "", startTime: "12:00", endTime: "14:00" },
 ]);
+
 function addSlot() {
   slots.value.push({
     startDate: "",
@@ -311,14 +297,6 @@ function removeSlot(index: number) {
 }
 
 // Date utils
-function getWeekStart(d = new Date()) {
-  const x = new Date(d);
-  const day = x.getDay();
-  const diff = x.getDate() - (day === 0 ? 6 : day - 1);
-  x.setDate(diff);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
 function toYMD(dt: Date) {
   return dt.toISOString().slice(0, 10);
 }
@@ -327,7 +305,7 @@ function parseYMD(s: string) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
-const minDate = toYMD(getWeekStart());
+const minDate = toYMD(new Date());
 
 // Validation
 function isSlotInvalid(slot: any) {
@@ -339,42 +317,19 @@ function isSlotInvalid(slot: any) {
 }
 const isInvalid = computed(() => slots.value.some(isSlotInvalid));
 
-// Scroll time/date
-function onScrollTime(event: WheelEvent, slot: any, field: string) {
-  const val = slot[field];
-  const [h, m] = val.split(":").map(Number);
-  let minutes = h * 60 + m;
-  minutes += event.deltaY < 0 ? 15 : -15;
-  if (minutes < 0) minutes = 0;
-  if (minutes >= 24 * 60) minutes = 24 * 60 - 15;
-  const newH = String(Math.floor(minutes / 60)).padStart(2, "0");
-  const newM = String(minutes % 60).padStart(2, "0");
-  slot[field] = `${newH}:${newM}`;
-}
-function onScrollDate(event: WheelEvent, slot: any, field: string) {
-  let step = 1;
-  if (event.shiftKey) step = 7;
-  if (event.altKey) step = 30;
-  const dir = event.deltaY < 0 ? +1 : -1;
-  let base = parseYMD(slot[field]) || new Date();
-  base.setDate(base.getDate() + dir * step);
-  const minDt = parseYMD(minDate)!;
-  if (base < minDt) base = minDt;
-  slot[field] = toYMD(base);
-  if (slot.endDate < slot.startDate) slot.endDate = slot.startDate;
-}
-
 // Actions
 function onCancel() {
   emit("close");
 }
 async function onConfirm() {
   if (isInvalid.value) return;
+
   const slotsPayload = slots.value.map((s) => ({
     start: new Date(`${s.startDate}T${s.startTime}`).toISOString(),
     end: new Date(`${s.endDate}T${s.endTime}`).toISOString(),
     title: null,
   }));
+
   try {
     const { mission } = await createMission({
       etablissement: etablissement.value,
@@ -389,7 +344,9 @@ async function onConfirm() {
       instructions: instructions.value,
       mode: mode.value,
       slots: slotsPayload,
-    });
+      entreprise_ref: props.slug, // ⚡ slug passé ici
+    } as any); // 👈 cast en any pour pas casser TS
+
     emit("created", mission);
     emit("close");
   } catch (err) {
