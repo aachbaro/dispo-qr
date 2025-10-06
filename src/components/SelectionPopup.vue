@@ -1,3 +1,4 @@
+<!-- src/components/SelectionPopup.vue -->
 <template>
   <Transition name="fade">
     <div

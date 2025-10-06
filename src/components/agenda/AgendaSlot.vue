@@ -1,3 +1,4 @@
+<!-- src/components/agenda/AgendaSlot.vue -->
 <template>
   <div
     class="absolute left-1 right-1 bg-red-800 text-white rounded p-1 text-xs shadow flex flex-col"

@@ -188,31 +188,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // --- Public (non connecté) ---
-      const { data: mission, error: missionError } = await supabaseAdmin
-        .from("missions")
-        .insert({
-          ...missionPayload,
-          entreprise_id: null, // impossible de savoir
-          client_id: null,
-          status: "proposed",
-        })
-        .select()
-        .single();
+      if (!user) {
+        let entrepriseId: number | null = null;
 
-      if (missionError)
-        return res.status(500).json({ error: missionError.message });
+        if (entreprise_ref) {
+          const { data: entreprise, error: entrepriseError } =
+            await findEntreprise(entreprise_ref);
 
-      if (slots?.length) {
-        await supabaseAdmin.from("slots").insert(
-          slots.map((s: any) => ({
-            ...s,
-            mission_id: mission.id,
-            entreprise_id: null,
-          }))
-        );
+          if (entrepriseError)
+            return res.status(500).json({ error: entrepriseError.message });
+          if (!entreprise)
+            return res.status(404).json({ error: "❌ Entreprise introuvable" });
+
+          entrepriseId = entreprise.id;
+        }
+
+        const { data: mission, error: missionError } = await supabaseAdmin
+          .from("missions")
+          .insert({
+            ...missionPayload,
+            entreprise_id: entrepriseId, // ⚡ toujours rattaché à une entreprise
+            client_id: null, // ⚡ jamais pour public
+            status: "proposed",
+          })
+          .select()
+          .single();
+
+        if (missionError)
+          return res.status(500).json({ error: missionError.message });
+
+        if (slots?.length) {
+          await supabaseAdmin.from("slots").insert(
+            slots.map((s: any) => ({
+              ...s,
+              mission_id: mission.id,
+              entreprise_id: entrepriseId,
+            }))
+          );
+        }
+
+        return res.status(201).json({ mission });
       }
-
-      return res.status(201).json({ mission });
     }
 
     return res.status(405).json({ error: "❌ Méthode non autorisée" });

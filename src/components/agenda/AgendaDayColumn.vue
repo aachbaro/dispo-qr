@@ -1,3 +1,4 @@
+<!-- src/components/agenda/AgendaDayCloumn.vue -->
 <template>
   <div
     class="flex-1 h-full flex-shrink-0 snap-center border-r border-back flex flex-col"

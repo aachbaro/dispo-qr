@@ -1,3 +1,4 @@
+<!-- src/components/agenda/Agenda.vue -->
 <template>
   <div class="flex flex-col h-full w-full">
     <!-- Header -->
