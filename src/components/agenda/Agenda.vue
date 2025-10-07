@@ -1,7 +1,34 @@
 <!-- src/components/agenda/Agenda.vue -->
+<!-- -------------------------------------------------------------
+ Composant principal : Agenda hebdomadaire
+---------------------------------------------------------------
+
+📌 Description :
+  - Affiche la vue agenda complète (entête + colonnes + créneaux)
+  - Centralise la logique des slots (lecture / création / drag / suppression)
+  - Gère la navigation par semaine et l’ouverture des popups
+
+📍 Comportement :
+  - Drag vertical d’un slot → déplacement fluide (snap 15min)
+  - Clic sur la grille → création d’un nouveau créneau (ghost slot)
+  - Double popup :
+    • Admin → SelectionPopup (création de slots)
+    • Client → ClientPopup (envoi de mission)
+  - Navigation semaine suivante / précédente
+
+🔒 Règles d’accès :
+  - Admin → accès complet (CRUD + drag)
+  - Public/client → lecture seule + création de mission
+
+⚠️ Remarques :
+  - Chaque jour est rendu via AgendaDayColumn.vue
+  - Les slots sont fournis par useAgendaSlots()
+  - Les popups s’ouvrent via useAgendaSelection()
+------------------------------------------------------------- -->
+
 <template>
   <div class="flex flex-col h-full w-full">
-    <!-- Header -->
+    <!-- 🧭 En-tête -->
     <AgendaHeader
       :is-admin="isAdmin"
       :week-label="weekLabel"
@@ -12,14 +39,13 @@
       @datePicked="onDatePicked"
     />
 
-    <!-- Agenda Body -->
+    <!-- 🗓️ Corps principal -->
     <div class="flex w-full h-[70vh] overflow-x-auto snap-x snap-mandatory">
-      <!-- Hours column -->
+      <!-- Colonne des heures -->
       <div
         class="w-14 flex-shrink-0 flex flex-col border-r border-black-600 text-xs text-back-500"
       >
         <div class="h-12"></div>
-        <!-- empty header space -->
         <div
           v-for="(hour, hIndex) in hours"
           :key="'hour-' + hIndex"
@@ -29,7 +55,7 @@
         </div>
       </div>
 
-      <!-- Days columns -->
+      <!-- Colonnes des jours -->
       <AgendaDayColumn
         v-for="(day, index) in days"
         :key="index"
@@ -41,10 +67,11 @@
         @createSlot="handleCreateSlot"
         @slotEdit="editSlot"
         @slotRemove="removeSlot"
+        @slotMove="moveSlot"
       />
     </div>
 
-    <!-- Popups -->
+    <!-- 🪟 Popups -->
     <SelectionPopup
       v-if="currentSelection"
       v-model:open="showPopup"
@@ -70,6 +97,9 @@
 </template>
 
 <script setup lang="ts">
+// -------------------------------------------------------------
+// Imports
+// -------------------------------------------------------------
 import AgendaHeader from "./AgendaHeader.vue";
 import AgendaDayColumn from "./AgendaDayColumn.vue";
 import SelectionPopup from "../SelectionPopup.vue";
@@ -79,27 +109,37 @@ import { useAgendaNavigation } from "../../composables/agenda/useAgendaNavigatio
 import { useAgendaSlots } from "../../composables/agenda/useAgendaSlots";
 import { useAgendaSelection } from "../../composables/agenda/useAgendaSelection";
 
+// -------------------------------------------------------------
+// Props
+// -------------------------------------------------------------
 const props = defineProps<{
   slug: string;
   isAdmin: boolean;
 }>();
 
-// navigation
+// -------------------------------------------------------------
+// Navigation (semaines, dates)
+// -------------------------------------------------------------
 const { weekLabel, isCurrentWeek, days, nextWeek, previousWeek, onDatePicked } =
   useAgendaNavigation();
 
-// slots
+// -------------------------------------------------------------
+// Slots (lecture, création, suppression, déplacement)
+// -------------------------------------------------------------
 const {
   daySlots,
   addSlot,
   editSlot,
   removeSlot,
+  moveSlot, // 👈 nouvelle fonction du composable
   handleSlotCreated,
   slotStyle,
   formatHour,
 } = useAgendaSlots(props.slug, props.isAdmin);
 
-// selection
+// -------------------------------------------------------------
+// Sélection (création client / admin + popups)
+// -------------------------------------------------------------
 const {
   currentSelection,
   showPopup,
@@ -108,13 +148,17 @@ const {
   handleClientMission,
 } = useAgendaSelection();
 
-// Hours list
+// -------------------------------------------------------------
+// Constantes locales
+// -------------------------------------------------------------
 const hours = Array.from(
   { length: 17 },
   (_, i) => `${String(i + 7).padStart(2, "0")}:00`
 );
 
-// Quick add slot
+// -------------------------------------------------------------
+// Quick add slot (bouton +)
+// -------------------------------------------------------------
 function openQuickAddSlot() {
   if (!props.isAdmin) return;
   const today = new Date();

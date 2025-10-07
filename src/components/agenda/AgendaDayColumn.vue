@@ -6,22 +6,23 @@
 📌 Description :
   - Affiche les créneaux horaires (par pas de 15 min)
   - Gère la création fluide d’un "ghost slot" pendant le drag
+  - Gère également la propagation du déplacement d’un slot (drag vertical)
   - Affiche les slots existants positionnés sur la grille
 
 📍 Comportement :
   - Clic + drag → création d’un bloc rouge semi-transparent ("ghost slot")
   - Relâchement → ouvre le popup de sélection prérempli
+  - Drag sur un slot → déplacement vertical fluide (snap 15 min)
   - Slots officiels affichés en rouge foncé, ghost slot en rouge clair
 
 🔒 Règles d’accès :
   - Slots : visibles pour tous
-  - Interaction (création/suppression/édition) : réservée à l’owner/admin
+  - Interaction (création/suppression/édition/déplacement) : réservée à l’owner/admin
 
 ⚠️ Remarques :
   - Chaque heure conserve la même hauteur qu’avant (1 unité = 60min)
   - Grille divisée en 4 sous-unités de 15min (visuellement identiques)
   - Calcul du positionnement basé sur minutes depuis 7h00
-
 ------------------------------------------------------------- -->
 
 <template>
@@ -83,6 +84,7 @@
         :format-hour="formatHour"
         @edit="$emit('slotEdit', $event)"
         @remove="$emit('slotRemove', $event)"
+        @slotMove="onSlotMove"
       />
     </div>
   </div>
@@ -112,6 +114,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "slotEdit", slot: Slot): void;
   (e: "slotRemove", id: number): void;
+  (
+    e: "slotMove",
+    payload: { id: number; newStart: string; newEnd: string }
+  ): void; // 👈 ajouté
   (e: "createSlot", range: { date: string; start: string; end: string }): void;
 }>();
 
@@ -146,7 +152,7 @@ function formatLabel(hhmm: string) {
 }
 
 // -------------------------------------------------------------
-// Sélection fluide
+// Sélection fluide (création de slot)
 // -------------------------------------------------------------
 function onMouseDown(date: string, hour: string) {
   if (!props.isAdmin) return; // public = lecture seule
@@ -184,6 +190,13 @@ function onLeave() {
     isDragging.value = false;
     ghostSlot.value = null;
   }
+}
+
+// -------------------------------------------------------------
+// 🧩 Drag & drop des slots existants
+// -------------------------------------------------------------
+function onSlotMove(payload: { id: number; newStart: string; newEnd: string }) {
+  emit("slotMove", payload); // 👉 propagation directe vers Agenda.vue
 }
 </script>
 
