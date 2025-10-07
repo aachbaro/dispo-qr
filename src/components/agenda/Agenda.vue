@@ -36,12 +36,9 @@
         :day="day"
         :slots="daySlots(day.fullDate)"
         :is-admin="isAdmin"
-        :is-selected="isSelected"
         :slot-style="slotStyle"
         :format-hour="formatHour"
-        @selectStart="startSelection"
-        @selectExtend="extendSelection"
-        @selectEnd="endSelection"
+        @createSlot="handleCreateSlot"
         @slotEdit="editSlot"
         @slotRemove="removeSlot"
       />
@@ -106,10 +103,7 @@ const {
 const {
   currentSelection,
   showPopup,
-  startSelection,
-  extendSelection,
-  endSelection,
-  isSelected,
+  handleCreateSlot,
   handleCancel,
   handleClientMission,
 } = useAgendaSelection();
