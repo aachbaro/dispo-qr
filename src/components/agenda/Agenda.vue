@@ -68,6 +68,7 @@
         @slotEdit="editSlot"
         @slotRemove="removeSlot"
         @slotMove="moveSlot"
+        @slotResize="moveSlot"
       />
     </div>
 
