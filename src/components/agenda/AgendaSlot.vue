@@ -40,6 +40,7 @@
       'bg-gray-400 text-gray-900 opacity-60': slot.type === 'unavailability',
     }"
     :style="slotDynamicStyle"
+    @click="onClick"
     @mousedown="onMouseDown"
   >
     <!-- 🔼 Handle supérieur -->
@@ -126,6 +127,10 @@ const emit = defineEmits<{
     payload: { id: number; newStart: string; newEnd: string }
   ): void;
   (
+    e: "openUnavailability",
+    slot: Extract<AgendaDisplaySlot, { type: "unavailability" }>
+  ): void;
+  (
     e: "removeOccurrence",
     slot: Extract<AgendaDisplaySlot, { type: "unavailability" }>
   ): void;
@@ -197,6 +202,13 @@ function onMouseDown(event: MouseEvent) {
 
   document.addEventListener("mousemove", onMouseMove);
   document.addEventListener("mouseup", onMouseUp);
+}
+
+function onClick() {
+  if (!props.isAdmin) return;
+  if (props.slot.type === "unavailability") {
+    emit("openUnavailability", props.slot);
+  }
 }
 
 function onMouseMove(event: MouseEvent) {
