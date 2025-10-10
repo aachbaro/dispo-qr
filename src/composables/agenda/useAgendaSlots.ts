@@ -1,31 +1,33 @@
 // src/composables/agenda/useAgendaSlots.ts
 // -------------------------------------------------------------
-// Composable : Gestion des slots (créneaux horaires)
+// Composable : Gestion des slots et indisponibilités
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - Centralise la logique CRUD des créneaux liés à une entreprise
+//   - Centralise la logique CRUD des créneaux horaires d’une entreprise
+//   - Gère aussi l’affichage des indisponibilités récurrentes (unavailabilities)
 //   - Fournit les helpers d’affichage et positionnement dans la grille
 //   - Intègre la mise à jour en drag & drop vertical (`moveSlot`)
 //
 // 📍 Fonctions principales :
-//   - fetchCurrentWeek() → charge les slots de la semaine courante
+//   - fetchCurrentWeek() → charge les slots + indispos de la semaine courante
 //   - addSlot() → création d’un slot (popup ou bouton +)
 //   - editSlot() → mise à jour d’un slot existant
-//   - removeSlot() → suppression
-//   - moveSlot() → déplacement vertical d’un slot (snap 15 min)
-//   - slotStyle() → calcule position/hauteur dans la colonne
+//   - removeSlot() → suppression d’un slot
+//   - moveSlot() → déplacement vertical (snap 15min)
+//   - daySlots() → fusionne slots + indispos par jour
+//   - slotStyle() → calcule position/hauteur
 //
 // 🔒 Règles d’accès :
-//   - Lecture publique (GET slots par slug)
+//   - Lecture publique (GET slots)
 //   - Écriture réservée à l’owner/admin
 //
 // ⚠️ Remarques :
-//   - Le positionnement est basé sur une journée de 07h à 24h
-//   - Les heures sont affichées au format local FR
+//   - Affiche les indisponibilités en fond gris transparent
+//   - Les heures sont basées sur une journée de 07h à 24h
 // -------------------------------------------------------------
 
-import { ref, watch } from "vue";
+import { ref, watch, computed, type Ref} from "vue";
 import {
   getEntrepriseSlots,
   createEntrepriseSlot,
@@ -33,19 +35,25 @@ import {
   deleteEntrepriseSlot,
   type Slot,
 } from "../../services/slots";
-import { useAgendaNavigation } from "./useAgendaNavigation";
+import { useUnavailabilities } from "../useUnavailabilities";
+import type { Unavailability } from "../../services/unavailabilities";
 
 // -------------------------------------------------------------
 // Composable principal
 // -------------------------------------------------------------
-export function useAgendaSlots(slug: string, isAdmin: boolean) {
+export function useAgendaSlots(
+  slug: string,
+  isAdmin: boolean,
+  activeWeek: Ref<Date>
+) {
   // -------------------------------------------------------------
   // 🧭 État
   // -------------------------------------------------------------
   const slots = ref<Slot[]>([]);
   const loading = ref(false);
 
-  const { activeWeek } = useAgendaNavigation();
+  // ✅ on passe maintenant le slug ici
+  const { unavailabilities, loadUnavailabilities } = useUnavailabilities(slug);
 
   // -------------------------------------------------------------
   // 🧰 Utils internes
@@ -57,7 +65,7 @@ export function useAgendaSlots(slug: string, isAdmin: boolean) {
     const hh = String(d.getHours()).padStart(2, "0");
     const mm = String(d.getMinutes()).padStart(2, "0");
     const ss = String(d.getSeconds()).padStart(2, "0");
-    return `${y}-${m}-${da}T${hh}:${mm}:${ss}`; // pas de Z → heure locale
+    return `${y}-${m}-${da}T${hh}:${mm}:${ss}`;
   }
 
   function ymdLocal(d: Date): string {
@@ -73,17 +81,25 @@ export function useAgendaSlots(slug: string, isAdmin: boolean) {
   }
 
   // -------------------------------------------------------------
-  // 📦 Fetch (chargement)
+  // 📦 Fetch (slots + indispos)
   // -------------------------------------------------------------
   async function fetchCurrentWeek() {
     if (!slug) return;
     loading.value = true;
     try {
       const { from, to } = weekBounds(activeWeek.value);
-      const { slots: data } = await getEntrepriseSlots(slug, { from, to });
-      slots.value = data;
+
+      const [{ slots: slotData }] = await Promise.all([
+        getEntrepriseSlots(slug, { from, to }),
+        loadUnavailabilities(from, to),
+      ]);
+
+      // ✅ Tri des slots par date de début pour cohérence
+      slots.value = slotData.sort(
+        (a, b) => new Date(a.start!).getTime() - new Date(b.start!).getTime()
+      );
     } catch (err) {
-      console.error("❌ Erreur fetch slots:", err);
+      console.error("❌ Erreur fetch slots/unavailabilities:", err);
     } finally {
       loading.value = false;
     }
@@ -92,13 +108,16 @@ export function useAgendaSlots(slug: string, isAdmin: boolean) {
   watch(activeWeek, fetchCurrentWeek, { immediate: true });
 
   // -------------------------------------------------------------
-  // ✏️ CRUD
+  // ✏️ CRUD Slots
   // -------------------------------------------------------------
   async function addSlot(start: string, end: string, title: string) {
     if (!isAdmin) return;
     try {
       const { slot } = await createEntrepriseSlot(slug, { start, end, title });
       slots.value.push(slot);
+      slots.value.sort(
+        (a, b) => new Date(a.start!).getTime() - new Date(b.start!).getTime()
+      );
     } catch (err) {
       console.error("❌ Erreur création slot:", err);
     }
@@ -143,7 +162,6 @@ export function useAgendaSlots(slug: string, isAdmin: boolean) {
         start: newStart,
         end: newEnd,
       });
-      // Mise à jour locale de la liste
       slots.value = slots.value.map((s) => (s.id === id ? slot : s));
     } catch (err) {
       console.error("❌ Erreur déplacement slot:", err);
@@ -153,48 +171,11 @@ export function useAgendaSlots(slug: string, isAdmin: boolean) {
   // -------------------------------------------------------------
   // 🖼️ Helpers d’affichage
   // -------------------------------------------------------------
-  function splitSlotByDay(slot: Slot) {
-    const start = new Date(slot.start);
-    const end = new Date(slot.end);
-
-    const parts: (Slot & { day: string })[] = [];
-    let dayCursor = new Date(start);
-    dayCursor.setHours(0, 0, 0, 0);
-
-    while (dayCursor < end) {
-      const nextDay = new Date(dayCursor);
-      nextDay.setDate(nextDay.getDate() + 1);
-      nextDay.setHours(0, 0, 0, 0);
-
-      const segStart = new Date(Math.max(start.getTime(), dayCursor.getTime()));
-      const segEnd = new Date(Math.min(end.getTime(), nextDay.getTime()));
-
-      if (segEnd > segStart) {
-        parts.push({
-          ...slot,
-          start: toLocalIso(segStart),
-          end: toLocalIso(segEnd),
-          day: ymdLocal(segStart),
-        });
-      }
-
-      dayCursor = nextDay;
-    }
-
-    return parts;
-  }
-
-  function daySlots(date: string) {
-    const all: (Slot & { day: string })[] = [];
-    for (const s of slots.value) {
-      all.push(...splitSlotByDay(s));
-    }
-    return all.filter((p) => p.day === date);
-  }
-
-  function slotStyle(slot: Slot) {
-    const start = new Date(slot.start);
-    const end = new Date(slot.end);
+  function slotStyle(slot: Slot | Unavailability) {
+    const start = new Date(
+      slot.start || `${slot.start_date}T${slot.start_time}`
+    );
+    const end = new Date(slot.end || `${slot.start_date}T${slot.end_time}`);
 
     const dayStart = new Date(start);
     dayStart.setHours(7, 0, 0, 0);
@@ -228,6 +209,34 @@ export function useAgendaSlots(slug: string, isAdmin: boolean) {
   }
 
   // -------------------------------------------------------------
+  // 🧩 Fusion slots + unavailabilities
+  // -------------------------------------------------------------
+  const allSlots = computed(() => {
+    const slotEvents = slots.value.map((s) => ({
+      ...s,
+      type: "slot",
+      color: "#2563eb",
+    }));
+
+    const unavEvents = unavailabilities.value.map((u) => ({
+      id: `unav-${u.id}`,
+      title: u.title || "Indisponible",
+      start: `${u.start_date}T${u.start_time}`,
+      end: `${u.start_date}T${u.end_time}`,
+      type: "unavailability",
+      color: "#9ca3af",
+    }));
+
+    return [...slotEvents, ...unavEvents];
+  });
+
+  function daySlots(date: string) {
+    return allSlots.value.filter(
+      (s) => typeof s.start === "string" && s.start.startsWith(date)
+    );
+  }
+
+  // -------------------------------------------------------------
   // ✅ Export du composable
   // -------------------------------------------------------------
   return {
@@ -240,11 +249,10 @@ export function useAgendaSlots(slug: string, isAdmin: boolean) {
     editSlot,
     removeSlot,
     handleSlotCreated,
-    moveSlot, // 👈 nouvelle méthode utilisée par le drag
+    moveSlot,
 
     // Display
     daySlots,
-    splitSlotByDay,
     slotStyle,
     formatHour,
   };

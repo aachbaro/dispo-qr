@@ -380,6 +380,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "missions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "missions_entreprise_id_fkey"
             columns: ["entreprise_id"]
             isOneToOne: false
@@ -447,6 +454,59 @@ export type Database = {
             columns: ["mission_id"]
             isOneToOne: false
             referencedRelation: "missions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      unavailabilities: {
+        Row: {
+          created_at: string
+          end_time: string
+          entreprise_id: number
+          exceptions: Json | null
+          id: number
+          recurrence_end: string | null
+          recurrence_type: string
+          start_date: string
+          start_time: string
+          title: string | null
+          updated_at: string
+          weekday: number | null
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          entreprise_id: number
+          exceptions?: Json | null
+          id?: never
+          recurrence_end?: string | null
+          recurrence_type?: string
+          start_date: string
+          start_time: string
+          title?: string | null
+          updated_at?: string
+          weekday?: number | null
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          entreprise_id?: number
+          exceptions?: Json | null
+          id?: never
+          recurrence_end?: string | null
+          recurrence_type?: string
+          start_date?: string
+          start_time?: string
+          title?: string | null
+          updated_at?: string
+          weekday?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "unavailabilities_company_id_fkey"
+            columns: ["entreprise_id"]
+            isOneToOne: false
+            referencedRelation: "entreprise"
             referencedColumns: ["id"]
           },
         ]

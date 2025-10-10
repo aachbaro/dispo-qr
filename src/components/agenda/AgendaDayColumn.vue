@@ -18,6 +18,10 @@
   - slotResize({ id, newStart, newEnd })
   - slotEdit(slot)
   - slotRemove(id)
+
+🔒 Règles :
+  - Admin → peut créer de vrais slots (SelectionPopup)
+  - Visiteur → peut sélectionner une plage (ClientPopup)
 ------------------------------------------------------------- -->
 
 <template>
@@ -150,10 +154,9 @@ function formatLabel(hhmm: string) {
 }
 
 // -------------------------------------------------------------
-// 📏 Création du ghost slot
+// 📏 Création du ghost slot (admin + visiteurs)
 // -------------------------------------------------------------
 function onMouseDown(event: MouseEvent) {
-  if (!props.isAdmin) return;
   if (!gridRef.value) return;
 
   // ✅ Empêche la création si on clique sur un slot existant
@@ -199,18 +202,10 @@ function onMouseMove(event: MouseEvent) {
   const duration = (newEnd.getTime() - newStart.getTime()) / 60000;
   if (duration < MIN_DURATION_MIN) return;
 
-  // Bloque haut
-  if (newStart.getHours() < DAY_START_HOUR) {
+  // Limites horaires
+  if (newStart.getHours() < DAY_START_HOUR)
     newStart.setHours(DAY_START_HOUR, 0, 0, 0);
-    newEnd = new Date(newStart.getTime() + duration * 60000);
-  }
-
-  // Bloque bas
-  const limitEnd = new Date(`${props.day.fullDate}T23:59`);
-  if (newEnd > limitEnd) {
-    newEnd = new Date(limitEnd);
-    newStart = new Date(newEnd.getTime() - duration * 60000);
-  }
+  if (newEnd.getHours() >= DAY_END_HOUR) newEnd.setHours(23, 59, 0, 0);
 
   ghostSlot.value = {
     start: snapToQuarter(newStart).toISOString(),

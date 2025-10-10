@@ -1,14 +1,15 @@
 <!-- src/components/agenda/AgendaSlot.vue -->
 <!-- -------------------------------------------------------------
- Composant : Slot (créneau horaire)
+ Composant : Slot (créneau horaire) ou Indisponibilité
 ---------------------------------------------------------------
 
 📌 Description :
   - Affiche un créneau horaire dans la grille agenda.
-  - Permet à l’admin de :
-      • Déplacer verticalement un slot (drag & drop)
-      • Redimensionner par les bords haut/bas
-  - Affiche le déplacement et le redimensionnement en temps réel.
+  - Peut représenter soit :
+      • un slot classique (mission / travail)
+      • une indisponibilité récurrente (grisée, non interactive)
+  - Gère le drag, resize, édition et suppression uniquement
+    pour les slots normaux.
 
 📍 Événements émis :
   - edit(slot)
@@ -18,7 +19,8 @@
 
 🔒 Règles d’accès :
   - Public → lecture seule
-  - Admin → drag, resize, édition, suppression
+  - Admin → drag, resize, édition, suppression (slots uniquement)
+  - Indisponibilités → lecture seule
 
 ⚠️ Remarques :
   - Feedback 1:1 avec la souris.
@@ -31,26 +33,38 @@
 
 <template>
   <div
-    class="slot absolute left-1 right-1 bg-red-800 text-white rounded p-1 text-xs shadow flex flex-col select-none"
-    :class="{ dragging: isDragging }"
+    class="slot absolute left-1 right-1 rounded p-1 text-xs shadow flex flex-col select-none"
+    :class="{
+      dragging: isDragging,
+      'bg-red-800 text-white': slot.type === 'slot',
+      'bg-gray-400 text-gray-900 opacity-60': slot.type === 'unavailability',
+    }"
     :style="slotDynamicStyle"
     @mousedown="onMouseDown"
   >
     <!-- 🔼 Handle supérieur -->
     <div
-      v-if="isAdmin"
+      v-if="isAdmin && slot.type === 'slot'"
       class="absolute top-0 left-0 right-0 h-2 cursor-ns-resize bg-transparent"
       @mousedown.stop="onResizeStart('top', $event)"
     ></div>
 
     <!-- 🧩 Contenu -->
     <div
-      class="flex justify-between items-center cursor-grab active:cursor-grabbing"
+      class="flex justify-between items-center"
+      :class="{
+        'cursor-grab active:cursor-grabbing': isAdmin && slot.type === 'slot',
+        'cursor-default': slot.type === 'unavailability',
+      }"
     >
-      <span class="font-semibold truncate">{{
-        slot.title || "Sans titre"
-      }}</span>
-      <div v-if="isAdmin" class="flex gap-1">
+      <span class="font-semibold truncate">
+        {{
+          slot.title ||
+          (slot.type === "unavailability" ? "Indisponible" : "Sans titre")
+        }}
+      </span>
+
+      <div v-if="isAdmin && slot.type === 'slot'" class="flex gap-1">
         <button @click.stop="$emit('edit', slot)" class="hover:text-yellow-300">
           ✏️
         </button>
@@ -70,7 +84,7 @@
 
     <!-- 🔽 Handle inférieur -->
     <div
-      v-if="isAdmin"
+      v-if="isAdmin && slot.type === 'slot'"
       class="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize bg-transparent"
       @mousedown.stop="onResizeStart('bottom', $event)"
     ></div>
@@ -80,17 +94,18 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount } from "vue";
 import type { Slot } from "../../services/slots";
+import type { Unavailability } from "../../services/unavailabilities";
 
 const props = defineProps<{
-  slot: Slot;
+  slot: Slot | (Unavailability & { type?: string });
   isAdmin: boolean;
-  slotStyle: (slot: Slot) => Record<string, string>;
+  slotStyle: (slot: Slot | Unavailability) => Record<string, string>;
   formatHour: (dateString: string) => string;
 }>();
 
 const emit = defineEmits<{
   (e: "edit", slot: Slot): void;
-  (e: "remove", id: number): void;
+  (e: "remove", id: number | string): void;
   (
     e: "slotMove",
     payload: { id: number; newStart: string; newEnd: string }
@@ -110,8 +125,12 @@ let originalStart: Date;
 let originalEnd: Date;
 let mode: "move" | "resize-top" | "resize-bottom" | null = null;
 
-const localStart = ref(props.slot.start);
-const localEnd = ref(props.slot.end);
+const localStart = ref(
+  props.slot.start || `${props.slot.start_date}T${props.slot.start_time}`
+);
+const localEnd = ref(
+  props.slot.end || `${props.slot.start_date}T${props.slot.end_time}`
+);
 
 const HOUR_HEIGHT = 48;
 const MIN_DURATION_MIN = 15;
@@ -153,10 +172,10 @@ const slotDynamicStyle = computed(() => {
 });
 
 // -------------------------------------------------------------
-// 🎯 Drag & Resize logique
+// 🎯 Drag & Resize logique (slots uniquement)
 // -------------------------------------------------------------
 function onMouseDown(event: MouseEvent) {
-  if (!props.isAdmin) return;
+  if (!props.isAdmin || props.slot.type === "unavailability") return;
   event.preventDefault();
 
   mode = "move";
@@ -177,82 +196,38 @@ function onMouseMove(event: MouseEvent) {
   let newStart = new Date(originalStart);
   let newEnd = new Date(originalEnd);
 
-  // ----------------------------------
-  // Déplacement complet (drag global)
-  // ----------------------------------
   if (mode === "move") {
     newStart.setMinutes(newStart.getMinutes() + deltaMinutes);
     newEnd.setMinutes(newEnd.getMinutes() + deltaMinutes);
-
-    const duration = newEnd.getTime() - newStart.getTime();
-
-    // Si on dépasse vers le haut → bloque à 07:00
-    const minLimit = new Date(originalStart);
-    minLimit.setHours(DAY_START_HOUR, 0, 0, 0);
-    if (newStart < minLimit) {
-      newStart = new Date(minLimit);
-      newEnd = new Date(newStart.getTime() + duration);
-    }
-
-    // Si on dépasse vers le bas → bloque à 23:59
-    const maxLimit = new Date(originalStart);
-    maxLimit.setHours(23, 59, 0, 0);
-    const maxEnd = new Date(maxLimit);
-    maxEnd.setMinutes(maxEnd.getMinutes()); // même jour
-    if (newEnd > maxLimit) {
-      newEnd = new Date(maxLimit);
-      newStart = new Date(newEnd.getTime() - duration);
-    }
   }
 
-  // ----------------------------------
-  // Resize haut
-  // ----------------------------------
   if (mode === "resize-top") {
     newStart.setMinutes(newStart.getMinutes() + deltaMinutes);
-    if (newEnd.getTime() - newStart.getTime() < MIN_DURATION_MIN * 60000) {
+    if (newEnd.getTime() - newStart.getTime() < MIN_DURATION_MIN * 60000)
       newStart = new Date(newEnd.getTime() - MIN_DURATION_MIN * 60000);
-    }
-    if (newStart.getHours() < DAY_START_HOUR) {
-      newStart.setHours(DAY_START_HOUR, 0, 0, 0);
-    }
   }
 
-  // ----------------------------------
-  // Resize bas
-  // ----------------------------------
   if (mode === "resize-bottom") {
     newEnd.setMinutes(newEnd.getMinutes() + deltaMinutes);
-    if (newEnd.getTime() - newStart.getTime() < MIN_DURATION_MIN * 60000) {
+    if (newEnd.getTime() - newStart.getTime() < MIN_DURATION_MIN * 60000)
       newEnd = new Date(newStart.getTime() + MIN_DURATION_MIN * 60000);
-    }
-    // Bloque à minuit
-    const maxEnd = new Date(originalEnd);
-    maxEnd.setHours(23, 59, 0, 0);
-    if (newEnd > maxEnd) newEnd = new Date(maxEnd);
   }
 
-  // Clamp final
-  newStart = clampToDayBounds(newStart);
-  newEnd = clampToDayBounds(newEnd);
+  newStart = clampToDayBounds(snapToQuarter(newStart));
+  newEnd = clampToDayBounds(snapToQuarter(newEnd));
 
-  // Application directe
-  localStart.value = snapToQuarter(newStart).toISOString();
-  localEnd.value = snapToQuarter(newEnd).toISOString();
+  localStart.value = newStart.toISOString();
+  localEnd.value = newEnd.toISOString();
 }
 
-// -------------------------------------------------------------
-// 🔚 Fin du drag ou resize
-// -------------------------------------------------------------
 function onMouseUp() {
   if (!mode) return;
-
   const finalStart = new Date(localStart.value);
   const finalEnd = new Date(localEnd.value);
   isDragging.value = false;
 
   emit(mode === "move" ? "slotMove" : "slotResize", {
-    id: props.slot.id,
+    id: props.slot.id as number,
     newStart: finalStart.toISOString(),
     newEnd: finalEnd.toISOString(),
   });
@@ -262,11 +237,8 @@ function onMouseUp() {
   document.removeEventListener("mouseup", onMouseUp);
 }
 
-// -------------------------------------------------------------
-// Resize Start
-// -------------------------------------------------------------
 function onResizeStart(direction: "top" | "bottom", event: MouseEvent) {
-  if (!props.isAdmin) return;
+  if (!props.isAdmin || props.slot.type === "unavailability") return;
   event.preventDefault();
   event.stopPropagation();
 

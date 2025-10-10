@@ -121,8 +121,15 @@ const props = defineProps<{
 // -------------------------------------------------------------
 // Navigation (semaines, dates)
 // -------------------------------------------------------------
-const { weekLabel, isCurrentWeek, days, nextWeek, previousWeek, onDatePicked } =
-  useAgendaNavigation();
+const {
+  weekLabel,
+  isCurrentWeek,
+  days,
+  nextWeek,
+  previousWeek,
+  onDatePicked,
+  activeWeek, // 👈 on l’ajoute ici
+} = useAgendaNavigation();
 
 // -------------------------------------------------------------
 // Slots (lecture, création, suppression, déplacement)
@@ -132,11 +139,11 @@ const {
   addSlot,
   editSlot,
   removeSlot,
-  moveSlot, // 👈 nouvelle fonction du composable
+  moveSlot,
   handleSlotCreated,
   slotStyle,
   formatHour,
-} = useAgendaSlots(props.slug, props.isAdmin);
+} = useAgendaSlots(props.slug, props.isAdmin, activeWeek);
 
 // -------------------------------------------------------------
 // Sélection (création client / admin + popups)

@@ -1,4 +1,27 @@
 <!-- src/components/SelectionPopup.vue -->
+<!-- -------------------------------------------------------------
+ Composant : SelectionPopup (création rapide de créneau)
+---------------------------------------------------------------
+
+📌 Description :
+  - Permet de créer soit :
+      • un slot classique (mission / travail)
+      • une indisponibilité récurrente
+  - Interface légère : titre, dates, heures, type de répétition, période.
+  - Gère les validations (plage horaire valide, non passée).
+
+📍 Endpoints :
+  - POST /api/entreprises/[ref]/slots
+  - POST /api/entreprises/[ref]/unavailabilities
+
+🔒 Accès :
+  - Réservé à l’owner/admin de l’entreprise
+
+⚠️ Remarques :
+  - Si type = “Indisponibilité”, options de récurrence activées
+  - Période optionnelle (début/fin de récurrence)
+------------------------------------------------------------- -->
+
 <template>
   <Transition name="fade">
     <div
@@ -14,7 +37,6 @@
         class="relative w-full max-w-md rounded-lg bg-white shadow-lg ring-1 ring-black/5"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="popup-title"
       >
         <!-- Header -->
         <div class="px-5 py-4 border-b">
@@ -25,18 +47,30 @@
 
         <!-- Body -->
         <div class="px-5 py-4 space-y-4">
-          <!-- Titre -->
+          <!-- 🧩 Type -->
+          <div class="space-y-1">
+            <label class="text-sm font-medium">Type de créneau</label>
+            <select
+              v-model="mode"
+              class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="slot">Créneau de travail</option>
+              <option value="unavailability">Indisponibilité</option>
+            </select>
+          </div>
+
+          <!-- 🏷️ Titre -->
           <div class="space-y-1">
             <label class="text-sm font-medium">Titre</label>
             <input
               v-model="title"
               type="text"
-              placeholder="ex: Service soir"
+              placeholder="ex: Service du soir"
               class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          <!-- Dates -->
+          <!-- 📅 Dates -->
           <div class="grid grid-cols-2 gap-3">
             <input
               ref="startDateEl"
@@ -55,7 +89,7 @@
             />
           </div>
 
-          <!-- Heures -->
+          <!-- 🕒 Heures -->
           <div class="grid grid-cols-2 gap-3">
             <div class="space-y-1">
               <label class="text-sm font-medium">Heure début</label>
@@ -79,9 +113,45 @@
             </div>
           </div>
 
-          <!-- Errors -->
+          <!-- 🔁 Récurrence -->
+          <div v-if="mode === 'unavailability'" class="space-y-1">
+            <label class="text-sm font-medium">Répétition</label>
+            <select
+              v-model="recurrenceType"
+              class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="none">Une seule fois</option>
+              <option value="daily">Chaque jour</option>
+              <option value="weekly">Chaque semaine</option>
+              <option value="monthly">Chaque mois</option>
+            </select>
+          </div>
+
+          <!-- 🗓️ Période de récurrence -->
+          <div
+            v-if="mode === 'unavailability' && recurrenceType !== 'none'"
+            class="space-y-1"
+          >
+            <label class="text-sm font-medium">Période de récurrence</label>
+            <div class="grid grid-cols-2 gap-3">
+              <input
+                type="date"
+                v-model="recurrenceStart"
+                :min="startDate"
+                class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="date"
+                v-model="recurrenceEnd"
+                :min="recurrenceStart"
+                class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <!-- ⚠️ Errors -->
           <p v-if="isInvalid" class="text-sm text-red-600">
-            L'heure de début doit être antérieure à l'heure de fin.
+            L'heure de début doit être avant celle de fin.
           </p>
           <p v-else-if="isBeforeMinWeek" class="text-sm text-red-600">
             Impossible de créer avant le lundi de la semaine courante ({{
@@ -113,14 +183,18 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, nextTick } from "vue";
-import { createEntrepriseSlot } from "@/services/slots";
+import { createEntrepriseSlot } from "../services/slots";
+import { createUnavailability } from "../services/unavailabilities";
 
+// -------------------------------------------------------------
+// Props & Emits
+// -------------------------------------------------------------
 const props = defineProps<{
   open: boolean;
-  initialDate?: string; // YYYY-MM-DD
-  initialStart?: string; // HH:mm
-  initialEnd?: string; // HH:mm
-  slug: string; // 👈 slug entreprise obligatoire
+  initialDate?: string;
+  initialStart?: string;
+  initialEnd?: string;
+  slug: string;
 }>();
 
 const emit = defineEmits<{
@@ -129,11 +203,13 @@ const emit = defineEmits<{
   (e: "cancel"): void;
 }>();
 
-// ----------------- Utils dates -----------------
+// -------------------------------------------------------------
+// Dates helpers
+// -------------------------------------------------------------
 function getWeekStart(d = new Date()) {
   const x = new Date(d);
-  const day = x.getDay(); // 0=dim..6=sam
-  const diff = x.getDate() - (day === 0 ? 6 : day - 1); // -> lundi
+  const day = x.getDay();
+  const diff = x.getDate() - (day === 0 ? 6 : day - 1);
   x.setDate(diff);
   x.setHours(0, 0, 0, 0);
   return x;
@@ -144,22 +220,28 @@ function toYMD(dt: Date) {
 function parseYMD(s: string | undefined) {
   if (!s) return null;
   const [y, m, d] = s.split("-").map(Number);
-  const dt = new Date(y, m - 1, d);
-  return dt;
+  return new Date(y, m - 1, d);
 }
 
-// borne basse : lundi semaine courante
 const minDate = toYMD(getWeekStart());
 
-// ----------------- Champs -----------------
+// -------------------------------------------------------------
+// Reactive state
+// -------------------------------------------------------------
+const mode = ref<"slot" | "unavailability">("slot");
 const title = ref("");
 const startDate = ref(props.initialDate ?? "");
 const endDate = ref(props.initialDate ?? "");
 const startTime = ref(props.initialStart ?? "12:00");
 const endTime = ref(props.initialEnd ?? "14:00");
+const recurrenceType = ref<"none" | "daily" | "weekly" | "monthly">("none");
+const recurrenceStart = ref<string>("");
+const recurrenceEnd = ref<string>("");
 const startDateEl = ref<HTMLInputElement | null>(null);
 
-// ----------------- Validations -----------------
+// -------------------------------------------------------------
+// Validation
+// -------------------------------------------------------------
 const startDateTime = computed(
   () => new Date(`${startDate.value}T${startTime.value}`)
 );
@@ -168,22 +250,24 @@ const endDateTime = computed(
 );
 
 const isInvalid = computed(() => startDateTime.value >= endDateTime.value);
+const isBeforeMinWeek = computed(
+  () => startDate.value < minDate || endDate.value < minDate
+);
+const isPastStart = computed(() => startDateTime.value < new Date());
 
-const isBeforeMinWeek = computed(() => {
-  return startDate.value < minDate || endDate.value < minDate;
-});
-
-const isPastStart = computed(() => {
-  return startDateTime.value < new Date();
-});
-
-// ----------------- Reset à l'ouverture -----------------
+// -------------------------------------------------------------
+// Reset à l’ouverture
+// -------------------------------------------------------------
 watch(
   () => props.open,
   async (val) => {
     if (!val) return;
-
     title.value = "";
+    mode.value = "slot";
+    recurrenceType.value = "none";
+    recurrenceStart.value = "";
+    recurrenceEnd.value = "";
+
     const init = props.initialDate || toYMD(new Date());
     const clamped = init < minDate ? minDate : init;
 
@@ -197,7 +281,9 @@ watch(
   }
 );
 
-// ----------------- Scroll helpers -----------------
+// -------------------------------------------------------------
+// Scroll helpers
+// -------------------------------------------------------------
 function onScrollTime(event: WheelEvent, field: "startTime" | "endTime") {
   const val = field === "startTime" ? startTime.value : endTime.value;
   const [h, m] = val.split(":").map(Number);
@@ -228,7 +314,9 @@ function onScrollDate(event: WheelEvent, field: "startDate" | "endDate") {
   if (endDate.value < startDate.value) endDate.value = startDate.value;
 }
 
-// ----------------- Actions -----------------
+// -------------------------------------------------------------
+// Actions
+// -------------------------------------------------------------
 function onCancel() {
   emit("cancel");
   emit("update:open", false);
@@ -249,14 +337,26 @@ async function onConfirm() {
   const endISO = new Date(`${endDate.value}T${endTime.value}`).toISOString();
 
   try {
-    const { slot } = await createEntrepriseSlot(props.slug, {
-      start: startISO,
-      end: endISO,
-      title: title.value,
-    });
-    emit("created", slot);
+    if (mode.value === "slot") {
+      const { slot } = await createEntrepriseSlot(props.slug, {
+        start: startISO,
+        end: endISO,
+        title: title.value,
+      });
+      emit("created", slot);
+    } else {
+      const unavailability = await createUnavailability(props.slug, {
+        title: title.value,
+        start_date: recurrenceStart.value || startDate.value,
+        start_time: startTime.value,
+        end_time: endTime.value,
+        recurrence_type: recurrenceType.value,
+        recurrence_end: recurrenceEnd.value || null,
+      });
+      emit("created", unavailability);
+    }
   } catch (err) {
-    console.error("Erreur création slot:", err);
+    console.error("❌ Erreur création:", err);
   }
 
   emit("update:open", false);

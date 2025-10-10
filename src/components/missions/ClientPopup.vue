@@ -227,12 +227,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { createMission } from "../../services/missions";
 import { listTemplates, type MissionTemplate } from "../../services/templates";
 
 // ✅ déclarer props correctement
-const props = defineProps<{ open: boolean; slug?: string }>();
+const props = defineProps<{
+  open: boolean;
+  slug?: string;
+  initialDate?: string;
+  initialStart?: string;
+  initialEnd?: string;
+}>();
 const emit = defineEmits(["close", "created"]);
 
 // Templates
@@ -281,8 +287,29 @@ const mode = ref<"freelance" | "salarié">("freelance");
 
 // Slots dynamiques
 const slots = ref([
-  { startDate: "", endDate: "", startTime: "12:00", endTime: "14:00" },
+  {
+    startDate: props.initialDate || "",
+    endDate: props.initialDate || "",
+    startTime: props.initialStart || "12:00",
+    endTime: props.initialEnd || "14:00",
+  },
 ]);
+
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (isOpen) {
+      slots.value = [
+        {
+          startDate: props.initialDate || "",
+          endDate: props.initialDate || "",
+          startTime: props.initialStart || "12:00",
+          endTime: props.initialEnd || "14:00",
+        },
+      ];
+    }
+  }
+);
 
 function addSlot() {
   slots.value.push({
