@@ -65,8 +65,9 @@
         :slot-style="slotStyle"
         :format-hour="formatHour"
         @createSlot="handleCreateSlot"
-        @slotEdit="editSlot"
-        @slotRemove="removeSlot"
+        @slotEdit="handleSlotEdit"
+        @slotRemove="handleSlotRemove"
+        @removeOccurrence="removeUnavailabilityOccurrence"
         @slotMove="moveSlot"
         @slotResize="moveSlot"
       />
@@ -107,8 +108,15 @@ import SelectionPopup from "../SelectionPopup.vue";
 import ClientPopup from "../missions/ClientPopup.vue";
 
 import { useAgendaNavigation } from "../../composables/agenda/useAgendaNavigation";
-import { useAgendaSlots } from "../../composables/agenda/useAgendaSlots";
+import {
+  useAgendaSlots,
+  type AgendaDisplaySlot,
+} from "../../composables/agenda/useAgendaSlots";
 import { useAgendaSelection } from "../../composables/agenda/useAgendaSelection";
+import {
+  deleteUnavailability,
+} from "../../services/unavailabilities";
+import type { Slot } from "../../services/slots";
 
 // -------------------------------------------------------------
 // Props
@@ -136,13 +144,13 @@ const {
 // -------------------------------------------------------------
 const {
   daySlots,
-  addSlot,
   editSlot,
   removeSlot,
   moveSlot,
   handleSlotCreated,
   slotStyle,
   formatHour,
+  fetchCurrentWeek,
 } = useAgendaSlots(props.slug, props.isAdmin, activeWeek);
 
 // -------------------------------------------------------------
@@ -177,5 +185,28 @@ function openQuickAddSlot() {
 
   currentSelection.value = { date, start, end };
   showPopup.value = true;
+}
+
+// -------------------------------------------------------------
+// ❌ Suppression d’une occurrence d’indisponibilité
+// -------------------------------------------------------------
+async function removeUnavailabilityOccurrence(
+  slot: Extract<AgendaDisplaySlot, { type: "unavailability" }>
+) {
+  if (!props.isAdmin) return;
+  try {
+    await deleteUnavailability(props.slug, Number(slot.id), slot.start_date);
+    await fetchCurrentWeek();
+  } catch (e) {
+    console.error("❌ Erreur suppression occurrence:", e);
+  }
+}
+
+function handleSlotEdit(slot: Slot) {
+  editSlot(slot.id, slot);
+}
+
+function handleSlotRemove(id: number) {
+  removeSlot(id);
 }
 </script>

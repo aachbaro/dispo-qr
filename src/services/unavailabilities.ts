@@ -84,9 +84,16 @@ export async function updateUnavailability(
 // ----------------------
 export async function deleteUnavailability(
   entrepriseRef: string,
-  id: number
+  id: number,
+  date?: string
 ): Promise<void> {
-  await request(`/api/entreprises/${entrepriseRef}/unavailabilities/${id}`, {
+  const url = date
+    ? `/api/entreprises/${entrepriseRef}/unavailabilities/${id}?date=${encodeURIComponent(
+        date
+      )}`
+    : `/api/entreprises/${entrepriseRef}/unavailabilities/${id}`;
+
+  await request(url, {
     method: "DELETE",
   });
 }

@@ -75,6 +75,15 @@
           ❌
         </button>
       </div>
+
+      <div v-if="isAdmin && slot.type === 'unavailability'" class="flex gap-1">
+        <button
+          @click.stop="$emit('removeOccurrence', slot)"
+          class="hover:text-gray-700"
+        >
+          ❌
+        </button>
+      </div>
     </div>
 
     <!-- 🕒 Horaires -->
@@ -93,19 +102,21 @@
 
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount } from "vue";
-import type { Slot } from "../../services/slots";
-import type { Unavailability } from "../../services/unavailabilities";
+import type { AgendaDisplaySlot } from "../../composables/agenda/useAgendaSlots";
 
 const props = defineProps<{
-  slot: Slot | (Unavailability & { type?: string });
+  slot: AgendaDisplaySlot;
   isAdmin: boolean;
-  slotStyle: (slot: Slot | Unavailability) => Record<string, string>;
+  slotStyle: (slot: AgendaDisplaySlot | { start: string; end: string }) => Record<string, string>;
   formatHour: (dateString: string) => string;
 }>();
 
 const emit = defineEmits<{
-  (e: "edit", slot: Slot): void;
-  (e: "remove", id: number | string): void;
+  (
+    e: "edit",
+    slot: Extract<AgendaDisplaySlot, { type: "slot" }>
+  ): void;
+  (e: "remove", id: number): void;
   (
     e: "slotMove",
     payload: { id: number; newStart: string; newEnd: string }
@@ -113,6 +124,10 @@ const emit = defineEmits<{
   (
     e: "slotResize",
     payload: { id: number; newStart: string; newEnd: string }
+  ): void;
+  (
+    e: "removeOccurrence",
+    slot: Extract<AgendaDisplaySlot, { type: "unavailability" }>
   ): void;
 }>();
 
@@ -125,12 +140,8 @@ let originalStart: Date;
 let originalEnd: Date;
 let mode: "move" | "resize-top" | "resize-bottom" | null = null;
 
-const localStart = ref(
-  props.slot.start || `${props.slot.start_date}T${props.slot.start_time}`
-);
-const localEnd = ref(
-  props.slot.end || `${props.slot.start_date}T${props.slot.end_time}`
-);
+const localStart = ref(props.slot.start);
+const localEnd = ref(props.slot.end);
 
 const HOUR_HEIGHT = 48;
 const MIN_DURATION_MIN = 15;
@@ -226,11 +237,17 @@ function onMouseUp() {
   const finalEnd = new Date(localEnd.value);
   isDragging.value = false;
 
-  emit(mode === "move" ? "slotMove" : "slotResize", {
+  const payload = {
     id: props.slot.id as number,
     newStart: finalStart.toISOString(),
     newEnd: finalEnd.toISOString(),
-  });
+  };
+
+  if (mode === "move") {
+    emit("slotMove", payload);
+  } else {
+    emit("slotResize", payload);
+  }
 
   mode = null;
   document.removeEventListener("mousemove", onMouseMove);
