@@ -78,6 +78,7 @@
         @edit="$emit('slotEdit', $event)"
         @remove="$emit('slotRemove', $event)"
         @removeOccurrence="$emit('removeOccurrence', $event)"
+        @openUnavailability="$emit('openUnavailability', $event)"
         @slotMove="onSlotMove"
         @slotResize="onSlotResize"
       />
@@ -109,6 +110,10 @@ const emit = defineEmits<{
   (e: "slotRemove", id: number): void;
   (
     e: "removeOccurrence",
+    slot: Extract<AgendaDisplaySlot, { type: "unavailability" }>
+  ): void;
+  (
+    e: "openUnavailability",
     slot: Extract<AgendaDisplaySlot, { type: "unavailability" }>
   ): void;
   (

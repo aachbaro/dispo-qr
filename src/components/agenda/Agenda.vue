@@ -68,6 +68,7 @@
         @slotEdit="handleSlotEdit"
         @slotRemove="handleSlotRemove"
         @removeOccurrence="removeUnavailabilityOccurrence"
+        @openUnavailability="openUnavailabilityModal"
         @slotMove="moveSlot"
         @slotResize="moveSlot"
       />
@@ -95,6 +96,17 @@
       @created="handleClientMission"
       @close="showPopup = false"
     />
+
+    <!-- 🔧 Popup d’édition d’indisponibilité -->
+    <UnavailabilityModal
+      v-if="isAdmin && selectedUnavailability"
+      :open="showUnavailabilityModal"
+      :slug="slug"
+      :occurrence="selectedUnavailability"
+      @close="closeUnavailabilityModal"
+      @updated="onUnavailabilityChanged"
+      @deleted="onUnavailabilityChanged"
+    />
   </div>
 </template>
 
@@ -102,10 +114,12 @@
 // -------------------------------------------------------------
 // Imports
 // -------------------------------------------------------------
+import { ref } from "vue";
 import AgendaHeader from "./AgendaHeader.vue";
 import AgendaDayColumn from "./AgendaDayColumn.vue";
 import SelectionPopup from "../SelectionPopup.vue";
 import ClientPopup from "../missions/ClientPopup.vue";
+import UnavailabilityModal from "./UnavailabilityModal.vue";
 
 import { useAgendaNavigation } from "../../composables/agenda/useAgendaNavigation";
 import {
@@ -171,6 +185,31 @@ const hours = Array.from(
   { length: 17 },
   (_, i) => `${String(i + 7).padStart(2, "0")}:00`
 );
+
+// -------------------------------------------------------------
+// 🗓️ Popup d’indisponibilité
+// -------------------------------------------------------------
+const showUnavailabilityModal = ref(false);
+const selectedUnavailability = ref<
+  Extract<AgendaDisplaySlot, { type: "unavailability" }> | null
+>(null);
+
+function openUnavailabilityModal(
+  slot: Extract<AgendaDisplaySlot, { type: "unavailability" }>
+) {
+  selectedUnavailability.value = slot;
+  showUnavailabilityModal.value = true;
+}
+
+function closeUnavailabilityModal() {
+  showUnavailabilityModal.value = false;
+  selectedUnavailability.value = null;
+}
+
+async function onUnavailabilityChanged() {
+  closeUnavailabilityModal();
+  await fetchCurrentWeek();
+}
 
 // -------------------------------------------------------------
 // Quick add slot (bouton +)
