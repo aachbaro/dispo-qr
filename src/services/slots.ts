@@ -61,7 +61,7 @@ export async function getEntrepriseSlots(
  * ➕ Créer un slot (owner uniquement)
  */
 export async function createEntrepriseSlot(
-  entrepriseId: number,
+  entrepriseId: number | string,
   slot: Pick<SlotInsert, "start" | "end"> & {
     title?: string;
     mission_id?: number;
@@ -77,7 +77,7 @@ export async function createEntrepriseSlot(
  * ✏️ Mettre à jour un slot (owner uniquement)
  */
 export async function updateEntrepriseSlot(
-  entrepriseId: number,
+  entrepriseId: number | string,
   id: number,
   updates: SlotUpdate
 ): Promise<{ slot: Slot }> {
@@ -94,7 +94,7 @@ export async function updateEntrepriseSlot(
  * ❌ Supprimer un slot (owner uniquement)
  */
 export async function deleteEntrepriseSlot(
-  entrepriseId: number,
+  entrepriseId: number | string,
   id: number
 ): Promise<void> {
   await request(`/api/entreprises/${entrepriseId}/slots/${id}`, {

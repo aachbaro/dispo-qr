@@ -96,9 +96,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ----------------------
-    // DELETE → Delete unavailability
+    // DELETE → Delete unavailability (full or single occurrence)
     // ----------------------
     if (req.method === "DELETE") {
+      const { date } = req.query;
+
+      if (date && typeof date === "string") {
+        const { data, error } = await supabaseAdmin
+          .from("unavailabilities")
+          .select("exceptions")
+          .eq("id", Number(id))
+          .single();
+
+        if (error) {
+          console.error("❌ Error fetching exceptions:", error.message);
+          return res.status(500).json({ error: error.message });
+        }
+
+        const exceptions = (data?.exceptions as string[]) || [];
+        if (!exceptions.includes(date)) {
+          exceptions.push(date);
+        }
+
+        const { error: updateError } = await supabaseAdmin
+          .from("unavailabilities")
+          .update({ exceptions })
+          .eq("id", Number(id))
+          .eq("entreprise_id", entreprise.id);
+
+        if (updateError) {
+          console.error(
+            "❌ Error updating unavailability exceptions:",
+            updateError.message
+          );
+          return res.status(500).json({ error: updateError.message });
+        }
+
+        return res.status(200).json({ success: true, partial: true });
+      }
+
       const { error } = await supabaseAdmin
         .from("unavailabilities")
         .delete()

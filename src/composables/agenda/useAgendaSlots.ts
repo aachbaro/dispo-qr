@@ -27,7 +27,7 @@
 //   - Les heures sont basées sur une journée de 07h à 24h
 // -------------------------------------------------------------
 
-import { ref, watch, computed, type Ref} from "vue";
+import { ref, watch, computed, type Ref } from "vue";
 import {
   getEntrepriseSlots,
   createEntrepriseSlot,
@@ -37,6 +37,15 @@ import {
 } from "../../services/slots";
 import { useUnavailabilities } from "../useUnavailabilities";
 import type { Unavailability } from "../../services/unavailabilities";
+
+export type AgendaDisplaySlot =
+  | (Slot & { start: string; end: string; type: "slot"; color: string })
+  | (Unavailability & {
+      start: string;
+      end: string;
+      type: "unavailability";
+      color: string;
+    });
 
 // -------------------------------------------------------------
 // Composable principal
@@ -58,20 +67,6 @@ export function useAgendaSlots(
   // -------------------------------------------------------------
   // 🧰 Utils internes
   // -------------------------------------------------------------
-  function toLocalIso(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const da = String(d.getDate()).padStart(2, "0");
-    const hh = String(d.getHours()).padStart(2, "0");
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    const ss = String(d.getSeconds()).padStart(2, "0");
-    return `${y}-${m}-${da}T${hh}:${mm}:${ss}`;
-  }
-
-  function ymdLocal(d: Date): string {
-    return d.toLocaleDateString("fr-CA"); // YYYY-MM-DD
-  }
-
   function weekBounds(mondayLikeDate: Date) {
     const start = new Date(mondayLikeDate);
     start.setHours(0, 0, 0, 0);
@@ -171,11 +166,16 @@ export function useAgendaSlots(
   // -------------------------------------------------------------
   // 🖼️ Helpers d’affichage
   // -------------------------------------------------------------
-  function slotStyle(slot: Slot | Unavailability) {
+  function slotStyle(slot: AgendaDisplaySlot | { start: string; end: string }) {
+    const hasDateInfo = "start_date" in slot;
     const start = new Date(
-      slot.start || `${slot.start_date}T${slot.start_time}`
+      hasDateInfo
+        ? `${slot.start_date}T${slot.start_time}`
+        : slot.start
     );
-    const end = new Date(slot.end || `${slot.start_date}T${slot.end_time}`);
+    const end = new Date(
+      hasDateInfo ? `${slot.start_date}T${slot.end_time}` : slot.end
+    );
 
     const dayStart = new Date(start);
     dayStart.setHours(7, 0, 0, 0);
@@ -190,7 +190,8 @@ export function useAgendaSlots(
     const endMin = Math.max(0, (e.getTime() - dayStart.getTime()) / 60000);
     const heightMin = Math.max(0, endMin - topMin);
 
-    if (heightMin <= 0) return { display: "none" };
+    if (heightMin <= 0)
+      return { display: "none", top: "0%", height: "0%" };
 
     const topPct = (topMin / totalMin) * 100;
     const heightPct = (heightMin / totalMin) * 100;
@@ -198,6 +199,7 @@ export function useAgendaSlots(
     return {
       top: `${topPct}%`,
       height: `${heightPct}%`,
+      display: "block",
     };
   }
 
@@ -211,26 +213,30 @@ export function useAgendaSlots(
   // -------------------------------------------------------------
   // 🧩 Fusion slots + unavailabilities
   // -------------------------------------------------------------
-  const allSlots = computed(() => {
-    const slotEvents = slots.value.map((s) => ({
-      ...s,
-      type: "slot",
-      color: "#2563eb",
-    }));
+  const allSlots = computed<AgendaDisplaySlot[]>(() => {
+    const slotEvents = slots.value
+      .filter(
+        (s): s is Slot & { start: string; end: string } =>
+          typeof s.start === "string" && typeof s.end === "string"
+      )
+      .map((s) => ({
+        ...s,
+        type: "slot" as const,
+        color: "#2563eb",
+      }));
 
     const unavEvents = unavailabilities.value.map((u) => ({
-      id: `unav-${u.id}`,
-      title: u.title || "Indisponible",
+      ...u,
       start: `${u.start_date}T${u.start_time}`,
       end: `${u.start_date}T${u.end_time}`,
-      type: "unavailability",
+      type: "unavailability" as const,
       color: "#9ca3af",
     }));
 
     return [...slotEvents, ...unavEvents];
   });
 
-  function daySlots(date: string) {
+  function daySlots(date: string): AgendaDisplaySlot[] {
     return allSlots.value.filter(
       (s) => typeof s.start === "string" && s.start.startsWith(date)
     );

@@ -77,6 +77,7 @@
         :format-hour="formatHour"
         @edit="$emit('slotEdit', $event)"
         @remove="$emit('slotRemove', $event)"
+        @removeOccurrence="$emit('removeOccurrence', $event)"
         @slotMove="onSlotMove"
         @slotResize="onSlotResize"
       />
@@ -87,6 +88,7 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount } from "vue";
 import type { Slot } from "../../services/slots";
+import type { AgendaDisplaySlot } from "../../composables/agenda/useAgendaSlots";
 import AgendaSlot from "./AgendaSlot.vue";
 
 // -------------------------------------------------------------
@@ -94,10 +96,10 @@ import AgendaSlot from "./AgendaSlot.vue";
 // -------------------------------------------------------------
 const props = defineProps<{
   day: { name: string; date: string; fullDate: string };
-  slots: Slot[];
+  slots: AgendaDisplaySlot[];
   isAdmin: boolean;
   slotStyle: (
-    slot: Slot | { start: string; end: string }
+    slot: AgendaDisplaySlot | { start: string; end: string }
   ) => Record<string, string>;
   formatHour: (dateString: string) => string;
 }>();
@@ -105,6 +107,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "slotEdit", slot: Slot): void;
   (e: "slotRemove", id: number): void;
+  (
+    e: "removeOccurrence",
+    slot: Extract<AgendaDisplaySlot, { type: "unavailability" }>
+  ): void;
   (
     e: "slotMove",
     payload: { id: number; newStart: string; newEnd: string }
