@@ -1,26 +1,7 @@
 <!-- src/components/SelectionPopup.vue -->
 <!-- -------------------------------------------------------------
  Composant : SelectionPopup (création rapide de créneau)
----------------------------------------------------------------
-
-📌 Description :
-  - Permet de créer soit :
-      • un slot classique (mission / travail)
-      • une indisponibilité récurrente
-  - Interface légère : titre, dates, heures, type de répétition, période.
-  - Gère les validations (plage horaire valide, non passée).
-
-📍 Endpoints :
-  - POST /api/entreprises/[ref]/slots
-  - POST /api/entreprises/[ref]/unavailabilities
-
-🔒 Accès :
-  - Réservé à l’owner/admin de l’entreprise
-
-⚠️ Remarques :
-  - Si type = “Indisponibilité”, options de récurrence activées
-  - Période optionnelle (début/fin de récurrence)
-------------------------------------------------------------- -->
+--------------------------------------------------------------- -->
 
 <template>
   <Transition name="fade">
@@ -114,7 +95,7 @@
           </div>
 
           <!-- 🔁 Récurrence -->
-          <div v-if="mode === 'unavailability'" class="space-y-1">
+          <div v-if="mode === 'unavailability'" class="space-y-2">
             <label class="text-sm font-medium">Répétition</label>
             <select
               v-model="recurrenceType"
@@ -125,27 +106,54 @@
               <option value="weekly">Chaque semaine</option>
               <option value="monthly">Chaque mois</option>
             </select>
-          </div>
 
-          <!-- 🗓️ Période de récurrence -->
-          <div
-            v-if="mode === 'unavailability' && recurrenceType !== 'none'"
-            class="space-y-1"
-          >
-            <label class="text-sm font-medium">Période de récurrence</label>
-            <div class="grid grid-cols-2 gap-3">
+            <!-- 🗓️ Affichage dynamique du jour concerné -->
+            <p
+              v-if="recurrenceType !== 'none'"
+              class="text-sm text-gray-500 italic"
+            >
+              {{
+                recurrenceType === "weekly"
+                  ? `Chaque semaine le ${weekdayLabel}`
+                  : recurrenceType === "monthly"
+                  ? `Chaque mois ${dayOfMonth}`
+                  : ""
+              }}
+            </p>
+
+            <!-- ✅ Bouton pour activer une période -->
+            <div
+              v-if="recurrenceType !== 'none'"
+              class="flex items-center gap-2 mt-2"
+            >
               <input
-                type="date"
-                v-model="recurrenceStart"
-                :min="startDate"
-                class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                id="toggle-period"
+                type="checkbox"
+                v-model="useRecurrencePeriod"
+                class="accent-blue-600"
               />
-              <input
-                type="date"
-                v-model="recurrenceEnd"
-                :min="recurrenceStart"
-                class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <label for="toggle-period" class="text-sm select-none">
+                Définir une période de début/fin
+              </label>
+            </div>
+
+            <!-- 🗓️ Période de récurrence -->
+            <div v-if="useRecurrencePeriod" class="space-y-1">
+              <label class="text-sm font-medium">Période de récurrence</label>
+              <div class="grid grid-cols-2 gap-3">
+                <input
+                  type="date"
+                  v-model="recurrenceStart"
+                  :min="startDate"
+                  class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="date"
+                  v-model="recurrenceEnd"
+                  :min="recurrenceStart || startDate"
+                  class="w-full rounded-full border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
           </div>
 
@@ -237,7 +245,31 @@ const endTime = ref(props.initialEnd ?? "14:00");
 const recurrenceType = ref<"none" | "daily" | "weekly" | "monthly">("none");
 const recurrenceStart = ref<string>("");
 const recurrenceEnd = ref<string>("");
+const useRecurrencePeriod = ref(false);
 const startDateEl = ref<HTMLInputElement | null>(null);
+
+// Labels pour affichage du jour de la semaine
+const daysOfWeek = [
+  "dimanche",
+  "lundi",
+  "mardi",
+  "mercredi",
+  "jeudi",
+  "vendredi",
+  "samedi",
+];
+
+const weekdayValue = computed(() => {
+  const [y, m, d] = startDate.value.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCDay(); // ✅ identique au backend
+});
+
+const weekdayLabel = computed(() => daysOfWeek[weekdayValue.value]);
+const dayOfMonth = computed(() => {
+  const [y, m, d] = startDate.value.split("-").map(Number);
+  return d ? `le ${d}` : "";
+});
 
 // -------------------------------------------------------------
 // Validation
@@ -248,7 +280,6 @@ const startDateTime = computed(
 const endDateTime = computed(
   () => new Date(`${endDate.value}T${endTime.value}`)
 );
-
 const isInvalid = computed(() => startDateTime.value >= endDateTime.value);
 const isBeforeMinWeek = computed(
   () => startDate.value < minDate || endDate.value < minDate
@@ -267,6 +298,7 @@ watch(
     recurrenceType.value = "none";
     recurrenceStart.value = "";
     recurrenceEnd.value = "";
+    useRecurrencePeriod.value = false;
 
     const init = props.initialDate || toYMD(new Date());
     const clamped = init < minDate ? minDate : init;
@@ -304,11 +336,9 @@ function onScrollDate(event: WheelEvent, field: "startDate" | "endDate") {
   if (event.altKey) step = 30;
   const dir = event.deltaY < 0 ? +1 : -1;
   const src = field === "startDate" ? startDate : endDate;
-
   let base = parseYMD(src.value) || new Date();
   base.setHours(12, 0, 0, 0);
   base.setDate(base.getDate() + dir * step);
-
   if (base < parseYMD(minDate)!) base = parseYMD(minDate)!;
   src.value = toYMD(base);
   if (endDate.value < startDate.value) endDate.value = startDate.value;
@@ -345,13 +375,20 @@ async function onConfirm() {
       });
       emit("created", slot);
     } else {
+      const weekday = weekdayValue.value;
       const unavailability = await createUnavailability(props.slug, {
         title: title.value,
-        start_date: recurrenceStart.value || startDate.value,
+        start_date: startDate.value,
         start_time: startTime.value,
         end_time: endTime.value,
         recurrence_type: recurrenceType.value,
-        recurrence_end: recurrenceEnd.value || null,
+        recurrence_start: useRecurrencePeriod.value
+          ? recurrenceStart.value || null
+          : null,
+        recurrence_end: useRecurrencePeriod.value
+          ? recurrenceEnd.value || null
+          : null,
+        weekday,
       });
       emit("created", unavailability);
     }

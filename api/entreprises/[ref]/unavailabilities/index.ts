@@ -57,8 +57,7 @@ function expandRecurrences(
     const cursor = new Date(startRange);
     while (cursor <= endRange) {
       const isoDate = cursor.toISOString().split("T")[0];
-      const dayOfWeek = cursor.getDay(); // 0 = dimanche ... 6 = samedi
-
+      const dayOfWeek = cursor.getUTCDay();
       let valid = false;
 
       switch (recurrence) {
@@ -190,7 +189,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         recurrence_type: payload.recurrence_type || "none",
         start_date: payload.start_date,
         recurrence_end: payload.recurrence_end || null,
-        weekday: payload.weekday ?? new Date(payload.start_date).getDay(),
+        weekday:
+          payload.weekday ??
+          (() => {
+            // Calcul du jour de la semaine sans dépendre du fuseau
+            const [y, m, d] = payload.start_date.split("-").map(Number);
+            // Algorithme de Zeller modifié pour jour de semaine (0=dimanche)
+            const date = new Date(Date.UTC(y, m - 1, d));
+            return date.getUTCDay();
+          })(),
         exceptions: payload.exceptions || [],
       };
 

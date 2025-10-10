@@ -26,7 +26,7 @@ import { getUserFromToken } from "../../../utils/auth.js";
 import {
   canAccessSensitive,
   findEntreprise,
-} from "../../../../_lib/entreprise.js";
+} from "../../../_lib/entreprise.js";
 
 // ----------------------
 // Handler principal
