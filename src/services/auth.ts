@@ -1,17 +1,19 @@
 // src/services/auth.ts
 // -------------------------------------------------------------
 // Services liés à l’authentification (couche Supabase)
+// -------------------------------------------------------------
 //
-// Fonctions disponibles :
-// - getSession()              : retourne la session en cours (JWT, user, etc.)
-// - getCurrentUser()          : retourne les infos du user courant (AuthUser)
-// - register(payload)         : inscription via l’API backend (/api/auth/register)
-// - login(email, password)    : connexion via Supabase Auth (retourne session)
-// - logout()                  : déconnexion Supabase
+// 📌 Description :
+//   - Centralise tous les appels Supabase liés à l’authentification
+//   - Fournit les helpers pour gérer la session et les actions (login, logout…)
+//   - Supporte les modes : mot de passe, Magic Link, OAuth (Google)
+//
+// 🔒 Règles d’accès :
+//   - Les vérifications de droits restent côté API (non ici)
 //
 // ⚠️ Remarques :
-// - Le stockage user/token est désormais géré par `useAuth.ts`.
-// - Ici : uniquement les appels Supabase / API.
+//   - Le stockage user/token est géré dans `useAuth.ts`
+//   - Ici : uniquement les appels directs à Supabase / API
 // -------------------------------------------------------------
 
 import { supabase } from "./supabase";
@@ -19,6 +21,7 @@ import { supabase } from "./supabase";
 // ----------------------
 // Types
 // ----------------------
+
 export type UserRole = "freelance" | "client" | "admin";
 
 export interface AuthUser {
@@ -31,11 +34,12 @@ export interface AuthUser {
 }
 
 // ----------------------
-// Helpers
+// Session helpers
 // ----------------------
 
 /**
- * 🔑 Récupérer la session en cours (token, infos user, expiration…)
+ * 🔑 getSession()
+ * Récupère la session active (token, infos, expiration…)
  */
 export async function getSession() {
   const { data, error } = await supabase.auth.getSession();
@@ -44,7 +48,8 @@ export async function getSession() {
 }
 
 /**
- * 👤 Récupérer l’utilisateur courant (ou null si non connecté)
+ * 👤 getCurrentUser()
+ * Récupère l'utilisateur courant (métadonnées incluses)
  */
 export async function getCurrentUser(): Promise<AuthUser | null> {
   const { data, error } = await supabase.auth.getUser();
@@ -55,7 +60,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   if (!data.user) return null;
 
   const metadata = data.user.user_metadata;
-
   return {
     id: data.user.id,
     email: data.user.email!,
@@ -67,16 +71,18 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 }
 
 // ----------------------
-// Actions
+// Auth actions principales
 // ----------------------
 
 /**
- * 📝 Inscription (via backend custom)
+ * 📝 register()
+ * Inscription classique via backend custom
+ * (utile si tu veux une API d’inscription spécifique)
  */
 export async function register(payload: {
   email: string;
   password: string;
-  role: "freelance" | "client";
+  role: UserRole;
   entreprise?: { nom: string; prenom: string };
 }) {
   const res = await fetch("/api/auth/register", {
@@ -90,21 +96,20 @@ export async function register(payload: {
 }
 
 /**
- * 🔑 Connexion utilisateur
+ * 🔑 login()
+ * Connexion via email + mot de passe
  */
 export async function login(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
-
   if (error) throw error;
 
   const session = data.session;
   const token = session?.access_token;
 
   if (token) {
-    console.log("🔑 Token sauvegardé:", token);
     localStorage.setItem("authToken", token);
   } else {
     console.warn("⚠️ Aucun access_token reçu de Supabase !");
@@ -114,9 +119,49 @@ export async function login(email: string, password: string) {
 }
 
 /**
- * 🚪 Déconnexion utilisateur
+ * 🚪 logout()
+ * Déconnexion complète côté Supabase
  */
 export async function logout() {
   const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+// ----------------------
+// Auth avancée (OAuth / Magic Link)
+// ----------------------
+
+/**
+ * 🔐 signInWithGoogle()
+ * Connexion via Google OAuth (redirection automatique)
+ * Redirige ensuite vers /auth/callback
+ */
+export async function signInWithGoogle() {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
+  if (error) throw error;
+}
+
+/**
+ * ✉️ signInWithMagicLink()
+ * Connexion / inscription via lien magique
+ * Stocke les métadonnées (role, nom, prenom…) dans Supabase
+ * Redirige ensuite vers /auth/callback
+ */
+export async function signInWithMagicLink(
+  email: string,
+  metadata?: Record<string, any>
+) {
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      data: metadata,
+      emailRedirectTo: `${window.location.origin}/auth/callback`,
+    },
+  });
   if (error) throw error;
 }

@@ -3,15 +3,22 @@
 // Gestion d'une mission spécifique (lecture, mise à jour, suppression)
 // -------------------------------------------------------------
 //
-// 📌 Endpoints :
-//   - GET    /api/missions/[id]
-//   - PUT    /api/missions/[id]
-//   - DELETE /api/missions/[id]
+// 📌 Description :
+//   - GET    /api/missions/[id]     → lire une mission
+//   - PUT    /api/missions/[id]     → modifier une mission
+//   - DELETE /api/missions/[id]     → supprimer une mission
 //
 // 🔒 Règles d'accès :
-//   - Authentification obligatoire
-//   - Entreprise/freelance/admin → accès complet à leurs missions
-//   - Client → accès lecture seule à ses missions
+//   - Auth obligatoire (JWT Supabase)
+//   - Rôles :
+//       • freelance / entreprise / admin → accès complet
+//       • client → lecture seule sur ses missions
+//
+// ⚠️ Remarques :
+//   - Rôle issu de user.role (AuthUser enrichi)
+//   - Suppression de user_metadata / app_metadata
+//   - canAccessSensitive(user, entreprise) contrôle les droits
+//
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -20,7 +27,7 @@ import type { Tables } from "../../types/database.js";
 import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
 
-const ENTREPRISE_ROLES = new Set(["entreprise", "freelance", "admin"]);
+const ENTREPRISE_ROLES = new Set(["freelance", "entreprise", "admin"]);
 const MISSION_SELECT =
   "*, slots(*), entreprise:entreprise_id(*), client:client_id(*)";
 
@@ -28,7 +35,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query;
 
   if (!id || Array.isArray(id)) {
-    return res.status(400).json({ error: "❌ Paramètres invalides" });
+    return res
+      .status(400)
+      .json({ error: "❌ Paramètre ID manquant ou invalide" });
   }
 
   const missionId = Number(id);
@@ -37,26 +46,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // 🔑 Authentification
     const user = await getUserFromToken(req);
-    if (!user) {
-      return res.status(401).json({ error: "❌ Non authentifié" });
-    }
+    if (!user) return res.status(401).json({ error: "❌ Non authentifié" });
 
-    const role =
-      (user.user_metadata?.role as string | undefined) ||
-      (user.app_metadata?.role as string | undefined);
+    const role = user.role;
 
-    const { data: missionRecord, error: missionFetchError } = await supabaseAdmin
-      .from("missions")
-      .select(MISSION_SELECT)
-      .eq("id", missionId)
-      .single<
-        Tables<"missions"> & {
-          entreprise?: Tables<"entreprise"> | null;
-          client?: Tables<"clients"> | null;
-          slots?: Tables<"slots">[];
-        }
-      >();
+    // 📄 Récupération mission complète
+    const { data: missionRecord, error: missionFetchError } =
+      await supabaseAdmin
+        .from("missions")
+        .select(MISSION_SELECT)
+        .eq("id", missionId)
+        .single<
+          Tables<"missions"> & {
+            entreprise?: Tables<"entreprise"> | null;
+            client?: Tables<"clients"> | null;
+            slots?: Tables<"slots">[];
+          }
+        >();
 
     if (missionFetchError) {
       console.error("❌ Erreur fetch mission:", missionFetchError.message);
@@ -70,15 +78,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: "❌ Mission introuvable" });
     }
 
-    const entreprise = missionRecord.entreprise || null;
-
-    const hasEntrepriseAccess =
-      entreprise && canAccessSensitive(user, entreprise as Tables<"entreprise">);
-
+    // 🏢 Vérification des droits d’accès
+    let entreprise = missionRecord.entreprise || null;
     if (ENTREPRISE_ROLES.has(role ?? "")) {
+      // Freelance / Admin / Entreprise → accès complet
       if (!entreprise) {
         const { data: entrepriseById, error: entrepriseError } =
           await findEntreprise(missionRecord.entreprise_id);
+
         if (entrepriseError) {
           console.error(
             "❌ Erreur fetch entreprise mission:",
@@ -86,39 +93,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           );
           return res.status(500).json({ error: entrepriseError.message });
         }
+
         if (!entrepriseById || !canAccessSensitive(user, entrepriseById)) {
           return res.status(403).json({ error: "❌ Accès interdit" });
         }
-      } else if (!hasEntrepriseAccess) {
+
+        entreprise = entrepriseById;
+      } else if (!canAccessSensitive(user, entreprise)) {
         return res.status(403).json({ error: "❌ Accès interdit" });
       }
     } else if (role === "client") {
+      // Client → lecture seule sur ses missions
       if (missionRecord.client_id !== user.id) {
-        return res.status(403).json({ error: "❌ Accès interdit" });
+        return res
+          .status(403)
+          .json({ error: "❌ Accès interdit à cette mission" });
       }
     } else {
       return res.status(403).json({ error: "❌ Rôle non autorisé" });
     }
 
+    // -------------------------------------------------------------
+    // 📖 GET → Lecture d’une mission
+    // -------------------------------------------------------------
     if (req.method === "GET") {
-      const { data: mission, error: missionError } = await supabaseAdmin
-        .from("missions")
-        .select(MISSION_SELECT)
-        .eq("id", missionId)
-        .single();
-
-      if (missionError) {
-        console.error("❌ Erreur lecture mission:", missionError.message);
-        return res.status(500).json({ error: missionError.message });
-      }
-
-      if (!mission) {
-        return res.status(404).json({ error: "❌ Mission introuvable" });
-      }
-
-      return res.status(200).json({ mission });
+      return res.status(200).json({ mission: missionRecord });
     }
 
+    // -------------------------------------------------------------
+    // ✏️ PUT → Mise à jour d’une mission
+    // -------------------------------------------------------------
     if (req.method === "PUT") {
       if (!ENTREPRISE_ROLES.has(role ?? "")) {
         return res
@@ -133,6 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         slots?: Array<Pick<Tables<"slots">, "start" | "end" | "title">>;
       };
 
+      // ✅ Validation du statut
       if (
         updates.status &&
         ![
@@ -145,9 +150,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           "realized",
         ].includes(updates.status)
       ) {
-        return res.status(400).json({ error: "❌ Statut invalide" });
+        return res.status(400).json({ error: "❌ Statut mission invalide" });
       }
 
+      // 🧱 Mise à jour mission principale
       const { error: updateError } = await supabaseAdmin
         .from("missions")
         .update(updates)
@@ -160,6 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ error: updateError.message });
       }
 
+      // 🔄 Slots associés
       if (Array.isArray(slots)) {
         await supabaseAdmin.from("slots").delete().eq("mission_id", missionId);
 
@@ -183,6 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // 📦 Renvoi mission mise à jour
       const { data: missionWithRelations, error: fetchUpdatedError } =
         await supabaseAdmin
           .from("missions")
@@ -192,7 +200,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (fetchUpdatedError) {
         console.error(
-          "❌ Erreur récupération mission mise à jour:",
+          "❌ Erreur fetch mission mise à jour:",
           fetchUpdatedError.message
         );
         return res.status(500).json({ error: fetchUpdatedError.message });
@@ -201,6 +209,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ mission: missionWithRelations });
     }
 
+    // -------------------------------------------------------------
+    // 🗑️ DELETE → Suppression d’une mission
+    // -------------------------------------------------------------
     if (req.method === "DELETE") {
       if (!ENTREPRISE_ROLES.has(role ?? "")) {
         return res
@@ -222,9 +233,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ message: "✅ Mission supprimée" });
     }
 
+    // -------------------------------------------------------------
+    // 🚫 Méthode non autorisée
+    // -------------------------------------------------------------
     return res.status(405).json({ error: "❌ Méthode non autorisée" });
   } catch (err: any) {
-    console.error("❌ Exception mission/[id] :", err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    console.error("💥 Exception /api/missions/[id]:", err);
+    return res.status(500).json({ error: err.message || "Erreur serveur" });
   }
 }

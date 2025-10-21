@@ -5,42 +5,56 @@
 //
 // 📌 Description :
 //   - Gère l’état utilisateur (user + token) en réactif
-//   - Persiste dans localStorage (clé: "authUser", "authToken")
-//   - Fournit les actions : setUser, clearAuth, initAuth
-//   - Au démarrage, restaure la session depuis Supabase
+//   - Persiste dans localStorage ("authUser", "authToken")
+//   - Fournit les actions : setUser, initAuth, logout, loginGoogle, loginMagicLink
+//   - Restaure la session Supabase au démarrage
 //
 // 🔒 Règles d’accès :
-//   - AuthUser contient id, email, role (+ slug si freelance)
-//   - Les vérifications de droits restent côté API
+//   - AuthUser contient id, email, role, slug (si freelance),
+//     ainsi que first_name, last_name, phone.
+//   - Les vérifications de droits se font côté API uniquement.
 //
 // ⚠️ Remarques :
-//   - Toute modif d’état met à jour localStorage
-//   - initAuth() doit être appelé une fois (hook global ou layout)
+//   - initAuth() doit être appelée une fois (dans App.vue ou Layout principal)
+//   - Toutes les modifications mettent à jour localStorage automatiquement
+//   - Ajout d’un état `isReady` et d’une promesse `ready()`
+//     permettant au frontend d’attendre que l’auth soit initialisée
 // -------------------------------------------------------------
 
-import { ref, onMounted } from "vue";
-import type { AuthUser } from "../services/auth";
-import { getSession, getCurrentUser } from "../services/auth";
+import { ref } from "vue";
+import type { AuthUser } from "@/services/auth";
+import {
+  getSession,
+  getCurrentUser,
+  logout as logoutService,
+  signInWithGoogle,
+  signInWithMagicLink,
+} from "@/services/auth";
+import { request } from "@/services/api";
 
 // ----------------------
 // State global
 // ----------------------
-
 const storedUser = localStorage.getItem("authUser");
 const storedToken = localStorage.getItem("authToken");
 
 const user = ref<AuthUser | null>(storedUser ? JSON.parse(storedUser) : null);
 const token = ref<string | null>(storedToken ?? null);
+const loading = ref<boolean>(true);
+
+// Nouveau : indique si l’auth a terminé son initialisation
+const isReady = ref<boolean>(false);
+let readyPromise: Promise<void> | null = null;
+let resolveReady: (() => void) | null = null;
 
 // ----------------------
-// Composable
+// Composable principal
 // ----------------------
-
 export function useAuth() {
   /**
-   * ✅ Met à jour user + token (et localStorage)
+   * ✅ Met à jour l’utilisateur et le token localement
    */
-  function setUser(newUser: AuthUser | null, newToken?: string) {
+  function setUser(newUser: AuthUser | null, newToken?: string | null) {
     user.value = newUser;
     token.value = newToken ?? token.value;
 
@@ -56,7 +70,20 @@ export function useAuth() {
   }
 
   /**
-   * 🚪 Déconnexion locale (reset + suppression storage)
+   * 🚪 Déconnexion complète (Supabase + localStorage)
+   */
+  async function logout() {
+    try {
+      await logoutService();
+    } catch (e) {
+      console.warn("⚠️ Erreur logout Supabase (non bloquante):", e);
+    } finally {
+      clearAuth();
+    }
+  }
+
+  /**
+   * 🧹 Réinitialisation locale du state
    */
   function clearAuth() {
     user.value = null;
@@ -66,24 +93,93 @@ export function useAuth() {
   }
 
   /**
-   * 🔄 Récupère la session Supabase et initialise user/token
+   * 🔄 Initialisation depuis Supabase (session persistée)
    */
   async function initAuth() {
-    const session = await getSession();
-    if (session?.access_token) {
-      token.value = session.access_token;
-      localStorage.setItem("authToken", session.access_token);
+    loading.value = true;
+    readyPromise = new Promise<void>((resolve) => (resolveReady = resolve));
 
-      const currentUser = await getCurrentUser();
-      if (currentUser) {
-        user.value = currentUser;
-        localStorage.setItem("authUser", JSON.stringify(currentUser));
+    try {
+      const session = await getSession();
+
+      if (session?.access_token) {
+        token.value = session.access_token;
+        localStorage.setItem("authToken", session.access_token);
+
+        // 👤 Charge le profil complet via backend
+        const { profile } = await request<{ profile: AuthUser }>(
+          "/api/profiles/me"
+        );
+
+        if (profile) {
+          user.value = profile;
+          localStorage.setItem("authUser", JSON.stringify(profile));
+        } else {
+          console.warn("⚠️ Aucun profil retourné par /api/profiles/me");
+          clearAuth();
+        }
+      } else {
+        clearAuth();
       }
+    } catch (e) {
+      console.error("❌ Erreur initAuth :", e);
+      clearAuth();
+    } finally {
+      loading.value = false;
+      isReady.value = true;
+      resolveReady?.(); // 🔓 Débloque la promesse ready()
     }
   }
 
-  // Exécuter une fois au montage global
-  onMounted(initAuth);
+  /**
+   * 🕓 Attente que l’auth soit prête (promesse)
+   */
+  async function ready() {
+    if (isReady.value) return;
+    if (!readyPromise) {
+      readyPromise = new Promise<void>((resolve) => (resolveReady = resolve));
+    }
+    await readyPromise;
+  }
 
-  return { user, token, setUser, clearAuth, initAuth };
+  /**
+   * 🔐 Connexion via Google OAuth
+   */
+  async function loginGoogle() {
+    try {
+      await signInWithGoogle();
+    } catch (e) {
+      console.error("❌ Erreur login Google :", e);
+    }
+  }
+
+  /**
+   * ✉️ Connexion / inscription via Magic Link
+   */
+  async function loginMagicLink(email: string, metadata?: Record<string, any>) {
+    try {
+      await signInWithMagicLink(email, metadata);
+      alert(`Un lien de connexion a été envoyé à ${email}`);
+    } catch (e) {
+      console.error("❌ Erreur Magic Link :", e);
+      throw e;
+    }
+  }
+
+  // ----------------------
+  // Expose API du composable
+  // ----------------------
+  return {
+    user,
+    token,
+    loading,
+    isReady,
+    ready, // 👈 permet d’attendre initAuth()
+    setUser,
+    clearAuth,
+    logout,
+    initAuth,
+    loginGoogle,
+    loginMagicLink,
+  };
 }

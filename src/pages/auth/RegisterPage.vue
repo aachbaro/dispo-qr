@@ -1,19 +1,19 @@
 <!-- src/pages/auth/RegisterPage.vue -->
 <!-- -------------------------------------------------------------
- Page d’inscription
+ Page d’inscription (manuelle + rapide)
 ---------------------------------------------------------------
 📌 Description :
- - Permet de créer un compte (freelance ou restaurateur/client)
- - Deux modes :
-   • Email + mot de passe + infos de base (formulaire)
-   • Connexion via Google (OAuth Supabase)
+ - Permet à l'utilisateur de s'inscrire selon deux modes :
+   • Email + mot de passe (formulaire manuel)
+   • Magic Link ou Google OAuth (connexion rapide)
+ - Enregistre le rôle (freelance ou client) + infos basiques
 
 🔒 Règles d’accès :
- - Publique (accessible sans authentification)
+ - Publique (accessible sans session)
 
 ⚠️ Remarques :
- - Freelance → création entreprise liée avec nom/prénom
- - Client/Restaurateur → inscription simple
+ - Freelance → crée automatiquement une entreprise
+ - Client → crée seulement un profil
 --------------------------------------------------------------- -->
 
 <template>
@@ -21,17 +21,19 @@
     <!-- Header -->
     <div class="text-center space-y-2">
       <h1 class="text-2xl font-bold">Créer un compte</h1>
-      <p class="text-gray-600">Rejoignez Dispo-QR et simplifiez vos missions</p>
+      <p class="text-gray-600">
+        Rejoignez ExtraBeam et gérez vos missions facilement
+      </p>
     </div>
 
-    <!-- Formulaire classique -->
+    <!-- Formulaire manuel -->
     <form @submit.prevent="handleRegister" class="space-y-4">
       <!-- Email -->
       <input
         v-model="email"
         type="email"
         placeholder="Email"
-        class="w-full rounded-lg border border-gray-300 px-3 py-2"
+        class="input"
         required
       />
 
@@ -40,15 +42,12 @@
         v-model="password"
         type="password"
         placeholder="Mot de passe"
-        class="w-full rounded-lg border border-gray-300 px-3 py-2"
+        class="input"
         required
       />
 
       <!-- Choix rôle -->
-      <select
-        v-model="role"
-        class="w-full rounded-lg border border-gray-300 px-3 py-2"
-      >
+      <select v-model="role" class="input">
         <option value="freelance">Je suis extra</option>
         <option value="client">Je suis restaurateur</option>
       </select>
@@ -62,19 +61,19 @@
           v-model="entreprise.nom"
           type="text"
           placeholder="Nom"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2"
+          class="input"
           required
         />
         <input
           v-model="entreprise.prenom"
           type="text"
           placeholder="Prénom"
-          class="w-full rounded-lg border border-gray-300 px-3 py-2"
+          class="input"
           required
         />
         <p class="text-xs text-gray-500">
           Vous pourrez compléter votre profil (adresse, SIRET, IBAN, etc.) plus
-          tard dans votre tableau de bord.
+          tard.
         </p>
       </div>
 
@@ -82,12 +81,8 @@
       <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
 
       <!-- Bouton submit -->
-      <button
-        type="submit"
-        class="w-full px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
-        :disabled="loading"
-      >
-        {{ loading ? "Inscription..." : "S'inscrire" }}
+      <button type="submit" class="btn-primary" :disabled="loading">
+        {{ loading ? "Inscription..." : "Créer un compte" }}
       </button>
     </form>
 
@@ -98,8 +93,15 @@
       <hr class="flex-1 border-gray-300" />
     </div>
 
-    <!-- Inscription via Google -->
-    <div class="text-center">
+    <!-- Connexion rapide -->
+    <div class="space-y-3 text-center">
+      <button
+        @click="handleMagicLink"
+        class="w-full px-4 py-2 rounded bg-black text-white font-semibold hover:bg-gray-800"
+      >
+        Recevoir un lien magique ✉️
+      </button>
+
       <button
         @click="handleGoogle"
         class="w-full px-4 py-2 rounded bg-red-500 text-white font-semibold hover:bg-red-600"
@@ -113,13 +115,14 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { supabase } from "../../services/supabase";
+import { useAuth } from "@/composables/useAuth";
 
 const router = useRouter();
+const { loginGoogle, loginMagicLink } = useAuth();
 
 const email = ref("");
 const password = ref("");
-const role = ref<"freelance" | "restaurateur">("freelance");
+const role = ref<"freelance" | "client">("freelance");
 const error = ref("");
 const loading = ref(false);
 
@@ -128,7 +131,7 @@ const entreprise = ref({
   prenom: "",
 });
 
-/** Inscription classique email/password */
+/** 🧱 Inscription manuelle via API backend */
 async function handleRegister() {
   loading.value = true;
   error.value = "";
@@ -147,24 +150,17 @@ async function handleRegister() {
 
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.error || "Erreur inscription");
+      throw new Error(err.error || "Erreur d'inscription.");
     }
 
     const data = await res.json();
     console.log("✅ Utilisateur inscrit:", data);
 
-    // connexion automatique
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email: email.value,
-      password: password.value,
-    });
-
-    if (loginError) throw new Error(loginError.message);
-
+    // Redirection selon type
     if (data.entreprise?.slug) {
       router.push(`/entreprise/${data.entreprise.slug}`);
     } else {
-      router.push("/");
+      router.push("/dashboard");
     }
   } catch (err: any) {
     error.value = err.message || "❌ Erreur lors de l'inscription.";
@@ -173,18 +169,34 @@ async function handleRegister() {
   }
 }
 
-/** Inscription via Google OAuth */
+/** ✉️ Connexion via lien magique Supabase */
+async function handleMagicLink() {
+  try {
+    await loginMagicLink(email.value, {
+      role: role.value,
+      nom: entreprise.value.nom,
+      prenom: entreprise.value.prenom,
+    });
+  } catch (err: any) {
+    error.value = err.message || "Erreur Magic Link.";
+  }
+}
+
+/** 🔐 Connexion via Google OAuth */
 async function handleGoogle() {
   try {
-    const { error: googleError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (googleError) throw new Error(googleError.message);
+    await loginGoogle();
   } catch (err: any) {
-    error.value = err.message || "❌ Erreur Google Sign-In.";
+    error.value = err.message || "Erreur Google Sign-In.";
   }
 }
 </script>
+
+<style scoped>
+.input {
+  @apply w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black;
+}
+.btn-primary {
+  @apply w-full px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50;
+}
+</style>

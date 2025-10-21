@@ -7,7 +7,7 @@
  - Agenda (slots)
  - Missions (selon droits)
  - Factures (owner uniquement)
- 
+
  ⚠️ Règles :
  - Côté frontend → toujours passer le slug
  - Côté backend → décide si infos sensibles (owner/admin) ou publiques
@@ -58,10 +58,7 @@
 
     <!-- Missions -->
     <div class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg">
-      <MissionList
-        v-if="entreprise"
-        :is-owner="isOwner"
-      />
+      <MissionList v-if="entreprise" :is-owner="isOwner" />
     </div>
 
     <!-- Factures -->
@@ -79,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useAuth } from "../composables/useAuth";
 import { getEntreprise } from "../services/entreprises";
@@ -94,32 +91,62 @@ const route = useRoute();
 const entreprise = ref<any>(null);
 const loading = ref(true);
 
-const { user } = useAuth();
+const { user, ready } = useAuth(); // 👈 attend que useAuth soit prêt
 
 // 👇 Vérifie si le user connecté est propriétaire (même slug)
 const isOwner = computed(() => user.value?.slug === route.params.slug);
 
 // ----------------------
-// Lifecycle
+// Fonction principale de fetch
 // ----------------------
-onMounted(async () => {
+async function fetchEntrepriseData(slug: string) {
+  if (!slug) {
+    console.warn("⚠️ Slug manquant, requête annulée");
+    return;
+  }
+
   try {
+    loading.value = true;
+    console.log("🔍 Chargement entreprise pour slug :", slug);
+    console.log("👤 User connecté :", user.value);
+    console.log("🔑 isOwner :", isOwner.value);
+
     let e;
     if (isOwner.value) {
-      // 🔑 Si owner → on force l’auth → backend renverra aussi les champs sensibles
-      ({ entreprise: e } = await getEntreprise(route.params.slug as string, {
-        forceAuth: true,
-      }));
+      // 🔑 Owner → accès complet
+      ({ entreprise: e } = await getEntreprise(slug, { forceAuth: true }));
     } else {
-      // 👤 Sinon → accès public
-      ({ entreprise: e } = await getEntreprise(route.params.slug as string));
+      // 👤 Accès public
+      ({ entreprise: e } = await getEntreprise(slug));
     }
+
     entreprise.value = e;
   } catch (err) {
     console.error("❌ Erreur chargement entreprise :", err);
   } finally {
     loading.value = false;
   }
+}
+
+// ----------------------
+// Lifecycle
+// ----------------------
+onMounted(async () => {
+  // ⏳ attend que l’auth soit prête
+  await ready();
+
+  const slug = route.params.slug as string | undefined;
+  if (!slug) {
+    console.warn("⚠️ Aucun slug dans l’URL → fetch annulé");
+    return;
+  }
+
+  await fetchEntrepriseData(slug);
+
+  // 🌀 Recharger si user ou slug changent (ex : après login ou navigation)
+  watch([() => user.value, () => route.params.slug], ([u, newSlug]) => {
+    if (u && newSlug) fetchEntrepriseData(newSlug as string);
+  });
 });
 
 // ----------------------

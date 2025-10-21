@@ -60,13 +60,27 @@ export async function createEntreprise(
 
 /**
  * 🔍 Récupérer une entreprise (slug public, id privé)
+ *
+ * - `ref` peut être le slug (ex: "adam-achbarou") ou l'id numérique
+ * - Si ref est absent → erreur claire côté frontend
+ * - Si forceAuth=true → inclut le token dans la requête (même pour slug)
  */
 export async function getEntreprise(
-  ref: string | number,
+  ref: string | number | undefined,
   opts: { forceAuth?: boolean } = {}
 ): Promise<{ entreprise: Entreprise }> {
+  if (!ref) {
+    console.warn("⚠️ getEntreprise appelé sans ref → requête annulée");
+    throw new Error("Slug ou ID manquant pour getEntreprise()");
+  }
+
+  const isPublicSlug = typeof ref === "string" && !opts.forceAuth;
+  console.log(
+    `🔍 getEntreprise(${ref}) → ${isPublicSlug ? "public" : "authentifié"}`
+  );
+
   return request<{ entreprise: Entreprise }>(`/api/entreprises/${ref}`, {
-    skipAuth: !opts.forceAuth && typeof ref === "string",
+    skipAuth: isPublicSlug,
   });
 }
 
@@ -89,5 +103,6 @@ export async function updateEntreprise(
 export async function connectEntrepriseStripe(
   ref: string | number
 ): Promise<{ url: string }> {
+  if (!ref) throw new Error("ID entreprise manquant pour connectStripe()");
   return request<{ url: string }>(`/api/entreprises/${ref}/connect-stripe`);
 }

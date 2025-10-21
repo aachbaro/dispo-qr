@@ -37,7 +37,7 @@
     :class="{
       dragging: isDragging,
       'bg-red-800 text-white': slot.type === 'slot',
-      'bg-gray-400 text-gray-900 opacity-60': slot.type === 'unavailability',
+      'bg-gray-400 text-gray-900 ': slot.type === 'unavailability',
     }"
     :style="slotDynamicStyle"
     @click="onClick"

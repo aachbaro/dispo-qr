@@ -10,9 +10,9 @@
  - Public : voir "Se connecter" et "S'inscrire"
  - Connecté : voir email, "Mon compte" et "Déconnexion"
 
-⚠️ Remarques :
- - "S’inscrire" redirige désormais vers la page /register
- - "Se connecter" reste une modale
+⚙️ Nouvelles fonctionnalités :
+ - Si l'utilisateur n'a pas encore complété son profil (pas de first_name, last_name, ou role),
+   le bouton "Mon compte" redirige vers /auth/onboarding
 --------------------------------------------------------------- -->
 
 <template>
@@ -43,9 +43,11 @@
 
         <!-- Si connecté -->
         <template v-else>
-          <span class="text-gray-700 font-medium">👤 {{ user.email }}</span>
+          <span class="text-gray-700 font-medium truncate max-w-[200px]">
+            👤 {{ user.email }}
+          </span>
           <button
-            @click="goToMyEntreprise"
+            @click="goToAccount"
             class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700"
           >
             Mon compte
@@ -76,8 +78,8 @@ import { ref } from "vue";
 import { useRouter } from "vue-router";
 import LoginModal from "./LoginModal.vue";
 import ContactModal from "./ContactModal.vue";
-import { useAuth } from "../composables/useAuth";
-import { supabase } from "../services/supabase";
+import { useAuth } from "@/composables/useAuth";
+import { supabase } from "@/services/supabase";
 
 const router = useRouter();
 const { user, setUser } = useAuth();
@@ -96,18 +98,34 @@ async function logoutUser() {
   router.push("/");
 }
 
-// Accès à mon compte
-function goToMyEntreprise() {
+/**
+ * 🧭 Redirige vers la bonne page "Mon compte"
+ * - Si le profil est incomplet (pas de nom/prénom/role) → /auth/onboarding
+ * - Sinon → page correspondant au rôle
+ */
+function goToAccount() {
   if (!user.value) return;
 
-  if (user.value.role === "freelance" && user.value.slug) {
-    router.push(`/entreprise/${user.value.slug}`);
-  } else if (user.value.role === "client") {
-    router.push("/client");
-  } else if (user.value.role === "admin") {
-    router.push("/admin"); // optionnel, à prévoir si tu as une page admin
-  } else {
-    alert("⚠️ Impossible de déterminer la page associée à ce rôle.");
+  const needsOnboarding = !user.value.role;
+
+  if (needsOnboarding) {
+    router.push("/auth/onboarding");
+    return;
+  }
+
+  switch (user.value.role) {
+    case "freelance":
+      if (user.value.slug) router.push(`/entreprise/${user.value.slug}`);
+      else router.push("/auth/onboarding");
+      break;
+    case "client":
+      router.push("/client");
+      break;
+    case "admin":
+      router.push("/admin");
+      break;
+    default:
+      router.push("/auth/onboarding");
   }
 }
 </script>

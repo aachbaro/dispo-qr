@@ -4,17 +4,21 @@
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - GET  /api/missions → liste les missions de l'utilisateur connecté
-//   - POST /api/missions → crée une mission
+//   - GET  /api/missions → liste les missions selon le rôle utilisateur
+//   - POST /api/missions → création d'une mission
 //
 // 🔒 Règles d’accès :
-//   - Auth obligatoire
-//   - Entreprise/freelance/admin → missions de leur entreprise
-//   - Client → missions où client_id = user.id
-//   - Public (non connecté) → POST autorisé mais mission sans client_id/entreprise_id
+//   - Auth obligatoire pour GET
+//   - POST :
+//       • freelance / entreprise / admin → création complète
+//       • client → création liée à son compte
+//       • public (non connecté) → création autorisée, mission anonyme
 //
 // ⚠️ Remarques :
-//   - Retourne toujours slots + entreprise + client liés
+//   - Inclut toujours slots + entreprise + client
+//   - Rôle issu de user.role (AuthUser enrichi)
+//   - Suppression totale de user_metadata / app_metadata
+//
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -29,38 +33,45 @@ interface MissionWithRelations extends Tables<"missions"> {
   client?: Tables<"clients"> | null;
 }
 
-const ENTREPRISE_ROLES = new Set(["entreprise", "freelance", "admin"]);
+const ENTREPRISE_ROLES = new Set(["freelance", "entreprise", "admin"]);
 const MISSION_SELECT =
   "*, slots(*), entreprise:entreprise_id(*), client:client_id(*)";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const user = await getUserFromToken(req);
-    const role = user?.user_metadata?.role || user?.app_metadata?.role || null;
+    // 🔑 Auth facultative pour POST public
+    const user = await getUserFromToken(req).catch(() => null);
+    const role = user?.role ?? null;
 
-    // ---------------- GET ----------------
+    // -------------------------------------------------------------
+    // 📖 GET → Liste des missions
+    // -------------------------------------------------------------
     if (req.method === "GET") {
       if (!user || !role) {
         return res.status(401).json({ error: "❌ Authentification requise" });
       }
 
-      // --- Entreprise / Freelance / Admin ---
+      // ----- Freelance / Entreprise / Admin -----
       if (ENTREPRISE_ROLES.has(role)) {
-        const entrepriseLookup =
+        const entrepriseRef =
           (req.query.entreprise_ref as string | undefined) ||
           (req.query.entreprise_id as string | undefined) ||
-          user.user_metadata?.entreprise_id ||
+          user.slug || // ton AuthUser enrichi contient slug de l’entreprise
           user.id;
 
         const { data: entreprise, error: entrepriseError } =
-          await findEntreprise(entrepriseLookup);
+          await findEntreprise(entrepriseRef);
 
-        if (entrepriseError)
+        if (entrepriseError) {
+          console.error("❌ Erreur fetch entreprise:", entrepriseError.message);
           return res.status(500).json({ error: entrepriseError.message });
-        if (!entreprise)
+        }
+        if (!entreprise) {
           return res.status(404).json({ error: "❌ Entreprise introuvable" });
-        if (!canAccessSensitive(user, entreprise))
+        }
+        if (!canAccessSensitive(user, entreprise)) {
           return res.status(403).json({ error: "❌ Accès interdit" });
+        }
 
         const { status } = req.query;
         let query = supabaseAdmin
@@ -74,14 +85,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const { data, error } = await query;
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+          console.error("❌ Erreur fetch missions entreprise:", error.message);
+          return res.status(500).json({ error: error.message });
+        }
 
-        return res
-          .status(200)
-          .json({ missions: data as MissionWithRelations[] });
+        return res.status(200).json({ missions: data ?? [] });
       }
 
-      // --- Client ---
+      // ----- Client -----
       if (role === "client") {
         const { data, error } = await supabaseAdmin
           .from("missions")
@@ -89,41 +101,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq("client_id", user.id)
           .order("created_at", { ascending: false });
 
-        if (error) return res.status(500).json({ error: error.message });
+        if (error) {
+          console.error("❌ Erreur fetch missions client:", error.message);
+          return res.status(500).json({ error: error.message });
+        }
 
-        return res
-          .status(200)
-          .json({ missions: data as MissionWithRelations[] });
+        return res.status(200).json({ missions: data ?? [] });
       }
 
       return res.status(403).json({ error: "❌ Rôle non autorisé" });
     }
 
-    // ---------------- POST ----------------
+    // -------------------------------------------------------------
+    // ✏️ POST → Création d'une mission
+    // -------------------------------------------------------------
     if (req.method === "POST") {
       const payload =
         typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
       const { slots, entreprise_ref, ...missionPayload } = payload;
-      console.log("payload", payload);
 
-      // --- Entreprise / Freelance / Admin ---
-      if (user && role && ENTREPRISE_ROLES.has(role)) {
+      // ----- Freelance / Entreprise / Admin -----
+      if (user && ENTREPRISE_ROLES.has(role ?? "")) {
+        const entrepriseRef =
+          missionPayload?.entreprise_id ??
+          entreprise_ref ??
+          user.slug ??
+          user.id;
+
         const { data: entreprise, error: entrepriseError } =
-          await findEntreprise(
-            missionPayload?.entreprise_id ??
-              entreprise_ref ??
-              user.user_metadata?.entreprise_id ??
-              user.id
-          );
+          await findEntreprise(entrepriseRef);
 
-        if (entrepriseError)
+        if (entrepriseError) {
+          console.error("❌ Erreur fetch entreprise:", entrepriseError.message);
           return res.status(500).json({ error: entrepriseError.message });
-        if (!entreprise)
+        }
+        if (!entreprise) {
           return res.status(404).json({ error: "❌ Entreprise introuvable" });
-        if (!canAccessSensitive(user, entreprise))
+        }
+        if (!canAccessSensitive(user, entreprise)) {
           return res.status(403).json({ error: "❌ Accès interdit" });
+        }
 
-        // 🔑 Ici on force entreprise_id avec l'id résolu
         const { data: mission, error: missionError } = await supabaseAdmin
           .from("missions")
           .insert({
@@ -135,15 +153,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .select()
           .single();
 
-        if (missionError)
+        if (missionError) {
+          console.error("❌ Erreur création mission:", missionError.message);
           return res.status(500).json({ error: missionError.message });
+        }
 
         if (slots?.length) {
           await supabaseAdmin.from("slots").insert(
             slots.map((s: any) => ({
               ...s,
               mission_id: mission.id,
-              entreprise_id: entreprise.id, // ✅ attach slots à la bonne entreprise
+              entreprise_id: entreprise.id,
             }))
           );
         }
@@ -151,9 +171,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(201).json({ mission });
       }
 
-      // --- Client connecté ---
+      // ----- Client connecté -----
       if (user && role === "client") {
-        // ⚡ Ici on map aussi entreprise_ref si fourni
         let entrepriseId: number | null = null;
         if (entreprise_ref) {
           const { data: entreprise } = await findEntreprise(entreprise_ref);
@@ -171,8 +190,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .select()
           .single();
 
-        if (missionError)
+        if (missionError) {
+          console.error(
+            "❌ Erreur création mission client:",
+            missionError.message
+          );
           return res.status(500).json({ error: missionError.message });
+        }
 
         if (slots?.length) {
           await supabaseAdmin.from("slots").insert(
@@ -187,7 +211,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(201).json({ mission });
       }
 
-      // --- Public (non connecté) ---
+      // ----- Public non connecté -----
       if (!user) {
         let entrepriseId: number | null = null;
 
@@ -195,10 +219,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { data: entreprise, error: entrepriseError } =
             await findEntreprise(entreprise_ref);
 
-          if (entrepriseError)
+          if (entrepriseError) {
+            console.error(
+              "❌ Erreur fetch entreprise (public):",
+              entrepriseError.message
+            );
             return res.status(500).json({ error: entrepriseError.message });
-          if (!entreprise)
+          }
+          if (!entreprise) {
             return res.status(404).json({ error: "❌ Entreprise introuvable" });
+          }
 
           entrepriseId = entreprise.id;
         }
@@ -207,15 +237,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from("missions")
           .insert({
             ...missionPayload,
-            entreprise_id: entrepriseId, // ⚡ toujours rattaché à une entreprise
-            client_id: null, // ⚡ jamais pour public
+            entreprise_id: entrepriseId,
+            client_id: null,
             status: "proposed",
           })
           .select()
           .single();
 
-        if (missionError)
+        if (missionError) {
+          console.error(
+            "❌ Erreur création mission publique:",
+            missionError.message
+          );
           return res.status(500).json({ error: missionError.message });
+        }
 
         if (slots?.length) {
           await supabaseAdmin.from("slots").insert(
@@ -231,9 +266,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // -------------------------------------------------------------
+    // 🚫 Méthode non autorisée
+    // -------------------------------------------------------------
     return res.status(405).json({ error: "❌ Méthode non autorisée" });
   } catch (err: any) {
-    console.error("❌ Exception missions/index:", err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    console.error("💥 Exception /api/missions/index:", err);
+    return res.status(500).json({ error: err.message || "Erreur serveur" });
   }
 }

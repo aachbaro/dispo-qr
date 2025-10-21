@@ -3,12 +3,19 @@
 // Générateur de lien de paiement Stripe pour une facture
 // -------------------------------------------------------------
 //
-// 📌 Endpoint :
-//   - POST /api/factures/[id]/payment-link
+// 📌 Description :
+//   - POST /api/factures/[id]/payment-link → génère un lien Stripe Checkout
 //
-// 🔒 Règles d'accès :
-//   - Auth obligatoire
-//   - Réservé au propriétaire de l'entreprise ou admin
+// 🔒 Règles d’accès :
+//   - Authentification obligatoire (JWT Supabase)
+//   - Rôle requis : "freelance", "entreprise" ou "admin"
+//   - Accès restreint aux factures appartenant à l’entreprise du user
+//
+// ⚠️ Remarques :
+//   - Les anciens champs user_metadata/app_metadata ne sont plus utilisés
+//   - Validation du montant TTC avant création de la session
+//   - Met à jour la facture avec le lien + session Stripe
+//
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -19,13 +26,16 @@ import { getUserFromToken } from "../../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../../_lib/entreprise.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-const ENTREPRISE_ROLES = new Set(["entreprise", "freelance", "admin"]);
+const ENTREPRISE_ROLES = new Set(["freelance", "entreprise", "admin"]);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query;
 
+  // --------------------------
+  // ⚙️ Validation de base
+  // --------------------------
   if (!id || Array.isArray(id)) {
-    return res.status(400).json({ error: "❌ Paramètres invalides" });
+    return res.status(400).json({ error: "❌ Paramètre ID invalide" });
   }
 
   if (req.method !== "POST") {
@@ -38,19 +48,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // 🔑 Authentification
     const user = await getUserFromToken(req);
     if (!user) {
       return res.status(401).json({ error: "❌ Non authentifié" });
     }
 
-    const role =
-      (user.user_metadata?.role as string | undefined) ||
-      (user.app_metadata?.role as string | undefined);
-
+    const role = user.role;
     if (!ENTREPRISE_ROLES.has(role ?? "")) {
-      return res.status(403).json({ error: "❌ Accès réservé au propriétaire" });
+      return res
+        .status(403)
+        .json({ error: "❌ Accès réservé aux entreprises" });
     }
 
+    // 🧾 Récupération de la facture
     const { data: factureRecord, error: factureError } = await supabaseAdmin
       .from("factures")
       .select("*, entreprise:entreprise_id(*)")
@@ -73,13 +84,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: "❌ Facture introuvable" });
     }
 
+    // 🏢 Récupération et vérification de l’entreprise liée
     let entreprise = factureRecord.entreprise || null;
-
     if (!entreprise) {
       const { data, error } = await findEntreprise(factureRecord.entreprise_id);
       if (error) {
         console.error(
-          "❌ Erreur fetch entreprise facture (payment-link):",
+          "❌ Erreur fetch entreprise (payment-link):",
           error.message
         );
         return res.status(500).json({ error: error.message });
@@ -91,10 +102,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: "❌ Accès interdit" });
     }
 
+    // 💰 Validation du montant
     if (!factureRecord.montant_ttc || factureRecord.montant_ttc <= 0) {
-      return res.status(400).json({ error: "❌ Montant facture invalide" });
+      return res.status(400).json({ error: "❌ Montant TTC invalide" });
     }
 
+    // -------------------------------------------------------------
+    // 💳 Création session Stripe Checkout
+    // -------------------------------------------------------------
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_creation: "if_required",
@@ -122,6 +137,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
+    // -------------------------------------------------------------
+    // 🧾 Mise à jour facture en base
+    // -------------------------------------------------------------
     const { error: updateError } = await supabaseAdmin
       .from("factures")
       .update({
@@ -134,14 +152,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (updateError) {
       console.error("❌ Erreur sauvegarde lien paiement:", updateError.message);
-      return res
-        .status(500)
-        .json({ error: "❌ Impossible de sauvegarder le lien" });
+      return res.status(500).json({ error: "❌ Sauvegarde du lien échouée" });
     }
 
+    // ✅ Retour du lien de paiement
     return res.status(200).json({ url: session.url });
   } catch (err: any) {
-    console.error("❌ Exception facture/payment-link :", err);
-    return res.status(500).json({ error: "Erreur serveur" });
+    console.error("💥 Exception /api/factures/[id]/payment-link:", err);
+    return res.status(500).json({ error: err.message || "Erreur serveur" });
   }
 }

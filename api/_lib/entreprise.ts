@@ -28,14 +28,16 @@ export async function findEntreprise(ref: string | number) {
   let query = supabaseAdmin.from("entreprise").select("*");
 
   if (typeof ref === "number" || !isNaN(Number(ref))) {
-    // Recherche par id numérique
+    // Recherche par ID numérique
     query = query.eq("id", Number(ref));
-  } else if (typeof ref === "string" && /^[0-9a-fA-F-]{36}$/.test(ref)) {
-    // Recherche par user_id (UUID)
-    query = query.eq("user_id", ref);
-  } else {
-    // Recherche par slug
-    query = query.eq("slug", ref);
+  } else if (typeof ref === "string") {
+    // UUID → recherche par user_id
+    if (/^[0-9a-fA-F-]{8}-[0-9a-fA-F-]{4}-/.test(ref)) {
+      query = query.eq("user_id", ref);
+    } else {
+      // Slug (ex: "adam-achbarou")
+      query = query.eq("slug", ref);
+    }
   }
 
   return query.single<Tables<"entreprise">>();
@@ -45,11 +47,22 @@ export async function findEntreprise(ref: string | number) {
 // 🔒 Permissions
 // ----------------------
 export function canAccessSensitive(
-  user: any,
+  user: { id: string; role?: string | null } | null,
   entreprise: Tables<"entreprise">
 ): boolean {
-  if (!user) return false;
-  if (user.id === entreprise.user_id) return true;
-  if (user.app_metadata?.role === "admin") return true;
+  console.log(
+    "🔒 Vérification accès sensible pour user:",
+    user,
+    "et entreprise:",
+    entreprise
+  );
+  if (!user || !entreprise) return false;
+
+  // 👇 Le propriétaire (freelance) de l'entreprise
+  if (entreprise.user_id === user.id) return true;
+
+  // 👇 Les admins ont toujours accès
+  if (user.role === "admin") return true;
+
   return false;
 }

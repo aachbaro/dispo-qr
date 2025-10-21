@@ -1,19 +1,26 @@
 // api/auth/register.ts
 // -------------------------------------------------------------
-// Route : /api/auth/register
+// Création d’un nouvel utilisateur
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - POST : Crée un nouvel utilisateur dans Supabase Auth
-//   - Ajoute un profil dans la table `profiles`
-//   - Si role = "freelance", crée aussi une entrée dans `entreprise`
+//   - Crée un utilisateur Supabase Auth
+//   - Initialise son profil dans la table `profiles`
+//   - Si role = "freelance" → crée aussi une entreprise liée
 //   - Génère un slug unique pour l’entreprise
 //
-// 📍 Endpoints :
+// 📍 Endpoint :
 //   - POST /api/auth/register
 //
 // 🔒 Règles d’accès :
-//   - Utilise la clé service role (supabaseAdmin)
+//   - Public (clé SERVICE côté backend)
+//   - Validation stricte des champs requis
+//
+// ⚠️ Remarques :
+//   - Compatible avec le modèle AuthUser enrichi
+//   - Ne dépend plus de user_metadata (profil toujours dans `profiles`)
+//   - Garantit cohérence entre Auth, profiles, entreprise
+//
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -21,7 +28,7 @@ import { supabaseAdmin } from "../_supabase.js";
 import type { TablesInsert } from "../../types/database.js";
 
 // ----------------------
-// Helpers
+// Helper : génération slug unique
 // ----------------------
 async function generateUniqueSlug(
   nom: string,
@@ -66,6 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { email, password, role, entreprise } = req.body;
 
+  // ✅ Validation des champs
   if (!email || !password || !role) {
     return res.status(400).json({ error: "❌ Champs obligatoires manquants" });
   }
@@ -74,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 1️⃣ Créer l’utilisateur
+    // 1️⃣ Création de l’utilisateur Supabase Auth
     const {
       data: { user },
       error: signUpError,
@@ -82,29 +90,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       email,
       password,
       email_confirm: true,
-      user_metadata: { role },
     });
 
     if (signUpError || !user) {
       console.error("❌ Erreur création user:", signUpError);
-      return res
-        .status(500)
-        .json({ error: signUpError?.message || "Erreur création utilisateur" });
-    }
-
-    // 2️⃣ Créer le profil
-    const { error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .insert([{ id: user.id, role }]);
-
-    if (profileError) {
-      console.error("❌ Erreur création profile:", profileError.message);
-      return res.status(500).json({ error: "Erreur création profile" });
+      return res.status(500).json({
+        error: signUpError?.message || "Erreur création utilisateur",
+      });
     }
 
     let createdEntreprise = null;
 
-    // 3️⃣ Si freelance → créer une entreprise
+    // 2️⃣ Création du profil utilisateur
+    const profileData: TablesInsert<"profiles"> = {
+      id: user.id,
+      email,
+      role,
+      first_name: entreprise?.prenom ?? null,
+      last_name: entreprise?.nom ?? null,
+    };
+
+    const { error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .insert([profileData]);
+
+    if (profileError) {
+      console.error("❌ Erreur création profil:", profileError.message);
+      return res.status(500).json({ error: "Erreur création profil" });
+    }
+
+    // 3️⃣ Si freelance → créer l’entreprise correspondante
     if (role === "freelance") {
       if (!entreprise?.nom || !entreprise?.prenom) {
         return res.status(400).json({ error: "Nom et prénom requis" });
@@ -153,35 +168,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       createdEntreprise = ent;
 
-      // 🔄 Mettre à jour metadata user
-      const { error: updateError } =
-        await supabaseAdmin.auth.admin.updateUserById(user.id, {
-          user_metadata: {
-            role,
-            slug: ent.slug,
-            nom: ent.nom,
-            prenom: ent.prenom,
-          },
-        });
+      // 4️⃣ Synchronisation du profil avec le slug
+      const { error: updateProfileError } = await supabaseAdmin
+        .from("profiles")
+        .update({ slug: ent.slug })
+        .eq("id", user.id);
 
-      if (updateError) {
-        console.error("⚠️ Erreur mise à jour metadata:", updateError.message);
+      if (updateProfileError) {
+        console.warn(
+          "⚠️ Erreur mise à jour slug profil:",
+          updateProfileError.message
+        );
       }
     }
 
-    // 4️⃣ Réponse finale
+    // 5️⃣ Réponse finale
     return res.status(201).json({
       user: {
         id: user.id,
-        email: user.email,
+        email,
         role,
         slug: createdEntreprise?.slug ?? null,
       },
-      profile: { role },
+      profile: {
+        id: user.id,
+        role,
+        first_name: entreprise?.prenom ?? null,
+        last_name: entreprise?.nom ?? null,
+      },
       entreprise: createdEntreprise,
     });
   } catch (err: any) {
-    console.error("❌ Exception register:", err);
+    console.error("💥 Exception /api/auth/register:", err);
     return res.status(500).json({ error: err.message || "Erreur serveur" });
   }
 }

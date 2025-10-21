@@ -63,7 +63,10 @@ export async function listFactures(
   const query = searchParams.toString();
 
   return request<{ factures: FactureWithRelations[] }>(
-    `/api/factures${query ? `?${query}` : ""}`
+    `/api/factures${query ? `?${query}` : ""}`,
+    {
+      skipAuth: false,
+    }
   );
 }
 
@@ -123,10 +126,9 @@ export async function deleteEntrepriseFacture(
 export async function generateFacturePaymentLink(
   factureId: number
 ): Promise<{ url: string }> {
-  return request<{ url: string }>(
-    `/api/factures/${factureId}/payment-link`,
-    { method: "POST" }
-  );
+  return request<{ url: string }>(`/api/factures/${factureId}/payment-link`, {
+    method: "POST",
+  });
 }
 
 /**

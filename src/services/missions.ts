@@ -76,7 +76,10 @@ export async function listMissions(
   const query = searchParams.toString();
 
   return request<{ missions: MissionWithRelations[] }>(
-    `/api/missions${query ? `?${query}` : ""}`
+    `/api/missions${query ? `?${query}` : ""}`,
+    {
+      skipAuth: false,
+    }
   );
 }
 
