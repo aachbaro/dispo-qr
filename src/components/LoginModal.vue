@@ -1,3 +1,16 @@
+<!-- src/components/LoginModal.vue -->
+<!-- -------------------------------------------------------------
+ Modal de connexion utilisateur (email/password ou OAuth Google)
+---------------------------------------------------------------
+
+📌 Description :
+  - Permet à l'utilisateur de se connecter manuellement
+  - Propose une connexion rapide via Google OAuth
+
+🔒 Règles d’accès :
+  - Public
+------------------------------------------------------------- -->
+
 <template>
   <Transition name="fade">
     <div
@@ -30,6 +43,22 @@
             class="w-full rounded-lg border border-back-300 px-3 py-2"
           />
           <p v-if="error" class="text-sm text-red-600">{{ error }}</p>
+
+          <!-- Divider -->
+          <div class="flex items-center gap-2 text-gray-400">
+            <hr class="flex-1 border-gray-300" />
+            <span class="text-sm">ou</span>
+            <hr class="flex-1 border-gray-300" />
+          </div>
+
+          <!-- Bouton Google -->
+          <button
+            type="button"
+            class="w-full px-4 py-2 rounded bg-red-500 text-white font-semibold hover:bg-red-600"
+            @click="handleGoogle"
+          >
+            Continuer avec Google
+          </button>
         </div>
 
         <div class="px-5 py-4 border-t flex justify-end gap-2">
@@ -58,7 +87,8 @@
 import { ref } from "vue";
 import { useAuth } from "../composables/useAuth";
 import { supabase } from "../services/supabase";
-import type { AuthUser } from "../services/auth"; // ton type custom
+import { signInWithGoogle } from "../services/auth";
+import type { AuthUser } from "../services/auth";
 
 const props = defineProps({
   open: Boolean,
@@ -90,17 +120,14 @@ async function handleLogin() {
     if (signInError) throw signInError;
     if (!data.user) throw new Error("Connexion échouée");
 
-    // 👉 Mapper User → AuthUser
     const authUser: AuthUser = {
       id: data.user.id,
-      email: data.user.email ?? "", // force string
+      email: data.user.email ?? "",
       role: data.user.user_metadata?.role,
       slug: data.user.user_metadata?.slug,
       nom: data.user.user_metadata?.nom,
       prenom: data.user.user_metadata?.prenom,
     };
-
-    console.log("✅ Login réussi:", authUser);
 
     setUser(authUser);
     emit("logged", authUser);
@@ -110,6 +137,15 @@ async function handleLogin() {
     console.error(err);
   } finally {
     loading.value = false;
+  }
+}
+
+/** 🔐 Connexion Google */
+async function handleGoogle() {
+  try {
+    await signInWithGoogle(); // redirige vers /auth/callback
+  } catch (err: any) {
+    error.value = err.message || "Erreur Google Sign-In.";
   }
 }
 </script>
