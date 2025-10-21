@@ -32,7 +32,7 @@
         v-else
         :entreprise="entreprise"
         :is-owner="isOwner"
-        @updated="entreprise = $event"
+        @updated="onEntrepriseUpdated"
       />
 
       <!-- Bouton ajouter en contact (si client et pas owner) -->
@@ -50,15 +50,20 @@
     >
       <Agenda
         v-if="entreprise"
-        :ref-id="entreprise.id"
         :slug="entreprise.slug"
         :is-admin="isOwner"
+        :slots="overview?.slots"
+        :unavailabilities="overview?.unavailabilities"
       />
     </div>
 
     <!-- Missions -->
     <div class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg">
-      <MissionList v-if="entreprise" :is-owner="isOwner" />
+      <MissionList
+        v-if="entreprise"
+        :is-owner="isOwner"
+        :missions="overview?.missions"
+      />
     </div>
 
     <!-- Factures -->
@@ -68,8 +73,10 @@
     >
       <FactureList
         :entreprise="entreprise"
+        :factures="overview?.factures"
         @edit="onEditFacture"
         @deleted="onDeletedFacture"
+        @updated="onFactureUpdated"
       />
     </div>
   </div>
@@ -79,7 +86,7 @@
 import { ref, onMounted, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useAuth } from "../composables/useAuth";
-import { getEntreprise } from "../services/entreprises";
+import { getEntrepriseOverview } from "../services/entreprises";
 
 import Agenda from "../components/agenda/Agenda.vue";
 import MissionList from "../components/missions/MissionList.vue";
@@ -88,17 +95,13 @@ import FactureList from "../components/factures/FactureList.vue";
 import AddContactButton from "../components/AddContactButton.vue";
 
 const route = useRoute();
-const entreprise = ref<any>(null);
+const overview = ref<any>(null);
+const entreprise = computed(() => overview.value?.entreprise ?? null);
+const isOwner = computed(() => overview.value?.mode === "owner");
 const loading = ref(true);
 
-const { user, ready } = useAuth(); // 👈 attend que useAuth soit prêt
+const { user, ready } = useAuth();
 
-// 👇 Vérifie si le user connecté est propriétaire (même slug)
-const isOwner = computed(() => user.value?.slug === route.params.slug);
-
-// ----------------------
-// Fonction principale de fetch
-// ----------------------
 async function fetchEntrepriseData(slug: string) {
   if (!slug) {
     console.warn("⚠️ Slug manquant, requête annulée");
@@ -107,56 +110,69 @@ async function fetchEntrepriseData(slug: string) {
 
   try {
     loading.value = true;
-    console.log("🔍 Chargement entreprise pour slug :", slug);
-    console.log("👤 User connecté :", user.value);
-    console.log("🔑 isOwner :", isOwner.value);
-
-    let e;
-    if (isOwner.value) {
-      // 🔑 Owner → accès complet
-      ({ entreprise: e } = await getEntreprise(slug, { forceAuth: true }));
-    } else {
-      // 👤 Accès public
-      ({ entreprise: e } = await getEntreprise(slug));
-    }
-
-    entreprise.value = e;
+    const data = await getEntrepriseOverview(slug, { forceAuth: true });
+    overview.value = data;
   } catch (err) {
-    console.error("❌ Erreur chargement entreprise :", err);
+    console.error("❌ Erreur chargement entreprise:", err);
   } finally {
     loading.value = false;
   }
 }
 
-// ----------------------
-// Lifecycle
-// ----------------------
 onMounted(async () => {
-  // ⏳ attend que l’auth soit prête
   await ready();
 
   const slug = route.params.slug as string | undefined;
   if (!slug) {
     console.warn("⚠️ Aucun slug dans l’URL → fetch annulé");
+    loading.value = false;
     return;
   }
 
   await fetchEntrepriseData(slug);
 
-  // 🌀 Recharger si user ou slug changent (ex : après login ou navigation)
-  watch([() => user.value, () => route.params.slug], ([u, newSlug]) => {
-    if (u && newSlug) fetchEntrepriseData(newSlug as string);
-  });
+  watch(
+    [() => user.value, () => route.params.slug],
+    ([, newSlug]) => {
+      if (typeof newSlug === "string") {
+        fetchEntrepriseData(newSlug);
+      }
+    }
+  );
 });
 
-// ----------------------
-// Handlers factures
-// ----------------------
+function onEntrepriseUpdated(updated: any) {
+  if (!overview.value) return;
+  overview.value = {
+    ...overview.value,
+    entreprise: updated,
+  };
+}
+
 function onEditFacture(facture: any) {
   console.log("✏️ Éditer facture", facture);
 }
 
+function onFactureUpdated(facture: any) {
+  if (!overview.value) return;
+  const current = overview.value.factures ?? [];
+  const exists = current.some((f: any) => f.id === facture.id);
+  const nextFactures = exists
+    ? current.map((f: any) => (f.id === facture.id ? facture : f))
+    : [facture, ...current];
+  overview.value = {
+    ...overview.value,
+    factures: nextFactures,
+  };
+}
+
 function onDeletedFacture(id: number) {
+  if (overview.value?.factures) {
+    overview.value = {
+      ...overview.value,
+      factures: overview.value.factures.filter((f: any) => f.id !== id),
+    };
+  }
   console.log("🗑️ Facture supprimée", id);
 }
 </script>

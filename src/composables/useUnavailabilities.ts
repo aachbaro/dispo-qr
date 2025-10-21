@@ -38,7 +38,13 @@ const error = ref<string | null>(null);
 // ----------------------
 // Composable principal
 // ----------------------
-export function useUnavailabilities(slug: string) {
+export function useUnavailabilities(
+  slug: string,
+  initialData?: Unavailability[]
+) {
+  if (initialData) {
+    unavailabilities.value = initialData;
+  }
   // Charger les indisponibilités pour une période donnée
   async function loadUnavailabilities(start: string, end: string) {
     try {
@@ -95,6 +101,10 @@ export function useUnavailabilities(slug: string) {
     }
   }
 
+  function setUnavailabilities(data: Unavailability[]) {
+    unavailabilities.value = data;
+  }
+
   return {
     unavailabilities,
     loading,
@@ -103,5 +113,6 @@ export function useUnavailabilities(slug: string) {
     addUnavailability,
     editUnavailability,
     removeUnavailability,
+    setUnavailabilities,
   };
 }

@@ -12,33 +12,61 @@
         v-for="mission in missions"
         :key="mission.id"
         :mission="mission"
-        @updated="fetchMissions"
+        @updated="() => fetchMissions(true)"
       />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted, watch, computed } from "vue";
 import { listMissions, type MissionWithRelations } from "../../services/missions";
 import MissionCard from "./MissionCard.vue";
 
 const props = defineProps<{
   isOwner: boolean; // indique si l’utilisateur est admin de cette entreprise
+  missions?: MissionWithRelations[];
 }>();
 
-const missions = ref<MissionWithRelations[]>([]);
-const loading = ref(false);
+const internalMissions = ref<MissionWithRelations[]>([]);
+const externalMissions = ref<MissionWithRelations[]>([]);
+const internalLoading = ref(false);
 
-async function fetchMissions() {
-  loading.value = true;
+const hasExternalMissions = computed(() => props.missions !== undefined);
+
+watch(
+  () => props.missions,
+  (value) => {
+    if (value) {
+      externalMissions.value = [...value];
+    } else {
+      externalMissions.value = [];
+    }
+  },
+  { immediate: true, deep: true }
+);
+
+const missions = computed(() =>
+  hasExternalMissions.value ? externalMissions.value : internalMissions.value
+);
+const loading = computed(() =>
+  hasExternalMissions.value ? false : internalLoading.value
+);
+
+async function fetchMissions(force = false) {
+  if (hasExternalMissions.value && !force) return;
+  internalLoading.value = true;
   try {
     const { missions: data } = await listMissions();
-    missions.value = data;
+    if (hasExternalMissions.value) {
+      externalMissions.value = data;
+    } else {
+      internalMissions.value = data;
+    }
   } catch (err) {
     console.error("❌ Erreur récupération missions:", err);
   } finally {
-    loading.value = false;
+    internalLoading.value = false;
   }
 }
 
@@ -56,4 +84,13 @@ onMounted(() => {
     fetchMissions();
   }
 });
+
+watch(
+  () => props.missions,
+  (value) => {
+    if (value === undefined && props.isOwner) {
+      fetchMissions();
+    }
+  }
+);
 </script>

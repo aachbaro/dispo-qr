@@ -85,6 +85,31 @@ export async function getEntreprise(
 }
 
 /**
+ * 🌐 Vue globale d'une entreprise (publique ou propriétaire)
+ *
+ * Retourne :
+ * - Si owner/admin → missions, factures, slots, unavailabilities
+ * - Si visiteur → slots publics, unavailabilities, infos publiques
+ */
+export async function getEntrepriseOverview(
+  ref: string,
+  opts: { forceAuth?: boolean } = {}
+): Promise<{
+  mode: "owner" | "public";
+  entreprise: any;
+  missions?: any[];
+  factures?: any[];
+  slots: any[];
+  unavailabilities: any[];
+}> {
+  const isPublic = !opts.forceAuth;
+  return request(
+    `/api/entreprises/${ref}/overview`,
+    { skipAuth: isPublic }
+  );
+}
+
+/**
  * ✏️ Mettre à jour une entreprise (owner uniquement)
  */
 export async function updateEntreprise(

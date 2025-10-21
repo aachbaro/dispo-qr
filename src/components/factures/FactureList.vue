@@ -83,11 +83,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useFactures } from "../../composables/useFactures";
 import { useAuth } from "../../composables/useAuth";
 import FactureCard from "./FactureCard.vue";
 import FactureModal from "./FactureModal.vue";
+import type { FactureWithRelations } from "../../services/factures";
 
 // ----------------------
 // Props & Emits
@@ -95,6 +96,7 @@ import FactureModal from "./FactureModal.vue";
 const props = defineProps<{
   entreprise?: any;
   readonly?: boolean;
+  factures?: FactureWithRelations[];
 }>();
 
 const emit = defineEmits(["edit", "deleted", "updated"]);
@@ -103,7 +105,33 @@ const emit = defineEmits(["edit", "deleted", "updated"]);
 // Composables
 // ----------------------
 const { user } = useAuth();
-const { factures, loading, fetchFactures } = useFactures();
+const {
+  factures: storeFactures,
+  loading: storeLoading,
+  fetchFactures,
+} = useFactures();
+
+const hasExternalFactures = computed(() => props.factures !== undefined);
+const externalFactures = ref<FactureWithRelations[]>([]);
+
+watch(
+  () => props.factures,
+  (value) => {
+    if (value) {
+      externalFactures.value = [...value];
+    } else {
+      externalFactures.value = [];
+    }
+  },
+  { immediate: true, deep: true }
+);
+
+const factures = computed(() =>
+  hasExternalFactures.value ? externalFactures.value : storeFactures.value
+);
+const loading = computed(() =>
+  hasExternalFactures.value ? false : storeLoading.value
+);
 
 // ----------------------
 // State
@@ -126,7 +154,9 @@ const canAddFacture = computed(() => {
 // Lifecycle
 // ----------------------
 onMounted(() => {
-  fetchFactures();
+  if (!hasExternalFactures.value) {
+    fetchFactures();
+  }
 });
 
 // ----------------------
@@ -137,10 +167,20 @@ function onEdit(facture: any) {
 }
 
 function onDeleted(id: number) {
+  if (hasExternalFactures.value) {
+    externalFactures.value = externalFactures.value.filter(
+      (f) => f.id !== id
+    );
+  }
   emit("deleted", id);
 }
 
-function onUpdated(facture: any) {
+function onUpdated(facture: FactureWithRelations) {
+  if (hasExternalFactures.value) {
+    externalFactures.value = externalFactures.value.map((f) =>
+      f.id === facture.id ? facture : f
+    );
+  }
   emit("updated", facture);
 }
 
@@ -149,8 +189,13 @@ function onUpdated(facture: any) {
  * - ferme le modal
  * - recharge la liste
  */
-async function onFactureCreated() {
+async function onFactureCreated(facture: FactureWithRelations) {
   openModal.value = false;
+  if (hasExternalFactures.value) {
+    externalFactures.value = [facture, ...externalFactures.value];
+    emit("updated", facture);
+    return;
+  }
   await fetchFactures();
 }
 </script>
