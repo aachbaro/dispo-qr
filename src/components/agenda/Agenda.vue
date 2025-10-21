@@ -114,7 +114,7 @@
 // -------------------------------------------------------------
 // Imports
 // -------------------------------------------------------------
-import { ref } from "vue";
+import { ref, watch, computed } from "vue";
 import AgendaHeader from "./AgendaHeader.vue";
 import AgendaDayColumn from "./AgendaDayColumn.vue";
 import SelectionPopup from "../SelectionPopup.vue";
@@ -131,6 +131,7 @@ import {
   deleteUnavailability,
 } from "../../services/unavailabilities";
 import type { Slot } from "../../services/slots";
+import type { Unavailability } from "../../services/unavailabilities";
 
 // -------------------------------------------------------------
 // Props
@@ -138,7 +139,13 @@ import type { Slot } from "../../services/slots";
 const props = defineProps<{
   slug: string;
   isAdmin: boolean;
+  slots?: Slot[];
+  unavailabilities?: Unavailability[];
 }>();
+
+const hasExternalData = computed(
+  () => props.slots !== undefined && props.unavailabilities !== undefined
+);
 
 // -------------------------------------------------------------
 // Navigation (semaines, dates)
@@ -165,7 +172,33 @@ const {
   slotStyle,
   formatHour,
   fetchCurrentWeek,
-} = useAgendaSlots(props.slug, props.isAdmin, activeWeek);
+  setSlots,
+  setUnavailabilities,
+} = useAgendaSlots(props.slug, props.isAdmin, activeWeek, {
+  initialSlots: props.slots,
+  initialUnavailabilities: props.unavailabilities,
+  disableAutoFetch: hasExternalData.value,
+});
+
+watch(
+  () => props.slots,
+  (value) => {
+    if (value) {
+      setSlots(value);
+    }
+  },
+  { deep: true }
+);
+
+watch(
+  () => props.unavailabilities,
+  (value) => {
+    if (value) {
+      setUnavailabilities(value);
+    }
+  },
+  { deep: true }
+);
 
 // -------------------------------------------------------------
 // Sélection (création client / admin + popups)

@@ -50,10 +50,17 @@ export type AgendaDisplaySlot =
 // -------------------------------------------------------------
 // Composable principal
 // -------------------------------------------------------------
+type AgendaSlotsOptions = {
+  initialSlots?: Slot[];
+  initialUnavailabilities?: Unavailability[];
+  disableAutoFetch?: boolean;
+};
+
 export function useAgendaSlots(
   slug: string,
   isAdmin: boolean,
-  activeWeek: Ref<Date>
+  activeWeek: Ref<Date>,
+  options: AgendaSlotsOptions = {}
 ) {
   // -------------------------------------------------------------
   // 🧭 État
@@ -62,7 +69,24 @@ export function useAgendaSlots(
   const loading = ref(false);
 
   // ✅ on passe maintenant le slug ici
-  const { unavailabilities, loadUnavailabilities } = useUnavailabilities(slug);
+  const { unavailabilities, loadUnavailabilities, setUnavailabilities } =
+    useUnavailabilities(slug, options.initialUnavailabilities);
+
+  function sortSlotsList(list: Slot[]) {
+    return [...list].sort(
+      (a, b) => new Date(a.start!).getTime() - new Date(b.start!).getTime()
+    );
+  }
+
+  if (options.initialSlots) {
+    slots.value = sortSlotsList(options.initialSlots);
+  }
+
+  if (options.initialUnavailabilities) {
+    setUnavailabilities(options.initialUnavailabilities);
+  }
+
+  const shouldAutoFetch = !options.disableAutoFetch;
 
   // -------------------------------------------------------------
   // 🧰 Utils internes
@@ -90,9 +114,7 @@ export function useAgendaSlots(
       ]);
 
       // ✅ Tri des slots par date de début pour cohérence
-      slots.value = slotData.sort(
-        (a, b) => new Date(a.start!).getTime() - new Date(b.start!).getTime()
-      );
+      slots.value = sortSlotsList(slotData);
     } catch (err) {
       console.error("❌ Erreur fetch slots/unavailabilities:", err);
     } finally {
@@ -100,7 +122,9 @@ export function useAgendaSlots(
     }
   }
 
-  watch(activeWeek, fetchCurrentWeek, { immediate: true });
+  if (shouldAutoFetch) {
+    watch(activeWeek, fetchCurrentWeek, { immediate: true });
+  }
 
   // -------------------------------------------------------------
   // ✏️ CRUD Slots
@@ -109,10 +133,7 @@ export function useAgendaSlots(
     if (!isAdmin) return;
     try {
       const { slot } = await createEntrepriseSlot(slug, { start, end, title });
-      slots.value.push(slot);
-      slots.value.sort(
-        (a, b) => new Date(a.start!).getTime() - new Date(b.start!).getTime()
-      );
+      slots.value = sortSlotsList([...slots.value, slot]);
     } catch (err) {
       console.error("❌ Erreur création slot:", err);
     }
@@ -139,7 +160,7 @@ export function useAgendaSlots(
   }
 
   function handleSlotCreated(slot: Slot) {
-    slots.value.push(slot);
+    slots.value = sortSlotsList([...slots.value, slot]);
   }
 
   // -------------------------------------------------------------
@@ -249,6 +270,10 @@ export function useAgendaSlots(
     slots,
     loading,
     fetchCurrentWeek,
+    setSlots: (data: Slot[]) => {
+      slots.value = sortSlotsList(data);
+    },
+    setUnavailabilities,
 
     // CRUD
     addSlot,
