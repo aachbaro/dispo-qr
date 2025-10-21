@@ -23,8 +23,8 @@
 //   - Écriture réservée à l’owner/admin
 //
 // ⚠️ Remarques :
-//   - Affiche les indisponibilités en fond gris transparent
-//   - Les heures sont basées sur une journée de 07h à 24h
+//   - En mode `overview` (disableAutoFetch = true), aucune requête réseau
+//     n’est lancée : on se base sur les données injectées côté frontend.
 // -------------------------------------------------------------
 
 import { ref, watch, computed, type Ref } from "vue";
@@ -38,6 +38,9 @@ import {
 import { useUnavailabilities } from "../useUnavailabilities";
 import type { Unavailability } from "../../services/unavailabilities";
 
+// -------------------------------------------------------------
+// Types & Interfaces
+// -------------------------------------------------------------
 export type AgendaDisplaySlot =
   | (Slot & { start: string; end: string; type: "slot"; color: string })
   | (Unavailability & {
@@ -47,15 +50,15 @@ export type AgendaDisplaySlot =
       color: string;
     });
 
-// -------------------------------------------------------------
-// Composable principal
-// -------------------------------------------------------------
 type AgendaSlotsOptions = {
   initialSlots?: Slot[];
   initialUnavailabilities?: Unavailability[];
   disableAutoFetch?: boolean;
 };
 
+// -------------------------------------------------------------
+// Composable principal
+// -------------------------------------------------------------
 export function useAgendaSlots(
   slug: string,
   isAdmin: boolean,
@@ -63,34 +66,24 @@ export function useAgendaSlots(
   options: AgendaSlotsOptions = {}
 ) {
   // -------------------------------------------------------------
-  // 🧭 État
+  // 🧭 État local
   // -------------------------------------------------------------
   const slots = ref<Slot[]>([]);
   const loading = ref(false);
+  const shouldAutoFetch = !options.disableAutoFetch;
 
-  // ✅ on passe maintenant le slug ici
   const { unavailabilities, loadUnavailabilities, setUnavailabilities } =
     useUnavailabilities(slug, options.initialUnavailabilities);
 
+  // -------------------------------------------------------------
+  // 🧰 Helpers
+  // -------------------------------------------------------------
   function sortSlotsList(list: Slot[]) {
     return [...list].sort(
       (a, b) => new Date(a.start!).getTime() - new Date(b.start!).getTime()
     );
   }
 
-  if (options.initialSlots) {
-    slots.value = sortSlotsList(options.initialSlots);
-  }
-
-  if (options.initialUnavailabilities) {
-    setUnavailabilities(options.initialUnavailabilities);
-  }
-
-  const shouldAutoFetch = !options.disableAutoFetch;
-
-  // -------------------------------------------------------------
-  // 🧰 Utils internes
-  // -------------------------------------------------------------
   function weekBounds(mondayLikeDate: Date) {
     const start = new Date(mondayLikeDate);
     start.setHours(0, 0, 0, 0);
@@ -100,20 +93,29 @@ export function useAgendaSlots(
   }
 
   // -------------------------------------------------------------
+  // 🧩 Initialisation
+  // -------------------------------------------------------------
+  if (options.initialSlots) {
+    slots.value = sortSlotsList(options.initialSlots);
+  }
+  if (options.initialUnavailabilities) {
+    setUnavailabilities(options.initialUnavailabilities);
+  }
+
+  // -------------------------------------------------------------
   // 📦 Fetch (slots + indispos)
   // -------------------------------------------------------------
   async function fetchCurrentWeek() {
-    if (!slug) return;
+    if (!slug || !shouldAutoFetch) return; // 👈 évite tout fetch inutile
     loading.value = true;
+
     try {
       const { from, to } = weekBounds(activeWeek.value);
-
       const [{ slots: slotData }] = await Promise.all([
         getEntrepriseSlots(slug, { from, to }),
         loadUnavailabilities(from, to),
       ]);
 
-      // ✅ Tri des slots par date de début pour cohérence
       slots.value = sortSlotsList(slotData);
     } catch (err) {
       console.error("❌ Erreur fetch slots/unavailabilities:", err);
@@ -122,8 +124,15 @@ export function useAgendaSlots(
     }
   }
 
+  // -------------------------------------------------------------
+  // 🔄 Auto-fetch (désactivé en mode overview)
+  // -------------------------------------------------------------
   if (shouldAutoFetch) {
     watch(activeWeek, fetchCurrentWeek, { immediate: true });
+  } else {
+    console.log(
+      "🧠 useAgendaSlots: autoFetch désactivé → données injectées utilisées."
+    );
   }
 
   // -------------------------------------------------------------
@@ -163,9 +172,6 @@ export function useAgendaSlots(
     slots.value = sortSlotsList([...slots.value, slot]);
   }
 
-  // -------------------------------------------------------------
-  // 🧲 Déplacement vertical (drag & drop)
-  // -------------------------------------------------------------
   async function moveSlot(payload: {
     id: number;
     newStart: string;
@@ -190,9 +196,7 @@ export function useAgendaSlots(
   function slotStyle(slot: AgendaDisplaySlot | { start: string; end: string }) {
     const hasDateInfo = "start_date" in slot;
     const start = new Date(
-      hasDateInfo
-        ? `${slot.start_date}T${slot.start_time}`
-        : slot.start
+      hasDateInfo ? `${slot.start_date}T${slot.start_time}` : slot.start
     );
     const end = new Date(
       hasDateInfo ? `${slot.start_date}T${slot.end_time}` : slot.end
@@ -211,8 +215,7 @@ export function useAgendaSlots(
     const endMin = Math.max(0, (e.getTime() - dayStart.getTime()) / 60000);
     const heightMin = Math.max(0, endMin - topMin);
 
-    if (heightMin <= 0)
-      return { display: "none", top: "0%", height: "0%" };
+    if (heightMin <= 0) return { display: "none", top: "0%", height: "0%" };
 
     const topPct = (topMin / totalMin) * 100;
     const heightPct = (heightMin / totalMin) * 100;
@@ -246,13 +249,43 @@ export function useAgendaSlots(
         color: "#2563eb",
       }));
 
-    const unavEvents = unavailabilities.value.map((u) => ({
-      ...u,
-      start: `${u.start_date}T${u.start_time}`,
-      end: `${u.start_date}T${u.end_time}`,
-      type: "unavailability" as const,
-      color: "#9ca3af",
-    }));
+    const { from } = weekBounds(activeWeek.value);
+    const monday = new Date(from); // début de la semaine affichée
+
+    const unavEvents = unavailabilities.value.flatMap((u) => {
+      if (u.recurrence_type !== "weekly" || !u.weekday) {
+        return [
+          {
+            ...u,
+            start: `${u.start_date}T${u.start_time}`,
+            end: `${u.start_date}T${u.end_time}`,
+            type: "unavailability" as const,
+            color: "#9ca3af",
+          },
+        ];
+      }
+
+      // Calcule la date réelle dans la semaine courante
+      const occurrence = new Date(monday);
+      occurrence.setDate(monday.getDate() + (u.weekday - 1));
+
+      // ✅ ISO local sans décalage UTC
+      const isoDate = occurrence.toLocaleDateString("fr-CA");
+
+      // Exceptions et fin de récurrence
+      if (u.exceptions?.includes(isoDate)) return [];
+      if (u.recurrence_end && isoDate > u.recurrence_end) return [];
+
+      return [
+        {
+          ...u,
+          start: `${isoDate}T${u.start_time}`,
+          end: `${isoDate}T${u.end_time}`,
+          type: "unavailability" as const,
+          color: "#9ca3af",
+        },
+      ];
+    });
 
     return [...slotEvents, ...unavEvents];
   });
