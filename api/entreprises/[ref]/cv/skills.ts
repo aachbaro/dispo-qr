@@ -65,7 +65,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? [body.name]
         : [];
 
-      const clean = [...new Set(names.map((name) => String(name).trim()).filter(Boolean))];
+      const clean = Array.from(
+        new Set(names.map((name) => String(name).trim()).filter(Boolean))
+      );
       if (clean.length === 0) {
         return res.status(400).json({ error: "❌ Provide 'name' or 'names[]'" });
       }

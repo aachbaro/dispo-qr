@@ -1,3 +1,4 @@
+// tsconfig.app.json
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
   "compilerOptions": {

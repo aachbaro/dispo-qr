@@ -1,24 +1,17 @@
+// tsconfig.node.json
 {
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
-
-    /* Cible moderne compatible avec Node 20 / Vercel */
-    "target": "ES2020",
-    "lib": ["ES2020"],
+    "target": "ES2022",
+    "lib": ["ES2022"],
     "module": "ESNext",
     "skipLibCheck": true,
-
-    /* Permet d'itérer sur les Set/Map sans erreur TS2802 */
     "downlevelIteration": true,
-
-    /* Bundler mode (Vite) */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
-
-    /* Vérifications strictes */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -26,7 +19,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-
-  /* On inclut aussi les fichiers d’API pour éviter les oublis */
   "include": ["vite.config.ts", "api/**/*.ts"]
 }

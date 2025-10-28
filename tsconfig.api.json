@@ -1,3 +1,4 @@
+// tsconfig.api.json
 {
   "compilerOptions": {
     "target": "ES2020",
