@@ -33,3 +33,8 @@ trash
 
 .env*.local
 .vercel
+
+# Supabase temporary files
+supabase/.branches/
+supabase/.temp/
+supabase/.shadow/

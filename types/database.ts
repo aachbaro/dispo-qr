@@ -68,6 +68,152 @@ export type Database = {
         }
         Relationships: []
       }
+      cv_education: {
+        Row: {
+          created_at: string | null
+          entreprise_id: number
+          id: number
+          school: string | null
+          title: string
+          year: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          entreprise_id: number
+          id?: never
+          school?: string | null
+          title: string
+          year?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          entreprise_id?: number
+          id?: never
+          school?: string | null
+          title?: string
+          year?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cv_education_entreprise_id_fkey"
+            columns: ["entreprise_id"]
+            isOneToOne: false
+            referencedRelation: "entreprise"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cv_experiences: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          description: string | null
+          end_date: string | null
+          entreprise_id: number
+          id: number
+          start_date: string | null
+          title: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          entreprise_id: number
+          id?: never
+          start_date?: string | null
+          title: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          entreprise_id?: number
+          id?: never
+          start_date?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cv_experiences_entreprise_id_fkey"
+            columns: ["entreprise_id"]
+            isOneToOne: false
+            referencedRelation: "entreprise"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cv_profiles: {
+        Row: {
+          bio: string | null
+          created_at: string | null
+          entreprise_id: number
+          id: number
+          job_title: string | null
+          location: string | null
+          photo_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          bio?: string | null
+          created_at?: string | null
+          entreprise_id: number
+          id?: never
+          job_title?: string | null
+          location?: string | null
+          photo_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          bio?: string | null
+          created_at?: string | null
+          entreprise_id?: number
+          id?: never
+          job_title?: string | null
+          location?: string | null
+          photo_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cv_profiles_entreprise_id_fkey"
+            columns: ["entreprise_id"]
+            isOneToOne: false
+            referencedRelation: "entreprise"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cv_skills: {
+        Row: {
+          created_at: string | null
+          entreprise_id: number
+          id: number
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          entreprise_id: number
+          id?: never
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          entreprise_id?: number
+          id?: never
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cv_skills_entreprise_id_fkey"
+            columns: ["entreprise_id"]
+            isOneToOne: false
+            referencedRelation: "entreprise"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entreprise: {
         Row: {
           adresse_ligne1: string
