@@ -15,6 +15,14 @@
 
 <template>
   <div class="w-full flex flex-col items-center justify-center px-4 mx-4 pb-5">
+    <!-- Bloc CV -->
+    <div
+      v-if="entrepriseSlug"
+      class="max-w-[1200px] w-full mb-6"
+    >
+      <CvCard :entreprise-ref="entrepriseSlug" :is-owner="isOwner" />
+    </div>
+
     <!-- Header infos entreprise -->
     <div class="max-w-[1200px] w-full mb-6">
       <h1 class="text-2xl font-bold">
@@ -93,11 +101,19 @@ import MissionList from "../components/missions/MissionList.vue";
 import EntrepriseInfos from "../components/EntrepriseInfos.vue";
 import FactureList from "../components/factures/FactureList.vue";
 import AddContactButton from "../components/AddContactButton.vue";
+import CvCard from "../components/cv/CvCard.vue";
 
 const route = useRoute();
 const overview = ref<any>(null);
 const entreprise = computed(() => overview.value?.entreprise ?? null);
-const isOwner = computed(() => overview.value?.mode === "owner");
+const isOwner = computed(
+  () => ["owner", "admin"].includes(overview.value?.mode ?? "")
+);
+const entrepriseSlug = computed(() => {
+  const slugFromOverview = entreprise.value?.slug;
+  const slugFromRoute = route.params.slug as string | undefined;
+  return slugFromOverview ?? slugFromRoute ?? "";
+});
 const loading = ref(true);
 
 const { user, ready } = useAuth();
