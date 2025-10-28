@@ -13,10 +13,10 @@
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { supabaseAdmin } from "../../../../_supabase.js";
-import type { Tables, TablesInsert } from "../../../../../types/database.js";
-import { getUserFromToken } from "../../../../utils/auth.js";
-import { canAccessSensitive, findEntreprise } from "../../../../_lib/entreprise.js";
+import { supabaseAdmin } from "../../../_supabase.js";
+import type { Tables, TablesInsert } from "../../../../types/database.js";
+import { getUserFromToken } from "../../../utils/auth.js";
+import { canAccessSensitive, findEntreprise } from "../../../_lib/entreprise.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { ref } = req.query;
