@@ -31,6 +31,7 @@ import type { Router } from "vue-router";
 
 import Home from "@/pages/Home.vue";
 import EntreprisePage from "@/pages/EntreprisePage.vue";
+import EntrepriseCvPage from "@/pages/EntrepriseCvPage.vue";
 import FacturePage from "@/pages/FacturePage.vue";
 import ClientPage from "@/pages/ClientPage.vue";
 import RegisterPage from "@/pages/auth/RegisterPage.vue";
@@ -83,6 +84,13 @@ const routes = [
     props: true,
   },
 
+  {
+    path: "/entreprise/:ref/cv",
+    name: "entreprise-cv",
+    component: EntrepriseCvPage,
+    props: true,
+  },
+
   // 🧾 Détail d’une facture
   {
     path: "/entreprise/:ref/factures/:id",
@@ -115,7 +123,7 @@ const router: Router = createRouter({
 // Middleware global (auth)
 // ----------------------
 
-router.beforeEach(async (to, from, next) => {
+router.beforeEach(async (to, _from, next) => {
   const { user, loading, initAuth } = useAuth();
 
   // ⚙️ Initialise la session si nécessaire
