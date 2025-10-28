@@ -26,7 +26,13 @@
               {{ experience.company }}
             </p>
             <p class="text-xs text-gray-400 uppercase tracking-wide mt-1">
-              {{ formatPeriod(experience.start_date, experience.end_date) }}
+              {{
+                formatPeriod(
+                  experience.start_date,
+                  experience.end_date,
+                  experience.is_current
+                )
+              }}
             </p>
           </div>
 
@@ -109,11 +115,12 @@ function formatDate(value: string | null) {
   return date.toLocaleDateString("fr-FR", { year: "numeric", month: "short" });
 }
 
-function formatPeriod(start: string | null, end: string | null) {
+function formatPeriod(start: string | null, end: string | null, isCurrent = false) {
   const startLabel = formatDate(start);
-  const endLabel = end ? formatDate(end) : "Aujourd'hui";
+  const endLabel = isCurrent ? "Aujourd'hui" : end ? formatDate(end) : null;
+
   if (startLabel && endLabel) return `${startLabel} – ${endLabel}`;
-  return startLabel || endLabel || "Période non renseignée";
+  return startLabel || endLabel || "";
 }
 
 function openCreate() {
@@ -132,6 +139,7 @@ async function handleSave(payload: {
   start_date: string | null;
   end_date: string | null;
   description: string | null;
+  is_current: boolean;
 }) {
   if (!props.entrepriseSlug) {
     console.warn("Slug entreprise manquant pour enregistrer l'expérience");
@@ -142,7 +150,12 @@ async function handleSave(payload: {
   const normalized = {
     ...payload,
     start_date: payload.start_date ? `${payload.start_date}-01` : null,
-    end_date: payload.end_date ? `${payload.end_date}-01` : null,
+    end_date: payload.is_current
+      ? null
+      : payload.end_date
+        ? `${payload.end_date}-01`
+        : null,
+    is_current: payload.is_current || false,
   };
 
   pending.value = true;

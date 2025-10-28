@@ -37,7 +37,9 @@ import type {
 
 export type CvProfile = Tables<"cv_profiles"> | null;
 export type CvSkill = Tables<"cv_skills">;
-export type CvExperience = Tables<"cv_experiences">;
+export type CvExperience = Tables<"cv_experiences"> & {
+  is_current?: boolean | null;
+};
 export type CvEducation = Tables<"cv_education">;
 export type CvEntreprise = Tables<"entreprise">;
 
@@ -129,7 +131,7 @@ export async function getExperiences(
 
 export async function createExperience(
   ref: string,
-  payload: CvExperienceInsert
+  payload: Partial<CvExperience>
 ): Promise<{ experiences: CvExperience[] }> {
   return request(`/api/entreprises/${encodeURIComponent(ref)}/cv/experiences`, {
     method: "POST",
@@ -140,7 +142,7 @@ export async function createExperience(
 export async function updateExperience(
   ref: string,
   id: number,
-  updates: CvExperienceUpdate
+  updates: Partial<CvExperience>
 ): Promise<{ message: string }> {
   return request(
     `/api/entreprises/${encodeURIComponent(ref)}/cv/experiences/${id}`,

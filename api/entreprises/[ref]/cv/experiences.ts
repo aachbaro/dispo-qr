@@ -64,8 +64,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         title: body.title,
         company: body.company ?? null,
         start_date: body.start_date ?? null,
-        end_date: body.end_date ?? null,
+        end_date: body.is_current ? null : body.end_date ?? null,
         description: body.description ?? null,
+        is_current: !!body.is_current,
       };
 
       if (!toInsert.title) {

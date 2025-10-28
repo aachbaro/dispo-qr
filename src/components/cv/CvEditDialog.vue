@@ -34,7 +34,19 @@
             v-model="form.end_date"
             type="month"
             class="mt-1 w-full border rounded px-3 py-2"
+            :disabled="form.is_current"
           />
+        </div>
+        <div class="col-span-2 flex items-center gap-2">
+          <input
+            id="is_current"
+            type="checkbox"
+            v-model="form.is_current"
+            class="w-4 h-4"
+          />
+          <label for="is_current" class="text-sm text-gray-700">
+            Expérience en cours
+          </label>
         </div>
       </div>
 
@@ -109,6 +121,7 @@ const emit = defineEmits<{
           start_date: string | null;
           end_date: string | null;
           description: string | null;
+          is_current: boolean;
         }
       | {
           title: string;
@@ -131,6 +144,7 @@ const form = reactive({
   start_date: "",
   end_date: "",
   description: "",
+  is_current: false,
   school: "",
   year: "",
 });
@@ -163,9 +177,19 @@ function hydrateForm() {
   form.start_date = data.start_date ?? "";
   form.end_date = data.end_date ?? "";
   form.description = data.description ?? "";
+  form.is_current = (data as CvExperience)?.is_current ?? false;
   form.school = data.school ?? "";
   form.year = data.year ?? "";
 }
+
+watch(
+  () => form.is_current,
+  (value) => {
+    if (value) {
+      form.end_date = "";
+    }
+  }
+);
 
 function close() {
   emit("update:modelValue", false);
@@ -185,8 +209,9 @@ function submit() {
       title: form.title,
       company: form.company || null,
       start_date: form.start_date || null,
-      end_date: form.end_date || null,
+      end_date: form.is_current ? null : form.end_date || null,
       description: form.description || null,
+      is_current: form.is_current,
     });
   } else {
     emit("save", {
