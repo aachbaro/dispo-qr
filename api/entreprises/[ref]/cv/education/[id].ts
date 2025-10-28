@@ -12,8 +12,8 @@
 // -------------------------------------------------------------
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { supabaseAdmin } from "../../../../../_supabase.js";
-import type { TablesUpdate } from "../../../../../../types/database.js";
+import { supabaseAdmin } from "../../../../_supabase.js";
+import type { TablesUpdate } from "../../../../../types/database.js";
 import { getUserFromToken } from "../../../../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../../../../_lib/entreprise.js";
 

@@ -1,5 +1,5 @@
 <template>
-  <section class="border rounded-xl bg-white shadow-sm p-6">
+  <section class="border border-black rounded-xl bg-white mt-6 p-6">
     <div v-if="loading" class="text-sm text-gray-500">
       Chargement du CV...
     </div>

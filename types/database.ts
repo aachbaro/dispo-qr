@@ -111,6 +111,7 @@ export type Database = {
           end_date: string | null
           entreprise_id: number
           id: number
+          is_current: boolean | null
           start_date: string | null
           title: string
         }
@@ -121,6 +122,7 @@ export type Database = {
           end_date?: string | null
           entreprise_id: number
           id?: never
+          is_current?: boolean | null
           start_date?: string | null
           title: string
         }
@@ -131,6 +133,7 @@ export type Database = {
           end_date?: string | null
           entreprise_id?: number
           id?: never
+          is_current?: boolean | null
           start_date?: string | null
           title?: string
         }

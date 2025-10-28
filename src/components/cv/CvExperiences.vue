@@ -47,11 +47,15 @@
           </div>
         </div>
 
-        <p v-if="experience.description" class="text-sm text-gray-600 mt-3 whitespace-pre-line">
+        <p
+          v-if="experience.description"
+          class="text-sm text-gray-600 mt-3 whitespace-pre-line"
+        >
           {{ experience.description }}
         </p>
       </article>
     </div>
+
     <p v-else class="text-sm text-gray-500 mt-3">
       Aucune expérience renseignée.
     </p>
@@ -83,7 +87,7 @@ const props = defineProps<{
   entrepriseSlug?: string | null;
 }>();
 
-const emit = defineEmits<["updated"]>();
+const emit = defineEmits<{ (e: "updated"): void }>();
 
 const dialogVisible = ref(false);
 const pending = ref(false);
@@ -99,22 +103,16 @@ const sortedExperiences = computed(() => {
 });
 
 function formatDate(value: string | null) {
-  if (!value) {
-    return null;
-  }
+  if (!value) return null;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+  if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("fr-FR", { year: "numeric", month: "short" });
 }
 
 function formatPeriod(start: string | null, end: string | null) {
   const startLabel = formatDate(start);
   const endLabel = end ? formatDate(end) : "Aujourd'hui";
-  if (startLabel && endLabel) {
-    return `${startLabel} – ${endLabel}`;
-  }
+  if (startLabel && endLabel) return `${startLabel} – ${endLabel}`;
   return startLabel || endLabel || "Période non renseignée";
 }
 
@@ -140,12 +138,23 @@ async function handleSave(payload: {
     return;
   }
 
+  // ✅ Correction : compléter les dates YYYY-MM → YYYY-MM-01
+  const normalized = {
+    ...payload,
+    start_date: payload.start_date ? `${payload.start_date}-01` : null,
+    end_date: payload.end_date ? `${payload.end_date}-01` : null,
+  };
+
   pending.value = true;
   try {
     if (editingExperience.value) {
-      await updateExperience(props.entrepriseSlug, editingExperience.value.id, payload);
+      await updateExperience(
+        props.entrepriseSlug,
+        editingExperience.value.id,
+        normalized
+      );
     } else {
-      await createExperience(props.entrepriseSlug, payload);
+      await createExperience(props.entrepriseSlug, normalized);
     }
     dialogVisible.value = false;
     editingExperience.value = null;
@@ -158,9 +167,7 @@ async function handleSave(payload: {
 }
 
 async function removeExperience(id: number) {
-  if (!props.entrepriseSlug) {
-    return;
-  }
+  if (!props.entrepriseSlug) return;
 
   deletingId.value = id;
   try {

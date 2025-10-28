@@ -1,19 +1,24 @@
 {
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
-    "target": "ES2023",
-    "lib": ["ES2023"],
+
+    /* Cible moderne compatible avec Node 20 / Vercel */
+    "target": "ES2020",
+    "lib": ["ES2020"],
     "module": "ESNext",
     "skipLibCheck": true,
 
-    /* Bundler mode */
+    /* Permet d'itérer sur les Set/Map sans erreur TS2802 */
+    "downlevelIteration": true,
+
+    /* Bundler mode (Vite) */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
 
-    /* Linting */
+    /* Vérifications strictes */
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -21,5 +26,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["vite.config.ts"]
+
+  /* On inclut aussi les fichiers d’API pour éviter les oublis */
+  "include": ["vite.config.ts", "api/**/*.ts"]
 }

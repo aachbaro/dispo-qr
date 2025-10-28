@@ -1,31 +1,38 @@
 <template>
-  <section>
-    <div class="flex items-center justify-between">
+  <section
+    v-if="isOwner || sortedEducation.length"
+    class="border-t border-gray-100 pt-6"
+  >
+    <div class="flex items-center justify-between mb-4">
       <h3 class="text-lg font-semibold text-gray-900">Formations</h3>
+
       <button
         v-if="isOwner"
-        class="px-3 py-1 text-sm bg-black text-white rounded"
+        class="px-3 py-1 text-sm bg-black text-white rounded hover:bg-gray-900 transition-colors"
         @click="openCreate"
       >
         Ajouter
       </button>
     </div>
 
-    <div v-if="sortedEducation.length" class="mt-4 space-y-4">
+    <div v-if="sortedEducation.length" class="space-y-4">
       <article
         v-for="entry in sortedEducation"
         :key="entry.id"
-        class="border border-gray-200 rounded-lg p-4"
+        class="p-4 rounded-lg border border-gray-200 bg-white shadow-sm hover:shadow transition-shadow"
       >
         <div class="flex items-start justify-between gap-4">
           <div>
-            <h4 class="text-base font-semibold text-gray-900">
+            <h4 class="text-base font-semibold text-gray-900 leading-tight">
               {{ entry.title }}
             </h4>
-            <p v-if="entry.school" class="text-sm text-gray-500">
+            <p v-if="entry.school" class="text-sm text-gray-600">
               {{ entry.school }}
             </p>
-            <p v-if="entry.year" class="text-xs text-gray-400 uppercase tracking-wide mt-1">
+            <p
+              v-if="entry.year"
+              class="text-xs text-gray-400 uppercase tracking-wide mt-1"
+            >
               {{ entry.year }}
             </p>
           </div>
@@ -48,9 +55,6 @@
         </div>
       </article>
     </div>
-    <p v-else class="text-sm text-gray-500 mt-3">
-      Aucune formation renseignée.
-    </p>
 
     <CvEditDialog
       v-if="isOwner"
@@ -79,7 +83,7 @@ const props = defineProps<{
   entrepriseSlug?: string | null;
 }>();
 
-const emit = defineEmits<["updated"]>();
+const emit = defineEmits<{ (e: "updated"): void }>();
 
 const dialogVisible = ref(false);
 const pending = ref(false);
@@ -117,7 +121,11 @@ async function handleSave(payload: {
   pending.value = true;
   try {
     if (editingEducation.value) {
-      await updateEducation(props.entrepriseSlug, editingEducation.value.id, payload);
+      await updateEducation(
+        props.entrepriseSlug,
+        editingEducation.value.id,
+        payload
+      );
     } else {
       await createEducation(props.entrepriseSlug, payload);
     }
@@ -132,9 +140,7 @@ async function handleSave(payload: {
 }
 
 async function removeEducation(id: number) {
-  if (!props.entrepriseSlug) {
-    return;
-  }
+  if (!props.entrepriseSlug) return;
 
   deletingId.value = id;
   try {

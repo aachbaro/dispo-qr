@@ -54,7 +54,7 @@ const props = defineProps<{
   entrepriseSlug?: string | null;
 }>();
 
-const emit = defineEmits<["updated"]>();
+defineEmits<{ (e: "updated"): void }>();
 
 const newSkill = ref("");
 const pending = ref(false);

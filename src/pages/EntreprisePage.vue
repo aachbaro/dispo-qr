@@ -24,12 +24,7 @@
     </div>
 
     <!-- Header infos entreprise -->
-    <div class="max-w-[1200px] w-full mb-6">
-      <h1 class="text-2xl font-bold">
-        {{ entreprise?.nom }} {{ entreprise?.prenom }}
-      </h1>
-      <p class="text-gray-600">Agenda et missions de l’entreprise</p>
-
+    <div class="max-w-[1200px] w-full mb-6 hidden">
       <div v-if="loading" class="text-gray-500 mt-2">Chargement...</div>
       <div v-else-if="!entreprise" class="text-red-600 mt-2">
         ❌ Entreprise introuvable

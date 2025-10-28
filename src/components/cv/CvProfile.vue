@@ -8,7 +8,10 @@
           alt="Portrait de l'entreprise"
           class="w-full h-full object-cover"
         />
-        <div v-else class="flex items-center justify-center text-gray-400 h-full">
+        <div
+          v-else
+          class="flex items-center justify-center text-gray-400 h-full"
+        >
           Aucun portrait
         </div>
       </div>
@@ -60,7 +63,12 @@
           placeholder="https://..."
           class="border rounded w-full px-3 py-2"
         />
-        <input type="file" accept="image/*" @change="onFileChange" class="text-sm" />
+        <input
+          type="file"
+          accept="image/*"
+          @change="onFileChange"
+          class="text-sm"
+        />
       </div>
 
       <textarea
@@ -88,8 +96,8 @@
       </div>
     </div>
 
-    <p v-else class="mt-3 text-gray-600 whitespace-pre-line">
-      {{ profile?.bio || "Aucune biographie renseignée pour le moment." }}
+    <p v-else-if="profile?.bio" class="mt-3 text-gray-600 whitespace-pre-line">
+      {{ profile.bio }}
     </p>
   </div>
 </template>
@@ -105,7 +113,7 @@ const props = defineProps<{
   isOwner: boolean;
 }>();
 
-const emit = defineEmits<["updated"]>();
+defineEmits<{ (e: "updated"): void }>();
 
 const editMode = ref(false);
 const pending = ref(false);
