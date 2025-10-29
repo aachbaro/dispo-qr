@@ -15,7 +15,15 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
+import type { Tables } from "../../types/database.js";
 import { supabaseAdmin } from "../_supabase.js";
+import { notify } from "../_lib/notifications.js";
+
+type StripeFacture = Tables<"factures">;
+type StripeEntreprise = Tables<"entreprise">;
+type StripeMission = Tables<"missions"> & {
+  client?: Tables<"clients"> | null;
+};
 
 // -----------------------------
 // Init Stripe
@@ -84,9 +92,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Vérifie facture
         const { data: facture, error: factureError } = await supabaseAdmin
           .from("factures")
-          .select("id, mission_id")
+          .select(
+            "*, entreprise:entreprise_id(*), mission:mission_id(*, client:client_id(*))"
+          )
           .eq("id", factureId)
-          .maybeSingle();
+          .maybeSingle<
+            StripeFacture & {
+              entreprise?: StripeEntreprise | null;
+              mission?: StripeMission | null;
+            }
+          >();
 
         if (factureError || !facture) {
           console.error("❌ Facture introuvable:", factureError?.message);
@@ -126,6 +141,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log(`✅ Mission ${facture.mission_id} → paid`);
           }
         }
+
+        const entreprise = facture.entreprise;
+        const clientEmail =
+          facture.mission?.client?.email ?? facture.mission?.contact_email ?? null;
+
+        if (clientEmail && entreprise) {
+          await notify.paymentSucceededToClient(
+            clientEmail,
+            {
+              id: facture.id,
+              numero: facture.numero,
+              status: "paid",
+              payment_link: facture.payment_link,
+            },
+            {
+              id: entreprise.id,
+              nom: entreprise.nom,
+              email: entreprise.email,
+              slug: entreprise.slug,
+            }
+          );
+        }
+
+        if (entreprise) {
+          await notify.billingStatusChangedForEntreprise(
+            {
+              id: entreprise.id,
+              nom: entreprise.nom,
+              email: entreprise.email,
+              slug: entreprise.slug,
+            },
+            {
+              id: facture.id,
+              numero: facture.numero,
+              status: "paid",
+              payment_link: facture.payment_link,
+            }
+          );
+        }
         break;
       }
 
@@ -139,6 +193,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           break;
         }
 
+        const { data: facture, error: factureFetchError } = await supabaseAdmin
+          .from("factures")
+          .select(
+            "*, entreprise:entreprise_id(*), mission:mission_id(*, client:client_id(*))"
+          )
+          .eq("id", factureId)
+          .maybeSingle<
+            StripeFacture & {
+              entreprise?: StripeEntreprise | null;
+              mission?: StripeMission | null;
+            }
+          >();
+
+        if (factureFetchError || !facture) {
+          console.error("❌ Erreur fetch facture canceled:", factureFetchError?.message);
+        }
+
         const { error } = await supabaseAdmin
           .from("factures")
           .update({ status: "canceled" })
@@ -148,6 +219,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.error("❌ Erreur update facture canceled:", error.message);
         } else {
           console.log(`⚠️ Facture ${factureId} → canceled`);
+          const entreprise = facture?.entreprise;
+          const clientEmail =
+            facture?.mission?.client?.email ?? facture?.mission?.contact_email ?? null;
+
+          if (clientEmail && entreprise) {
+            await notify.paymentFailedToClient(
+              clientEmail,
+              {
+                id: facture.id,
+                numero: facture.numero,
+                status: "canceled",
+                payment_link: facture.payment_link,
+              },
+              {
+                id: entreprise.id,
+                nom: entreprise.nom,
+                email: entreprise.email,
+                slug: entreprise.slug,
+              }
+            );
+          }
+
+          if (entreprise) {
+            await notify.billingStatusChangedForEntreprise(
+              {
+                id: entreprise.id,
+                nom: entreprise.nom,
+                email: entreprise.email,
+                slug: entreprise.slug,
+              },
+              {
+                id: facture.id,
+                numero: facture.numero,
+                status: "canceled",
+                payment_link: facture.payment_link,
+              }
+            );
+          }
         }
         break;
       }

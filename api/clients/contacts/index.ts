@@ -15,6 +15,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { supabaseAdmin } from "../../_supabase.js";
 import { requireAuth } from "../../utils/auth.js";
+import { notify } from "../../_lib/notifications.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await requireAuth(req, "client");
@@ -63,6 +64,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    if (data?.entreprise) {
+      await notify.companyBookmarked(
+        {
+          id: data.entreprise.id,
+          nom: data.entreprise.nom,
+          email: data.entreprise.email,
+          slug: data.entreprise.slug,
+        },
+        { id: user.id, name: user.name, email: user.email }
+      );
+    }
+
     return res.status(201).json({ contact: data });
   }
 
