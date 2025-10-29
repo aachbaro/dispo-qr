@@ -24,6 +24,7 @@ import { supabaseAdmin } from "../../_supabase.js";
 import type { Tables } from "../../../types/database.js";
 import { getUserFromToken } from "../../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../../_lib/entreprise.js";
+import { notify } from "../../_lib/notifications.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const ENTREPRISE_ROLES = new Set(["freelance", "entreprise", "admin"]);
@@ -154,6 +155,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error("❌ Erreur sauvegarde lien paiement:", updateError.message);
       return res.status(500).json({ error: "❌ Sauvegarde du lien échouée" });
     }
+
+    let missionWithClient:
+      | (Tables<"missions"> & { client?: Tables<"clients"> | null })
+      | null = null;
+    if (factureRecord.mission_id) {
+      const { data: mission, error: missionError } = await supabaseAdmin
+        .from("missions")
+        .select("*, client:client_id(*)")
+        .eq("id", factureRecord.mission_id)
+        .maybeSingle<
+          Tables<"missions"> & { client?: Tables<"clients"> | null }
+        >();
+      if (missionError) {
+        console.error("⚠️ Erreur fetch mission pour notif:", missionError.message);
+      } else {
+        missionWithClient = mission ?? null;
+      }
+    }
+
+    const clientEmail =
+      missionWithClient?.client?.email ?? missionWithClient?.contact_email ?? null;
+
+    if (clientEmail) {
+      await notify.paymentLinkToClient(
+        clientEmail,
+        {
+          id: factureRecord.id,
+          numero: factureRecord.numero,
+          status: "pending_payment",
+          payment_link: session.url,
+        },
+        {
+          id: entreprise.id,
+          nom: entreprise.nom,
+          email: entreprise.email,
+          slug: entreprise.slug,
+        }
+      );
+    }
+
+    await notify.billingStatusChangedForEntreprise(
+      {
+        id: entreprise.id,
+        nom: entreprise.nom,
+        email: entreprise.email,
+        slug: entreprise.slug,
+      },
+      {
+        id: factureRecord.id,
+        numero: factureRecord.numero,
+        status: "pending_payment",
+        payment_link: session.url,
+      }
+    );
 
     // ✅ Retour du lien de paiement
     return res.status(200).json({ url: session.url });

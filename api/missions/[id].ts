@@ -26,6 +26,7 @@ import { supabaseAdmin } from "../_supabase.js";
 import type { Tables } from "../../types/database.js";
 import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
+import { notify } from "../_lib/notifications.js";
 
 const ENTREPRISE_ROLES = new Set(["freelance", "entreprise", "admin"]);
 const MISSION_SELECT =
@@ -204,6 +205,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           fetchUpdatedError.message
         );
         return res.status(500).json({ error: fetchUpdatedError.message });
+      }
+
+      if (missionWithRelations) {
+        const entrepriseForNotify = {
+          id: missionWithRelations.entreprise?.id ?? missionRecord.entreprise_id,
+          nom: missionWithRelations.entreprise?.nom ?? null,
+          email: missionWithRelations.entreprise?.email ?? null,
+          slug: missionWithRelations.entreprise?.slug ?? null,
+        };
+
+        const clientEmail =
+          missionWithRelations.client?.email ??
+          missionWithRelations.contact_email ??
+          null;
+
+        const slotDtos = missionWithRelations.slots?.map((s) => ({
+          start: s.start!,
+          end: s.end!,
+          title: s.title ?? null,
+        }));
+
+        if (updates.status && updates.status !== missionRecord.status) {
+          await notify.missionStatusChangedToClient(
+            clientEmail,
+            {
+              id: missionWithRelations.id,
+              status: missionWithRelations.status,
+              etablissement: missionWithRelations.etablissement,
+              instructions: missionWithRelations.instructions,
+              slots: slotDtos,
+            },
+            entrepriseForNotify
+          );
+        }
+
+        if (Array.isArray(slots)) {
+          await notify.missionSlotsRescheduledToClient(
+            clientEmail,
+            {
+              id: missionWithRelations.id,
+              status: missionWithRelations.status,
+              etablissement: missionWithRelations.etablissement,
+              instructions: missionWithRelations.instructions,
+              slots: slotDtos,
+            },
+            entrepriseForNotify
+          );
+        }
       }
 
       return res.status(200).json({ mission: missionWithRelations });

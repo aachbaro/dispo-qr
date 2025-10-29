@@ -25,6 +25,7 @@ import { supabaseAdmin } from "../_supabase.js";
 import type { Tables } from "../../types/database.js";
 import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
+import { notify } from "../_lib/notifications.js";
 
 interface FactureWithRelations extends Tables<"factures"> {
   missions?:
@@ -236,6 +237,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           fetchError.message
         );
         return res.status(500).json({ error: fetchError.message });
+      }
+
+      const clientEmail =
+        factureWithRelations?.missions?.client?.email ??
+        factureWithRelations?.missions?.contact_email ??
+        null;
+
+      await notify.billingStatusChangedForEntreprise(
+        {
+          id: entreprise.id,
+          nom: entreprise.nom,
+          email: entreprise.email,
+          slug: entreprise.slug,
+        },
+        {
+          id: factureWithRelations.id,
+          numero: factureWithRelations.numero,
+          status: factureWithRelations.status as "pending_payment" | "paid" | "canceled",
+          payment_link: factureWithRelations.payment_link,
+        }
+      );
+
+      if (clientEmail) {
+        await notify.invoiceCreatedToClient(
+          clientEmail,
+          {
+            id: factureWithRelations.id,
+            numero: factureWithRelations.numero,
+            status: factureWithRelations.status as "pending_payment" | "paid" | "canceled",
+            payment_link: factureWithRelations.payment_link,
+          },
+          {
+            id: entreprise.id,
+            nom: entreprise.nom,
+            email: entreprise.email,
+            slug: entreprise.slug,
+          }
+        );
       }
 
       return res.status(201).json({ facture: factureWithRelations });

@@ -26,6 +26,7 @@ import { supabaseAdmin } from "../_supabase.js";
 import type { Tables } from "../../types/database.js";
 import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
+import { notify } from "../_lib/notifications.js";
 
 interface MissionWithRelations extends Tables<"missions"> {
   slots?: Tables<"slots">[];
@@ -174,9 +175,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // ----- Client connecté -----
       if (user && role === "client") {
         let entrepriseId: number | null = null;
+        let entrepriseData: Tables<"entreprise"> | null = null;
         if (entreprise_ref) {
           const { data: entreprise } = await findEntreprise(entreprise_ref);
           entrepriseId = entreprise?.id ?? null;
+          entrepriseData = entreprise ?? null;
         }
 
         const { data: mission, error: missionError } = await supabaseAdmin
@@ -208,12 +211,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           );
         }
 
+        const entrepriseForNotify = entrepriseData
+          ? {
+              id: entrepriseData.id,
+              nom: entrepriseData.nom,
+              email: entrepriseData.email,
+              slug: entrepriseData.slug,
+            }
+          : {
+              id: entrepriseId ?? 0,
+              nom: null,
+              email: null,
+              slug: null,
+            };
+
+        const slotDtos = Array.isArray(slots)
+          ? slots.map((s: any) => ({ start: s.start, end: s.end, title: s.title ?? null }))
+          : [];
+
+        await notify.missionCreatedByClient(
+          entrepriseForNotify,
+          {
+            id: mission.id,
+            status: mission.status,
+            etablissement: mission.etablissement,
+            instructions: mission.instructions,
+            slots: slotDtos,
+            contact_name: user.name,
+            contact_email: user.email,
+            contact_phone: null,
+          },
+          { id: user.id, name: user.name, email: user.email }
+        );
+
+        await notify.missionAckToClient(
+          { id: user.id, name: user.name, email: user.email },
+          {
+            id: mission.id,
+            status: mission.status,
+            etablissement: mission.etablissement,
+            instructions: mission.instructions,
+            slots: slotDtos,
+          },
+          entrepriseForNotify
+        );
+
         return res.status(201).json({ mission });
       }
 
       // ----- Public non connecté -----
       if (!user) {
         let entrepriseId: number | null = null;
+        let entrepriseData: Tables<"entreprise"> | null = null;
 
         if (entreprise_ref) {
           const { data: entreprise, error: entrepriseError } =
@@ -231,6 +280,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           entrepriseId = entreprise.id;
+          entrepriseData = entreprise;
         }
 
         const { data: mission, error: missionError } = await supabaseAdmin
@@ -259,6 +309,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               mission_id: mission.id,
               entreprise_id: entrepriseId,
             }))
+          );
+        }
+
+        const entrepriseForNotify = entrepriseData
+          ? {
+              id: entrepriseData.id,
+              nom: entrepriseData.nom,
+              email: entrepriseData.email,
+              slug: entrepriseData.slug,
+            }
+          : {
+              id: entrepriseId ?? 0,
+              nom: null,
+              email: null,
+              slug: null,
+            };
+
+        const slotDtos = Array.isArray(slots)
+          ? slots.map((s: any) => ({ start: s.start, end: s.end, title: s.title ?? null }))
+          : [];
+
+        await notify.missionCreatedByVisitor(
+          entrepriseForNotify,
+          {
+            id: mission.id,
+            status: mission.status,
+            etablissement: mission.etablissement,
+            instructions: mission.instructions,
+            slots: slotDtos,
+            contact_name: mission.contact_name,
+            contact_email: mission.contact_email,
+            contact_phone: mission.contact_phone,
+          }
+        );
+
+        if (mission.contact_email) {
+          await notify.missionAckToClient(
+            { name: mission.contact_name ?? "Vous", email: mission.contact_email },
+            {
+              id: mission.id,
+              status: mission.status,
+              etablissement: mission.etablissement,
+              instructions: mission.instructions,
+              slots: slotDtos,
+            },
+            entrepriseForNotify
           );
         }
 
