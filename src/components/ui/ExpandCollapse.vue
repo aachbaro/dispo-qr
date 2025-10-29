@@ -5,6 +5,7 @@
     @before-enter="beforeEnter"
     @enter="enter"
     @after-enter="afterEnter"
+    @before-leave="beforeLeave"
     @leave="leave"
     @after-leave="afterLeave"
   >
@@ -33,9 +34,18 @@ function enter(el: Element) {
   element.style.opacity = "1";
 }
 
+function beforeLeave(el: Element) {
+  const element = el as HTMLElement;
+  // 🔥 Fix : on fige la hauteur actuelle avant de replier
+  element.style.height = `${element.scrollHeight}px`;
+  element.style.opacity = "1";
+  // On force un reflow pour que la transition parte bien
+  void element.offsetHeight;
+}
+
 function leave(el: Element) {
   const element = el as HTMLElement;
-  element.style.transition = "height 0.4s ease 0.1s, opacity 0.3s ease";
+  element.style.transition = "height 0.5s ease, opacity 0.4s ease";
   element.style.height = "0";
   element.style.opacity = "0";
 }
