@@ -29,8 +29,10 @@ import {
   type ClientDTO,
   type FactureDTO,
 } from "./templates/emailTemplates.js";
-
-type Maybe<T> = T | null | undefined;
+import {
+  getClientEmailFromFacture,
+  getClientEmailFromMission,
+} from "./utils/email.js";
 
 export const notify = {
   // ENTREPRISE
@@ -85,62 +87,168 @@ export const notify = {
   },
 
   async missionStatusChangedToClient(
-    clientEmail: Maybe<string>,
-    mission: MissionDTO,
+    mission: MissionDTO & {
+      client?: any;
+      client_id?: string | null;
+    },
     entreprise: EntrepriseDTO
   ) {
-    if (!clientEmail) return;
+    const clientEmail = getClientEmailFromMission(mission as any);
+    if (!clientEmail) {
+      console.log("📭 Aucun e-mail disponible pour cette mission", {
+        mission_id: mission.id,
+        client_id: mission.client_id ?? null,
+      });
+      return;
+    }
     const { subject, html } = templates.missionStatusChangedToClient(clientEmail, mission, entreprise);
     await sendRawEmail({ to: clientEmail, subject, html });
   },
 
   async missionSlotsRescheduledToClient(
-    clientEmail: Maybe<string>,
-    mission: MissionDTO,
+    mission: MissionDTO & {
+      client?: any;
+      client_id?: string | null;
+    },
     entreprise: EntrepriseDTO
   ) {
-    if (!clientEmail) return;
+    const clientEmail = getClientEmailFromMission(mission as any);
+    if (!clientEmail) {
+      console.log("📭 Aucun e-mail disponible pour cette mission", {
+        mission_id: mission.id,
+        client_id: mission.client_id ?? null,
+      });
+      return;
+    }
     const { subject, html } = templates.missionSlotsRescheduledToClient(clientEmail, mission, entreprise);
     await sendRawEmail({ to: clientEmail, subject, html });
   },
 
   async invoiceCreatedToClient(
-    clientEmail: Maybe<string>,
-    facture: FactureDTO,
+    facture: FactureDTO & {
+      missions?: {
+        client?: any;
+        contact_email?: string | null;
+        client_id?: string | null;
+      } | null;
+      contact_email?: string | null;
+      mission_id?: number | null;
+    },
     entreprise: EntrepriseDTO
   ) {
-    if (!clientEmail) return;
-    const { subject, html } = templates.invoiceCreatedToClient(clientEmail, facture, entreprise);
+    const clientEmail = getClientEmailFromFacture(facture as any);
+    if (!clientEmail) {
+      console.log("📭 Aucun e-mail disponible pour cette facture", {
+        facture_id: facture.id,
+        mission_id: facture.mission_id ?? null,
+      });
+      return;
+    }
+    const factureDto: FactureDTO = {
+      id: facture.id,
+      numero: facture.numero,
+      montant_ht: facture.montant_ht ?? null,
+      montant_ttc: facture.montant_ttc ?? null,
+      status: facture.status,
+      payment_link: facture.payment_link ?? null,
+    };
+    const { subject, html } = templates.invoiceCreatedToClient(clientEmail, factureDto, entreprise);
     await sendRawEmail({ to: clientEmail, subject, html });
   },
 
   async paymentLinkToClient(
-    clientEmail: Maybe<string>,
-    facture: FactureDTO,
+    facture: FactureDTO & {
+      missions?: {
+        client?: any;
+        contact_email?: string | null;
+        client_id?: string | null;
+      } | null;
+      contact_email?: string | null;
+      mission_id?: number | null;
+    },
     entreprise: EntrepriseDTO
   ) {
-    if (!clientEmail) return;
-    const { subject, html } = templates.paymentLinkToClient(clientEmail, facture, entreprise);
+    const clientEmail = getClientEmailFromFacture(facture as any);
+    if (!clientEmail) {
+      console.log("📭 Aucun e-mail disponible pour cette facture", {
+        facture_id: facture.id,
+        mission_id: facture.mission_id ?? null,
+      });
+      return;
+    }
+    const factureDto: FactureDTO = {
+      id: facture.id,
+      numero: facture.numero,
+      montant_ht: facture.montant_ht ?? null,
+      montant_ttc: facture.montant_ttc ?? null,
+      status: facture.status,
+      payment_link: facture.payment_link ?? null,
+    };
+    const { subject, html } = templates.paymentLinkToClient(clientEmail, factureDto, entreprise);
     await sendRawEmail({ to: clientEmail, subject, html });
   },
 
   async paymentSucceededToClient(
-    clientEmail: Maybe<string>,
-    facture: FactureDTO,
+    facture: FactureDTO & {
+      missions?: {
+        client?: any;
+        contact_email?: string | null;
+        client_id?: string | null;
+      } | null;
+      contact_email?: string | null;
+      mission_id?: number | null;
+    },
     entreprise: EntrepriseDTO
   ) {
-    if (!clientEmail) return;
-    const { subject, html } = templates.paymentSucceededToClient(clientEmail, facture, entreprise);
+    const clientEmail = getClientEmailFromFacture(facture as any);
+    if (!clientEmail) {
+      console.log("📭 Aucun e-mail disponible pour cette facture", {
+        facture_id: facture.id,
+        mission_id: facture.mission_id ?? null,
+      });
+      return;
+    }
+    const factureDto: FactureDTO = {
+      id: facture.id,
+      numero: facture.numero,
+      montant_ht: facture.montant_ht ?? null,
+      montant_ttc: facture.montant_ttc ?? null,
+      status: facture.status,
+      payment_link: facture.payment_link ?? null,
+    };
+    const { subject, html } = templates.paymentSucceededToClient(clientEmail, factureDto, entreprise);
     await sendRawEmail({ to: clientEmail, subject, html });
   },
 
   async paymentFailedToClient(
-    clientEmail: Maybe<string>,
-    facture: FactureDTO,
+    facture: FactureDTO & {
+      missions?: {
+        client?: any;
+        contact_email?: string | null;
+        client_id?: string | null;
+      } | null;
+      contact_email?: string | null;
+      mission_id?: number | null;
+    },
     entreprise: EntrepriseDTO
   ) {
-    if (!clientEmail) return;
-    const { subject, html } = templates.paymentFailedToClient(clientEmail, facture, entreprise);
+    const clientEmail = getClientEmailFromFacture(facture as any);
+    if (!clientEmail) {
+      console.log("📭 Aucun e-mail disponible pour cette facture", {
+        facture_id: facture.id,
+        mission_id: facture.mission_id ?? null,
+      });
+      return;
+    }
+    const factureDto: FactureDTO = {
+      id: facture.id,
+      numero: facture.numero,
+      montant_ht: facture.montant_ht ?? null,
+      montant_ttc: facture.montant_ttc ?? null,
+      status: facture.status,
+      payment_link: facture.payment_link ?? null,
+    };
+    const { subject, html } = templates.paymentFailedToClient(clientEmail, factureDto, entreprise);
     await sendRawEmail({ to: clientEmail, subject, html });
   },
 };

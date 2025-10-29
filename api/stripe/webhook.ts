@@ -18,6 +18,7 @@ import Stripe from "stripe";
 import type { Tables } from "../../types/database.js";
 import { supabaseAdmin } from "../_supabase.js";
 import { notify } from "../_lib/notifications.js";
+import type { FactureDTO } from "../_lib/templates/emailTemplates.js";
 
 type StripeFacture = Tables<"factures">;
 type StripeEntreprise = Tables<"entreprise">;
@@ -143,25 +144,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const entreprise = facture.entreprise;
-        const clientEmail =
-          facture.mission?.client?.email ?? facture.mission?.contact_email ?? null;
 
-        if (clientEmail && entreprise) {
-          await notify.paymentSucceededToClient(
-            clientEmail,
-            {
-              id: facture.id,
-              numero: facture.numero,
-              status: "paid",
-              payment_link: facture.payment_link,
-            },
-            {
-              id: entreprise.id,
-              nom: entreprise.nom,
-              email: entreprise.email,
-              slug: entreprise.slug,
-            }
-          );
+        const factureForNotify = {
+          id: facture.id,
+          numero: facture.numero,
+          montant_ht: facture.montant_ht ?? null,
+          montant_ttc: facture.montant_ttc ?? null,
+          status: "paid" as FactureDTO["status"],
+          payment_link: facture.payment_link ?? null,
+          missions: facture.mission
+            ? {
+                client: facture.mission.client ?? null,
+                contact_email: facture.mission.contact_email ?? null,
+                client_id: facture.mission.client_id ?? null,
+              }
+            : null,
+          contact_email: facture.contact_email ?? null,
+          mission_id: facture.mission_id ?? null,
+        } satisfies FactureDTO & {
+          missions?: {
+            client?: Tables<"clients"> | null;
+            contact_email?: string | null;
+            client_id?: string | null;
+          } | null;
+          contact_email?: string | null;
+          mission_id?: number | null;
+        };
+
+        if (entreprise) {
+          await notify.paymentSucceededToClient(factureForNotify, {
+            id: entreprise.id,
+            nom: entreprise.nom,
+            email: entreprise.email,
+            slug: entreprise.slug,
+          });
         }
 
         if (entreprise) {
@@ -220,25 +236,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else {
           console.log(`⚠️ Facture ${factureId} → canceled`);
           const entreprise = facture?.entreprise;
-          const clientEmail =
-            facture?.mission?.client?.email ?? facture?.mission?.contact_email ?? null;
-
-          if (clientEmail && entreprise) {
-            await notify.paymentFailedToClient(
-              clientEmail,
-              {
+          const factureForNotify = facture
+            ? ({
                 id: facture.id,
                 numero: facture.numero,
-                status: "canceled",
-                payment_link: facture.payment_link,
-              },
-              {
-                id: entreprise.id,
-                nom: entreprise.nom,
-                email: entreprise.email,
-                slug: entreprise.slug,
-              }
-            );
+                montant_ht: facture.montant_ht ?? null,
+                montant_ttc: facture.montant_ttc ?? null,
+                status: "canceled" as FactureDTO["status"],
+                payment_link: facture.payment_link ?? null,
+                missions: facture.mission
+                  ? {
+                      client: facture.mission.client ?? null,
+                      contact_email: facture.mission.contact_email ?? null,
+                      client_id: facture.mission.client_id ?? null,
+                    }
+                  : null,
+                contact_email: facture.contact_email ?? null,
+                mission_id: facture.mission_id ?? null,
+              } satisfies FactureDTO & {
+                missions?: {
+                  client?: Tables<"clients"> | null;
+                  contact_email?: string | null;
+                  client_id?: string | null;
+                } | null;
+                contact_email?: string | null;
+                mission_id?: number | null;
+              })
+            : null;
+
+          if (entreprise && factureForNotify) {
+            await notify.paymentFailedToClient(factureForNotify, {
+              id: entreprise.id,
+              nom: entreprise.nom,
+              email: entreprise.email,
+              slug: entreprise.slug,
+            });
           }
 
           if (entreprise) {

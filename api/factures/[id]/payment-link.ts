@@ -25,6 +25,7 @@ import type { Tables } from "../../../types/database.js";
 import { getUserFromToken } from "../../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../../_lib/entreprise.js";
 import { notify } from "../../_lib/notifications.js";
+import type { FactureDTO } from "../../_lib/templates/emailTemplates.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 const ENTREPRISE_ROLES = new Set(["freelance", "entreprise", "admin"]);
@@ -174,26 +175,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const clientEmail =
-      missionWithClient?.client?.email ?? missionWithClient?.contact_email ?? null;
+    const factureForNotify = {
+      id: factureRecord.id,
+      numero: factureRecord.numero,
+      montant_ht: factureRecord.montant_ht ?? null,
+      montant_ttc: factureRecord.montant_ttc ?? null,
+      status: "pending_payment" as FactureDTO["status"],
+      payment_link: session.url,
+      missions: missionWithClient
+        ? {
+            client: missionWithClient.client ?? null,
+            contact_email: missionWithClient.contact_email ?? null,
+            client_id: missionWithClient.client_id ?? null,
+          }
+        : null,
+      contact_email: factureRecord.contact_email ?? null,
+      mission_id: factureRecord.mission_id ?? null,
+    } satisfies FactureDTO & {
+      missions?: {
+        client?: Tables<"clients"> | null;
+        contact_email?: string | null;
+        client_id?: string | null;
+      } | null;
+      contact_email?: string | null;
+      mission_id?: number | null;
+    };
 
-    if (clientEmail) {
-      await notify.paymentLinkToClient(
-        clientEmail,
-        {
-          id: factureRecord.id,
-          numero: factureRecord.numero,
-          status: "pending_payment",
-          payment_link: session.url,
-        },
-        {
-          id: entreprise.id,
-          nom: entreprise.nom,
-          email: entreprise.email,
-          slug: entreprise.slug,
-        }
-      );
-    }
+    await notify.paymentLinkToClient(factureForNotify, {
+      id: entreprise.id,
+      nom: entreprise.nom,
+      email: entreprise.email,
+      slug: entreprise.slug,
+    });
 
     await notify.billingStatusChangedForEntreprise(
       {
