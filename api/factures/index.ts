@@ -26,6 +26,7 @@ import type { Tables } from "../../types/database.js";
 import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
 import { notify } from "../_lib/notifications.js";
+import type { FactureDTO } from "../_lib/templates/emailTemplates.js";
 
 interface FactureWithRelations extends Tables<"factures"> {
   missions?:
@@ -239,10 +240,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ error: fetchError.message });
       }
 
-      const clientEmail =
-        factureWithRelations?.missions?.client?.email ??
-        factureWithRelations?.missions?.contact_email ??
-        null;
+      const factureStatus = (
+        factureWithRelations.status ?? "pending_payment"
+      ) as FactureDTO["status"];
+
+      const factureForNotify: FactureDTO & {
+        missions?: {
+          client?: Tables<"clients"> | null;
+          contact_email?: string | null;
+          client_id?: string | null;
+        } | null;
+        contact_email?: string | null;
+        mission_id?: number | null;
+      } = {
+        id: factureWithRelations.id,
+        numero: factureWithRelations.numero,
+        montant_ht: factureWithRelations.montant_ht ?? null,
+        montant_ttc: factureWithRelations.montant_ttc ?? null,
+        status: factureStatus,
+        payment_link: factureWithRelations.payment_link ?? null,
+        missions: factureWithRelations.missions
+          ? {
+              client: factureWithRelations.missions.client ?? null,
+              contact_email: factureWithRelations.missions.contact_email ?? null,
+              client_id: factureWithRelations.missions.client_id ?? null,
+            }
+          : null,
+        contact_email: factureWithRelations.contact_email ?? null,
+        mission_id: factureWithRelations.mission_id ?? null,
+      };
 
       await notify.billingStatusChangedForEntreprise(
         {
@@ -254,28 +280,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         {
           id: factureWithRelations.id,
           numero: factureWithRelations.numero,
-          status: factureWithRelations.status as "pending_payment" | "paid" | "canceled",
+          status: factureStatus,
           payment_link: factureWithRelations.payment_link,
         }
       );
 
-      if (clientEmail) {
-        await notify.invoiceCreatedToClient(
-          clientEmail,
-          {
-            id: factureWithRelations.id,
-            numero: factureWithRelations.numero,
-            status: factureWithRelations.status as "pending_payment" | "paid" | "canceled",
-            payment_link: factureWithRelations.payment_link,
-          },
-          {
-            id: entreprise.id,
-            nom: entreprise.nom,
-            email: entreprise.email,
-            slug: entreprise.slug,
-          }
-        );
-      }
+      await notify.invoiceCreatedToClient(factureForNotify, {
+        id: entreprise.id,
+        nom: entreprise.nom,
+        email: entreprise.email,
+        slug: entreprise.slug,
+      });
 
       return res.status(201).json({ facture: factureWithRelations });
     }

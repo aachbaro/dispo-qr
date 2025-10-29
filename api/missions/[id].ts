@@ -27,6 +27,7 @@ import type { Tables } from "../../types/database.js";
 import { getUserFromToken } from "../utils/auth.js";
 import { canAccessSensitive, findEntreprise } from "../_lib/entreprise.js";
 import { notify } from "../_lib/notifications.js";
+import type { MissionDTO } from "../_lib/templates/emailTemplates.js";
 
 const ENTREPRISE_ROLES = new Set(["freelance", "entreprise", "admin"]);
 const MISSION_SELECT =
@@ -215,41 +216,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           slug: missionWithRelations.entreprise?.slug ?? null,
         };
 
-        const clientEmail =
-          missionWithRelations.client?.email ??
-          missionWithRelations.contact_email ??
-          null;
-
         const slotDtos = missionWithRelations.slots?.map((s) => ({
           start: s.start!,
           end: s.end!,
           title: s.title ?? null,
         }));
 
+        const missionForNotify: MissionDTO & {
+          contact_email?: string | null;
+          client?: Tables<"clients"> | null;
+          client_id?: string | null;
+        } = {
+          id: missionWithRelations.id,
+          status: missionWithRelations.status,
+          etablissement: missionWithRelations.etablissement,
+          instructions: missionWithRelations.instructions,
+          slots: slotDtos,
+          contact_email: missionWithRelations.contact_email,
+          client: missionWithRelations.client ?? null,
+          client_id: missionWithRelations.client_id,
+        };
+
         if (updates.status && updates.status !== missionRecord.status) {
           await notify.missionStatusChangedToClient(
-            clientEmail,
-            {
-              id: missionWithRelations.id,
-              status: missionWithRelations.status,
-              etablissement: missionWithRelations.etablissement,
-              instructions: missionWithRelations.instructions,
-              slots: slotDtos,
-            },
+            missionForNotify,
             entrepriseForNotify
           );
         }
 
         if (Array.isArray(slots)) {
           await notify.missionSlotsRescheduledToClient(
-            clientEmail,
-            {
-              id: missionWithRelations.id,
-              status: missionWithRelations.status,
-              etablissement: missionWithRelations.etablissement,
-              instructions: missionWithRelations.instructions,
-              slots: slotDtos,
-            },
+            missionForNotify,
             entrepriseForNotify
           );
         }
