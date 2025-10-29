@@ -2,7 +2,7 @@
 // -------------------------------------------------------------
 // Helper : retourne la meilleure adresse e-mail à utiliser
 // -------------------------------------------------------------
-import type { Tables } from "../../types/database.js";
+import type { Tables } from "../../../types/database.js";
 
 export function getClientEmailFromMission(
   mission: Partial<Tables<"missions">> & { client?: any }

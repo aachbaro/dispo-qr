@@ -42,7 +42,7 @@ export async function getUserFromToken(
   req: VercelRequest
 ): Promise<AuthUser | null> {
   const auth = req.headers.authorization;
-  console.log("🔑 Header reçu:", auth);
+  // console.log("🔑 Header reçu:", auth);
 
   if (!auth) return null;
   const token = auth.split(" ")[1];
@@ -54,11 +54,11 @@ export async function getUserFromToken(
     const userId = decoded.sub;
     const email = decoded.email ?? null;
 
-    console.log("🧩 Token décodé:", {
-      sub: decoded.sub,
-      email: decoded.email,
-      exp: decoded.exp,
-    });
+    // console.log("🧩 Token décodé:", {
+    //   sub: decoded.sub,
+    //   email: decoded.email,
+    //   exp: decoded.exp,
+    // });
 
     // 🧱 Lecture du profil complet depuis la base
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -98,7 +98,7 @@ export async function getUserFromToken(
       slug,
     };
 
-    console.log("✅ AuthUser final:", user);
+    // console.log("✅ AuthUser final:", user);
     return user;
   } catch (err) {
     console.error("❌ Token Supabase invalide ou expiré:", err);

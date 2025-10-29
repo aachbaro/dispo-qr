@@ -41,7 +41,7 @@ export async function sendRawEmail({
   subject,
   html,
   fromName = "ExtraBeam",
-  fromEmail = "no-reply@extrabeam.app",
+  fromEmail = "adam.achbarou@gmail.com",
   replyTo,
 }: SendRawEmailParams) {
   if (!API_KEY) {
