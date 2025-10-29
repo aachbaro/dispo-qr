@@ -18,48 +18,25 @@
         <button
           v-if="!expanded && hasDetails"
           @click="expanded = true"
+          :aria-expanded="expanded"
           class="mt-4 text-sm text-gray-600 hover:text-black underline transition-colors"
         >
           Voir plus sur {{ entreprise?.prenom || "ce profil" }}
         </button>
       </Transition>
 
-      <ExpandableSection :visible="expanded && hasDetails">
+      <ExpandCollapse :visible="expanded && hasDetails">
         <div class="space-y-8 mt-6">
           <TransitionGroup name="stagger" tag="div" class="space-y-8">
             <div
-              v-if="showSkills"
-              key="skills"
-              class="opacity-0 animate-fadeIn delay-100"
+              v-for="(section, index) in visibleSections"
+              :key="section.key"
+              class="opacity-0 animate-fadeIn"
+              :style="{ '--delay': `${index * delayStepInSeconds}s` }"
             >
-              <CvSkills
-                :skills="skills"
-                :entreprise-slug="entrepriseSlug"
-                :is-owner="isOwner"
-                @updated="refresh"
-              />
-            </div>
-
-            <div
-              v-if="showExperiences"
-              key="experiences"
-              class="opacity-0 animate-fadeIn delay-300"
-            >
-              <CvExperiences
-                :experiences="experiences"
-                :entreprise-slug="entrepriseSlug"
-                :is-owner="isOwner"
-                @updated="refresh"
-              />
-            </div>
-
-            <div
-              v-if="showEducation"
-              key="education"
-              class="opacity-0 animate-fadeIn delay-500"
-            >
-              <CvEducation
-                :education="education"
+              <component
+                :is="section.component"
+                v-bind="section.props"
                 :entreprise-slug="entrepriseSlug"
                 :is-owner="isOwner"
                 @updated="refresh"
@@ -70,19 +47,20 @@
           <button
             v-if="expanded"
             @click="expanded = false"
+            aria-expanded="true"
             class="mt-4 text-sm text-gray-500 hover:text-black underline transition-colors"
           >
             Réduire
           </button>
         </div>
-      </ExpandableSection>
+      </ExpandCollapse>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, toRefs, watch } from "vue";
-import ExpandableSection from "@/components/ui/ExpandableSection.vue";
+import { computed, onMounted, ref, toRefs, watch, type Component } from "vue";
+import ExpandCollapse from "@/components/ui/ExpandCollapse.vue";
 import { useCv } from "./useCv";
 import CvProfile from "./CvProfile.vue";
 import CvSkills from "./CvSkills.vue";
@@ -101,21 +79,44 @@ const loading = ref(false);
 const { entreprise, profile, skills, experiences, education, fetchCv } = useCv();
 
 const entrepriseSlug = computed(() => entreprise.value?.slug ?? props.entrepriseRef);
-const hasDetails = computed(
-  () =>
-    skills.value.length > 0 ||
-    experiences.value.length > 0 ||
-    education.value.length > 0 ||
-    props.isOwner
-);
-const showSkills = computed(() => skills.value.length > 0 || props.isOwner);
-const showExperiences = computed(() => experiences.value.length > 0 || props.isOwner);
-const showEducation = computed(() => education.value.length > 0 || props.isOwner);
+
+type SectionKey = "skills" | "experiences" | "education";
+
+interface SectionConfig {
+  key: SectionKey;
+  component: Component;
+  props: Record<string, unknown>;
+  visible: boolean;
+}
+
+const delayStepInSeconds = 0.2;
+
+const sections = computed<SectionConfig[]>(() => [
+  {
+    key: "skills",
+    component: CvSkills,
+    props: { skills: skills.value },
+    visible: (skills.value?.length ?? 0) > 0 || isOwner.value,
+  },
+  {
+    key: "experiences",
+    component: CvExperiences,
+    props: { experiences: experiences.value },
+    visible: (experiences.value?.length ?? 0) > 0 || isOwner.value,
+  },
+  {
+    key: "education",
+    component: CvEducation,
+    props: { education: education.value },
+    visible: (education.value?.length ?? 0) > 0 || isOwner.value,
+  },
+]);
+
+const visibleSections = computed(() => sections.value.filter((section) => section.visible));
+const hasDetails = computed(() => visibleSections.value.length > 0);
 
 async function refresh() {
-  if (!props.entrepriseRef) {
-    return;
-  }
+  if (!props.entrepriseRef) return;
 
   try {
     loading.value = true;
@@ -179,17 +180,6 @@ onMounted(refresh);
 
 .animate-fadeIn {
   animation: fadeIn 0.7s ease forwards;
-}
-
-.delay-100 {
-  animation-delay: 0.1s;
-}
-
-.delay-300 {
-  animation-delay: 0.3s;
-}
-
-.delay-500 {
-  animation-delay: 0.5s;
+  animation-delay: var(--delay, 0s);
 }
 </style>
