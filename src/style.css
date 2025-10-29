@@ -3,6 +3,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import "./assets/css/transitions.css";
+
 body {
   font-family: "Inter", sans-serif;
 }

@@ -9,7 +9,7 @@
     @leave="leave"
     @after-leave="afterLeave"
   >
-    <div v-show="visible" class="overflow-hidden will-change-[height,opacity]">
+    <div v-show="visible" class="overflow-hidden expand-transition">
       <slot />
     </div>
   </Transition>

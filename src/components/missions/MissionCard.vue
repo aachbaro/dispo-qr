@@ -19,202 +19,209 @@
  ------------------------------------------------------------- -->
 
 <template>
-  <div
-    class="border rounded-lg p-4 cursor-pointer hover:shadow-md transition"
-    @click="expanded = !expanded"
-  >
-    <!-- Vue compacte -->
-    <div class="flex justify-between items-center">
-      <h3 class="font-bold text-lg">{{ mission.etablissement }}</h3>
-      <p v-if="mission.slots?.length" class="text-sm text-gray-600">
-        {{ formatDate(mission.slots?.[0]?.start) }}
-      </p>
-      <!-- Status -->
-      <span
-        class="px-2 py-1 text-xs rounded-full"
-        :class="statusClasses[mission.status]"
-      >
-        {{ statusLabels[mission.status] || mission.status }}
-      </span>
-    </div>
-
-    <!-- Vue détaillée -->
-    <transition name="fade">
-      <div v-if="expanded" class="mt-3 space-y-2">
-        <!-- Adresse établissement -->
+  <ExpandableCard v-model:expanded="expanded" class="p-4 hover:shadow-md">
+    <template #header="{ expanded: isExpanded, toggle }">
+      <div class="flex flex-col gap-3 w-full">
         <div
-          v-if="
-            mission.etablissement_adresse_ligne1 || mission.etablissement_ville
-          "
-          class="text-sm text-gray-600"
+          class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         >
-          📍
-          {{ mission.etablissement_adresse_ligne1 || "" }},
-          <span v-if="mission.etablissement_adresse_ligne2">
-            , {{ mission.etablissement_adresse_ligne2 }},
-          </span>
-          {{ mission.etablissement_code_postal || "" }},
-          {{ mission.etablissement_ville || "" }}
-          <span v-if="mission.etablissement_pays">
-            ({{ mission.etablissement_pays }})
-          </span>
-        </div>
-
-        <!-- Contact -->
-        <p v-if="mission.contact_name" class="text-sm font-medium">
-          👤 {{ mission.contact_name }}
-        </p>
-        <p v-if="mission.contact_phone" class="text-sm">
-          📞
-          <a
-            :href="`tel:${mission.contact_phone.replace(/\s+/g, '')}`"
-            class="text-blue-600 underline"
-          >
-            {{ mission.contact_phone }}
-          </a>
-        </p>
-        <p v-if="mission.contact_email" class="text-sm">
-          ✉️
-          <a
-            :href="`mailto:${mission.contact_email}`"
-            class="text-blue-600 underline"
-          >
-            {{ mission.contact_email }}
-          </a>
-        </p>
-
-        <!-- Créneaux -->
-        <div
-          v-if="mission.slots?.length"
-          class="space-y-1 text-sm text-gray-600"
-        >
-          <p
-            v-for="slot in mission.slots"
-            :key="
-              slot.id ?? slot.start ?? slot.end ?? slot.title ?? slot.created_at
-            "
-          >
-            📅 {{ formatDate(slot.start) }} → {{ formatDate(slot.end) }}
-          </p>
-        </div>
-
-        <!-- Instructions -->
-        <p v-if="mission.instructions" class="text-sm italic text-gray-700">
-          {{ mission.instructions }}
-        </p>
-
-        <!-- Mode -->
-        <p class="text-sm">
-          Mode : <b>{{ mission.mode }}</b>
-        </p>
-
-        <!-- Actions -->
-        <div v-if="!props.readonly" class="flex gap-2 mt-3 justify-center">
-          <!-- Proposed -->
-          <template v-if="mission.status === 'proposed'">
-            <button
-              class="btn-primary hover:bg-blue-700"
-              @click.stop="acceptMission"
-              :disabled="loading"
-            >
-              Accepter
-            </button>
-            <button
-              class="btn-primary hover:bg-red-700"
-              @click.stop="rejectMission"
-              :disabled="loading"
-            >
-              Refuser
-            </button>
-          </template>
-
-          <!-- Validated -->
-          <template v-else-if="mission.status === 'validated'">
-            <button
-              class="btn-primary hover:bg-green-700"
-              @click.stop="createDevis"
-            >
-              Devis
-            </button>
-            <button
-              class="btn-primary hover:bg-gray-700"
-              @click.stop="markRealized"
-            >
-              Marquer réalisée
-            </button>
-          </template>
-
-          <!-- Pending payment -->
-          <template v-else-if="mission.status === 'pending_payment'">
-            <span class="text-sm text-yellow-600">Paiement en attente…</span>
-            <button
-              class="btn-primary hover:bg-green-700"
-              @click.stop="markPaid"
-            >
-              Marquer payé
-            </button>
-          </template>
-
-          <!-- Paid -->
-          <template v-else-if="mission.status === 'paid'">
-            <span class="text-sm text-green-600">Mission payée ✅</span>
-            <button
-              class="btn-primary hover:bg-gray-700"
-              @click.stop="closeMission"
-            >
-              Clore
-            </button>
-          </template>
-
-          <!-- Refused -->
-          <template v-else-if="mission.status === 'refused'">
-            <span class="text-sm text-red-500">Mission refusée</span>
-          </template>
-
-          <!-- Closed -->
-          <template v-else-if="mission.status === 'closed'">
-            <span class="text-sm text-gray-500">Mission clôturée</span>
-          </template>
-        </div>
-
-        <!-- Facturation -->
-        <div v-if="mission.status === 'realized'" class="mt-4 border-t pt-3">
-          <h4 class="text-md font-semibold mb-2">📑 Facturation</h4>
-
-          <!-- Entreprise : générer ou gérer facture -->
-          <template v-if="!props.readonly">
-            <!-- Si pas encore de facture -->
-            <div v-if="!facture">
-              <button
-                class="btn-primary hover:bg-green-700"
-                @click.stop="createFacture"
-              >
-                Générer une facture
-              </button>
-            </div>
-
-            <!-- Si une facture existe -->
-            <FactureCard
-              v-else
-              :facture="facture"
-              :entreprise="mission.entreprise"
-              @deleted="handleFactureDeleted"
-              @updated="handleFactureUpdated"
-              @edit="handleFactureEdit"
-            />
-          </template>
-
-          <!-- Client (readonly) : voir facture si elle existe -->
-          <template v-else>
-            <FactureCard v-if="facture" :facture="facture" readonly />
-            <p v-else class="text-sm text-gray-500 italic">
-              Aucune facture encore générée pour cette mission.
+          <div>
+            <h3 class="font-bold text-lg text-gray-900">
+              {{ mission.etablissement }}
+            </h3>
+            <p v-if="mission.slots?.length" class="text-sm text-gray-600">
+              {{ formatDate(mission.slots?.[0]?.start) }}
             </p>
-          </template>
+          </div>
+
+          <div class="flex items-center gap-3 self-start sm:self-auto">
+            <span
+              class="px-2 py-1 text-xs rounded-full"
+              :class="statusClasses[mission.status]"
+            >
+              {{ statusLabels[mission.status] || mission.status }}
+            </span>
+
+            <button
+              class="text-sm text-gray-600 hover:text-black underline transition-colors"
+              @click.stop="toggle()"
+              :aria-expanded="isExpanded"
+            >
+              {{ isExpanded ? "Réduire" : "Voir plus" }}
+            </button>
+          </div>
         </div>
       </div>
-    </transition>
-  </div>
+    </template>
+    <template #indicator></template>
+
+    <div class="mt-3 space-y-3 text-sm text-gray-700">
+      <!-- Adresse établissement -->
+      <div
+        v-if="mission.etablissement_adresse_ligne1 || mission.etablissement_ville"
+        class="text-sm text-gray-600"
+      >
+        📍
+        {{ mission.etablissement_adresse_ligne1 || "" }},
+        <span v-if="mission.etablissement_adresse_ligne2">
+          , {{ mission.etablissement_adresse_ligne2 }},
+        </span>
+        {{ mission.etablissement_code_postal || "" }},
+        {{ mission.etablissement_ville || "" }}
+        <span v-if="mission.etablissement_pays">
+          ({{ mission.etablissement_pays }})
+        </span>
+      </div>
+
+      <!-- Contact -->
+      <p v-if="mission.contact_name" class="text-sm font-medium">
+        👤 {{ mission.contact_name }}
+      </p>
+      <p v-if="mission.contact_phone" class="text-sm">
+        📞
+        <a
+          :href="`tel:${mission.contact_phone.replace(/\s+/g, '')}`"
+          class="text-blue-600 underline"
+        >
+          {{ mission.contact_phone }}
+        </a>
+      </p>
+      <p v-if="mission.contact_email" class="text-sm">
+        ✉️
+        <a
+          :href="`mailto:${mission.contact_email}`"
+          class="text-blue-600 underline"
+        >
+          {{ mission.contact_email }}
+        </a>
+      </p>
+
+      <!-- Créneaux -->
+      <div v-if="mission.slots?.length" class="space-y-1 text-sm text-gray-600">
+        <p
+          v-for="slot in mission.slots"
+          :key="slot.id ?? slot.start ?? slot.end ?? slot.title ?? slot.created_at"
+        >
+          📅 {{ formatDate(slot.start) }} → {{ formatDate(slot.end) }}
+        </p>
+      </div>
+
+      <!-- Instructions -->
+      <p v-if="mission.instructions" class="text-sm italic text-gray-700">
+        {{ mission.instructions }}
+      </p>
+
+      <!-- Mode -->
+      <p class="text-sm">
+        Mode : <b>{{ mission.mode }}</b>
+      </p>
+
+      <!-- Actions -->
+      <div v-if="!props.readonly" class="flex gap-2 mt-3 justify-center">
+        <!-- Proposed -->
+        <template v-if="mission.status === 'proposed'">
+          <button
+            class="btn-primary hover:bg-blue-700"
+            @click.stop="acceptMission"
+            :disabled="loading"
+          >
+            Accepter
+          </button>
+          <button
+            class="btn-primary hover:bg-red-700"
+            @click.stop="rejectMission"
+            :disabled="loading"
+          >
+            Refuser
+          </button>
+        </template>
+
+        <!-- Validated -->
+        <template v-else-if="mission.status === 'validated'">
+          <button
+            class="btn-primary hover:bg-green-700"
+            @click.stop="createDevis"
+          >
+            Devis
+          </button>
+          <button
+            class="btn-primary hover:bg-gray-700"
+            @click.stop="markRealized"
+          >
+            Marquer réalisée
+          </button>
+        </template>
+
+        <!-- Pending payment -->
+        <template v-else-if="mission.status === 'pending_payment'">
+          <span class="text-sm text-yellow-600">Paiement en attente…</span>
+          <button
+            class="btn-primary hover:bg-green-700"
+            @click.stop="markPaid"
+          >
+            Marquer payé
+          </button>
+        </template>
+
+        <!-- Paid -->
+        <template v-else-if="mission.status === 'paid'">
+          <span class="text-sm text-green-600">Mission payée ✅</span>
+          <button
+            class="btn-primary hover:bg-gray-700"
+            @click.stop="closeMission"
+          >
+            Clore
+          </button>
+        </template>
+
+        <!-- Refused -->
+        <template v-else-if="mission.status === 'refused'">
+          <span class="text-sm text-red-500">Mission refusée</span>
+        </template>
+
+        <!-- Closed -->
+        <template v-else-if="mission.status === 'closed'">
+          <span class="text-sm text-gray-500">Mission clôturée</span>
+        </template>
+      </div>
+
+      <!-- Facturation -->
+      <div v-if="mission.status === 'realized'" class="mt-4 border-t pt-3">
+        <h4 class="text-md font-semibold mb-2">📑 Facturation</h4>
+
+        <!-- Entreprise : générer ou gérer facture -->
+        <template v-if="!props.readonly">
+          <!-- Si pas encore de facture -->
+          <div v-if="!facture">
+            <button
+              class="btn-primary hover:bg-green-700"
+              @click.stop="createFacture"
+            >
+              Générer une facture
+            </button>
+          </div>
+
+          <!-- Si une facture existe -->
+          <FactureCard
+            v-else
+            :facture="facture"
+            :entreprise="mission.entreprise"
+            @deleted="handleFactureDeleted"
+            @updated="handleFactureUpdated"
+            @edit="handleFactureEdit"
+          />
+        </template>
+
+        <!-- Client (readonly) : voir facture si elle existe -->
+        <template v-else>
+          <FactureCard v-if="facture" :facture="facture" readonly />
+          <p v-else class="text-sm text-gray-500 italic">
+            Aucune facture encore générée pour cette mission.
+          </p>
+        </template>
+      </div>
+    </div>
+  </ExpandableCard>
 
   <!-- FactureModal pour création -->
   <FactureModal
@@ -228,12 +235,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { updateMission } from "../../services/missions";
 import { listFacturesByMission, type FactureWithRelations } from "../../services/factures";
 import FactureModal from "../factures/FactureModal.vue";
 import FactureCard from "../factures/FactureCard.vue";
 import type { MissionWithRelations } from "../../services/missions";
+import ExpandableCard from "@/components/ui/ExpandableCard.vue";
+import { useExpandableCard } from "@/composables/ui/useExpandableCard";
 
 const props = defineProps<{
   mission: MissionWithRelations;
@@ -243,7 +252,7 @@ const props = defineProps<{
 const emit = defineEmits(["updated"]);
 const loading = ref(false);
 const showFactureModal = ref(false);
-const expanded = ref(false);
+const { expanded } = useExpandableCard();
 const facture = ref<FactureWithRelations | null>(null);
 
 // ----------------------
