@@ -4,7 +4,7 @@
     class="mt-6 p-6"
     :collapsible="hasDetails"
   >
-    <template #header="{ expanded: isExpanded, toggle }">
+    <template #header>
       <div>
         <div v-if="loading" class="text-sm text-gray-500 animate-pulse">
           Chargement du CV...
@@ -17,22 +17,10 @@
             :is-owner="isOwner"
             @updated="refresh"
           />
-
-          <button
-            v-if="hasDetails"
-            @click.stop="toggle()"
-            :aria-expanded="isExpanded"
-            class="mt-4 text-sm text-gray-600 hover:text-black underline transition-colors"
-          >
-            {{
-              isExpanded
-                ? "Réduire"
-                : `Voir plus sur ${entreprise?.prenom || "ce profil"}`
-            }}
-          </button>
         </template>
       </div>
     </template>
+
     <template #indicator></template>
 
     <div v-if="!loading && hasDetails" class="space-y-8 mt-6">
@@ -70,12 +58,15 @@ const props = defineProps<{
 }>();
 
 const { isOwner } = toRefs(props);
-
 const { expanded, close } = useExpandableCard();
 const loading = ref(false);
-const { entreprise, profile, skills, experiences, education, fetchCv } = useCv();
 
-const entrepriseSlug = computed(() => entreprise.value?.slug ?? props.entrepriseRef);
+const { entreprise, profile, skills, experiences, education, fetchCv } =
+  useCv();
+
+const entrepriseSlug = computed(
+  () => entreprise.value?.slug ?? props.entrepriseRef
+);
 
 type SectionKey = "skills" | "experiences" | "education";
 
@@ -109,7 +100,7 @@ const sections = computed<SectionConfig[]>(() => [
   },
 ]);
 
-const visibleSections = computed(() => sections.value.filter((section) => section.visible));
+const visibleSections = computed(() => sections.value.filter((s) => s.visible));
 const hasDetails = computed(() => visibleSections.value.length > 0);
 
 async function refresh() {
@@ -135,14 +126,9 @@ watch(
   }
 );
 
-watch(
-  hasDetails,
-  (value) => {
-    if (!value) {
-      close();
-    }
-  }
-);
+watch(hasDetails, (value) => {
+  if (!value) close();
+});
 
 onMounted(refresh);
 </script>

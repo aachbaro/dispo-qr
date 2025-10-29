@@ -23,7 +23,7 @@
         />
       </div>
 
-      <div v-if="isCollapsible" class="flex items-center justify-end sm:justify-center">
+      <!-- <div v-if="isCollapsible" class="flex items-center justify-end sm:justify-center">
         <slot name="indicator" :expanded="expanded">
           <svg
             class="h-5 w-5 text-gray-500 transition-transform duration-300"
@@ -39,7 +39,7 @@
             />
           </svg>
         </slot>
-      </div>
+      </div> -->
     </header>
 
     <ExpandCollapse :visible="expanded">

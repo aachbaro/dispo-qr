@@ -16,28 +16,25 @@
 
 <template>
   <ExpandableCard v-model:expanded="expanded" class="p-4 hover:shadow-md">
-    <template #header="{ expanded: isExpanded, toggle }">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+    <template #header>
+      <div
+        class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full"
+      >
         <div>
           <h3 class="font-bold text-lg text-gray-900">{{ template.nom }}</h3>
           <p class="text-sm text-gray-600">{{ template.etablissement }}</p>
         </div>
-
-        <button
-          class="text-sm text-gray-600 hover:text-black underline transition-colors"
-          @click.stop="toggle()"
-          :aria-expanded="isExpanded"
-        >
-          {{ isExpanded ? "Réduire" : "Voir plus" }}
-        </button>
       </div>
     </template>
+
     <template #indicator></template>
 
     <div class="mt-3 space-y-2 text-sm text-gray-700">
       <!-- Adresse -->
       <div
-        v-if="template.etablissement_adresse_ligne1 || template.etablissement_ville"
+        v-if="
+          template.etablissement_adresse_ligne1 || template.etablissement_ville
+        "
       >
         📍 {{ template.etablissement_adresse_ligne1 }}
         <span v-if="template.etablissement_adresse_ligne2">
@@ -81,7 +78,7 @@
         </button>
       </div>
 
-      <!-- Edition inline -->
+      <!-- Édition inline -->
       <div v-if="editing" class="mt-4 border-t pt-3 space-y-2">
         <input
           v-model="editForm.nom"
@@ -136,6 +133,9 @@ const emit = defineEmits<{
   (e: "deleted", id: number): void;
 }>();
 
+// -------------------------------------------------------------
+// État local
+// -------------------------------------------------------------
 const { expanded } = useExpandableCard();
 const editing = ref(false);
 const loading = ref(false);
@@ -146,15 +146,15 @@ const editForm = ref({
   instructions: props.template.instructions || "",
 });
 
-// ----------------------
-// Actions
-// ----------------------
+// -------------------------------------------------------------
+// Actions CRUD
+// -------------------------------------------------------------
 function startEdit() {
   editing.value = true;
 }
+
 function cancelEdit() {
   editing.value = false;
-  // reset form
   editForm.value = {
     nom: props.template.nom,
     etablissement: props.template.etablissement,

@@ -14,12 +14,9 @@
 --------------------------------------------------------------- -->
 
 <template>
-  <div class="w-full flex flex-col items-center justify-center px-4 mx-4 pb-5">
+  <div class="w-full flex flex-col items-center justify-center px-4 pb-5">
     <!-- Bloc CV -->
-    <div
-      v-if="entrepriseSlug"
-      class="max-w-[1200px] w-full mb-6"
-    >
+    <div v-if="entrepriseSlug" class="max-w-[1200px] w-full mb-6">
       <CvCard :entreprise-ref="entrepriseSlug" :is-owner="isOwner" />
     </div>
 
@@ -61,7 +58,10 @@
     </div>
 
     <!-- Missions -->
-    <div class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg">
+    <div
+      v-if="entreprise && isOwner"
+      class="max-w-[1200px] w-full mt-4 border border-black p-3 rounded-lg"
+    >
       <MissionList
         v-if="entreprise"
         :is-owner="isOwner"
@@ -101,8 +101,8 @@ import CvCard from "../components/cv/CvCard.vue";
 const route = useRoute();
 const overview = ref<any>(null);
 const entreprise = computed(() => overview.value?.entreprise ?? null);
-const isOwner = computed(
-  () => ["owner", "admin"].includes(overview.value?.mode ?? "")
+const isOwner = computed(() =>
+  ["owner", "admin"].includes(overview.value?.mode ?? "")
 );
 const entrepriseSlug = computed(() => {
   const slugFromOverview = entreprise.value?.slug;
@@ -142,14 +142,11 @@ onMounted(async () => {
 
   await fetchEntrepriseData(slug);
 
-  watch(
-    [() => user.value, () => route.params.slug],
-    ([, newSlug]) => {
-      if (typeof newSlug === "string") {
-        fetchEntrepriseData(newSlug);
-      }
+  watch([() => user.value, () => route.params.slug], ([, newSlug]) => {
+    if (typeof newSlug === "string") {
+      fetchEntrepriseData(newSlug);
     }
-  );
+  });
 });
 
 function onEntrepriseUpdated(updated: any) {

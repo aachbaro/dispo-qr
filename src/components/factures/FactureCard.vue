@@ -14,42 +14,39 @@
 
 <template>
   <ExpandableCard v-model:expanded="expanded" class="p-4 hover:shadow-md">
-    <template #header="{ expanded: isExpanded, toggle }">
+    <template #header>
       <div
-        class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full"
+        class="grid grid-cols-3 items-center w-full text-center sm:text-left"
       >
-        <div class="flex flex-col gap-2">
-          <h3 class="font-semibold text-lg text-gray-900">
-            📄 {{ facture.numero }}
-          </h3>
-          <p class="text-sm bg-gray-100 px-2 py-1 rounded-full inline-flex w-max">
-            <b>{{ facture.client_name }}</b>
-          </p>
-        </div>
+        <!-- Gauche : numéro de facture -->
+        <h3 class="font-semibold text-lg text-gray-900 truncate">
+          📄 {{ facture.numero }}
+        </h3>
 
-        <div class="flex items-center gap-3 self-start sm:self-auto">
-          <span
-            class="inline-flex px-2 py-1 text-xs rounded-full"
-            :class="statusClasses[facture.status]"
-          >
-            {{ statusLabels[facture.status] || facture.status }}
-          </span>
+        <!-- Centre : nom du restaurant / client -->
+        <p
+          class="text-sm bg-gray-100 px-2 py-1 rounded-full inline-flex justify-center w-full sm:w-auto mx-auto sm:mx-0"
+        >
+          <b class="truncate">{{ facture.client_name }}</b>
+        </p>
 
-          <button
-            class="text-sm text-gray-600 hover:text-black underline transition-colors"
-            @click.stop="toggle()"
-            :aria-expanded="isExpanded"
-          >
-            {{ isExpanded ? "Réduire" : "Voir plus" }}
-          </button>
-        </div>
+        <!-- Droite : statut (chip compact) -->
+        <span
+          class="inline-flex items-center justify-center px-2 py-1 text-xs rounded-full w-max sm:justify-self-end mx-auto sm:mx-0"
+          :class="statusClasses[facture.status]"
+        >
+          {{ statusLabels[facture.status] || facture.status }}
+        </span>
       </div>
     </template>
+
     <template #indicator></template>
 
     <div class="mt-3 space-y-3 text-sm text-gray-700">
       <!-- Infos facture -->
-      <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div
+        class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
+      >
         <p class="text-sm font-semibold">
           TTC : {{ facture.montant_ttc.toFixed(2) }} €
         </p>
@@ -80,7 +77,6 @@
 
         <!-- Actions sensibles : uniquement si !readonly -->
         <div v-if="!readonly" class="flex gap-2">
-          <!-- Gestion du lien paiement -->
           <button
             v-if="!facture.payment_link"
             class="btn-primary p-1 text-sm"
@@ -119,7 +115,7 @@ import { useExpandableCard } from "@/composables/ui/useExpandableCard";
 const props = defineProps<{
   facture: FactureWithRelations;
   entreprise?: any;
-  readonly?: boolean; // 👈 permet de basculer client vs entreprise
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits(["edit", "deleted", "updated"]);
@@ -128,7 +124,7 @@ const { removeFacture } = useFactures();
 const { expanded } = useExpandableCard();
 
 // ----------------------
-// Status labels & styles
+// Labels & styles
 // ----------------------
 const statusLabels: Record<string, string> = {
   pending_payment: "Paiement en attente",
@@ -186,4 +182,3 @@ async function onDelete() {
   }
 }
 </script>
-

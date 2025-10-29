@@ -5,23 +5,26 @@
 //
 // 📌 Description :
 //   - Regroupe toutes les données liées à une entreprise :
-//     • infos entreprise
-//     • missions, factures, slots, unavailabilities
-//   - Le contenu dépend du statut de l’utilisateur (owner/admin vs public)
+//     • Infos entreprise (publiques ou privées selon accès)
+//     • Missions (avec slots, client, entreprise)
+//     • Factures, slots, indisponibilités
+//   - Le contenu dépend du statut utilisateur :
+//       → owner/admin : données complètes
+//       → visiteur/client : vue publique restreinte
 //
 // 📍 Endpoints :
 //   - GET /api/entreprises/[ref]/overview
-//       → mode=owner : données complètes
-//       → mode=public : données allégées
+//       → mode="owner"  → données complètes
+//       → mode="public" → données allégées
 //
 // 🔒 Règles d’accès :
-//   - Public : accès restreint (champs non sensibles, slots publics uniquement)
-//   - Authentifié (owner/admin) : accès complet
+//   - Public : accès restreint (pas de données sensibles)
+//   - Authentifié (owner/admin) : accès complet via canAccessSensitive
 //
 // ⚠️ Remarques :
-//   - `ref` = slug (string) ou id (number)
-//   - Utilise getUserFromToken + canAccessSensitive pour vérifier les droits
-//   - Combine plusieurs tables Supabase en une seule réponse
+//   - `ref` peut être un slug (string) ou un id (number)
+//   - combine plusieurs tables Supabase en une seule réponse JSON
+//   - Les missions incluent directement leurs slots pour MissionCard
 //
 // -------------------------------------------------------------
 
@@ -56,6 +59,12 @@ type PublicEntreprise = Pick<
 type PrivateEntreprise = Tables<"entreprise">;
 
 // -------------------------------------------------------------
+// Sélecteur relationnel pour missions
+// -------------------------------------------------------------
+const MISSION_SELECT =
+  "*, slots(*), client:client_id(*), entreprise:entreprise_id(*)";
+
+// -------------------------------------------------------------
 // Handler principal
 // -------------------------------------------------------------
 
@@ -74,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log("📡 [overview] Chargement entreprise pour ref:", ref);
 
     // 🔐 1. Récupération utilisateur (si token présent)
-    const user = await getUserFromToken(req);
+    const user = await getUserFromToken(req).catch(() => null);
 
     // 🔍 2. Récupération entreprise cible
     let entrepriseQuery = supabaseAdmin.from("entreprise").select("*");
@@ -105,7 +114,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const [missions, factures, slots, unavailabilities] = await Promise.all([
         supabaseAdmin
           .from("missions")
-          .select("*")
+          .select(MISSION_SELECT)
           .eq("entreprise_id", entreprise.id)
           .order("created_at", { ascending: false }),
 
@@ -126,7 +135,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .select("*")
           .eq("entreprise_id", entreprise.id),
       ]);
-      console.log("📅 unavailabilities:", unavailabilities.data);
 
       return res.status(200).json({
         mode: "owner",
@@ -144,7 +152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const [slots, unavailabilities] = await Promise.all([
       supabaseAdmin
         .from("slots")
-        .select("*")
+        .select("*, missions(status)")
         .eq("entreprise_id", entreprise.id),
       supabaseAdmin
         .from("unavailabilities")
@@ -152,7 +160,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("entreprise_id", entreprise.id),
     ]);
 
-    console.log("📅 unavailabilities:", unavailabilities.data);
+    // 🌍 Filtrage des slots publics (missions validées/payées/completed)
+    const publicSlots =
+      (slots.data as (Tables<"slots"> & { missions?: { status: string } })[])?.filter(
+        (s) =>
+          !s.mission_id ||
+          ["validated", "paid", "completed"].includes(s.missions?.status ?? "")
+      ) || [];
 
     const publicEntreprise: PublicEntreprise = {
       id: entreprise.id,
@@ -174,11 +188,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       mode: "public",
       entreprise: publicEntreprise,
-      slots: slots.data || [],
+      slots: publicSlots,
       unavailabilities: unavailabilities.data || [],
     });
   } catch (err: any) {
-    console.error("❌ [overview] Erreur GET /overview:", err.message);
+    console.error("❌ [overview] Erreur GET /overview:", err);
     return res.status(500).json({ error: "Erreur serveur interne" });
   }
 }

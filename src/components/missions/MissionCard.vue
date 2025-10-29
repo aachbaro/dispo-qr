@@ -20,45 +20,41 @@
 
 <template>
   <ExpandableCard v-model:expanded="expanded" class="p-4 hover:shadow-md">
-    <template #header="{ expanded: isExpanded, toggle }">
-      <div class="flex flex-col gap-3 w-full">
-        <div
-          class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+    <template #header>
+      <div
+        class="grid grid-cols-3 items-center w-full text-center sm:text-left"
+      >
+        <!-- Gauche : nom de l'établissement -->
+        <h3 class="font-bold text-lg text-gray-900 truncate">
+          {{ mission.etablissement }}
+        </h3>
+
+        <!-- Centre : date + heure du premier créneau -->
+        <p
+          v-if="mission.slots?.length"
+          class="text-sm text-gray-600 text-center"
         >
-          <div>
-            <h3 class="font-bold text-lg text-gray-900">
-              {{ mission.etablissement }}
-            </h3>
-            <p v-if="mission.slots?.length" class="text-sm text-gray-600">
-              {{ formatDate(mission.slots?.[0]?.start) }}
-            </p>
-          </div>
+          {{ formatDate(mission.slots?.[0]?.start) }}
+        </p>
 
-          <div class="flex items-center gap-3 self-start sm:self-auto">
-            <span
-              class="px-2 py-1 text-xs rounded-full"
-              :class="statusClasses[mission.status]"
-            >
-              {{ statusLabels[mission.status] || mission.status }}
-            </span>
-
-            <button
-              class="text-sm text-gray-600 hover:text-black underline transition-colors"
-              @click.stop="toggle()"
-              :aria-expanded="isExpanded"
-            >
-              {{ isExpanded ? "Réduire" : "Voir plus" }}
-            </button>
-          </div>
-        </div>
+        <!-- Droite : statut -->
+        <span
+          class="inline-flex items-center justify-center px-2 py-1 text-xs rounded-full w-max sm:justify-self-end mx-auto sm:mx-0"
+          :class="statusClasses[mission.status]"
+        >
+          {{ statusLabels[mission.status] || mission.status }}
+        </span>
       </div>
     </template>
+
     <template #indicator></template>
 
     <div class="mt-3 space-y-3 text-sm text-gray-700">
       <!-- Adresse établissement -->
       <div
-        v-if="mission.etablissement_adresse_ligne1 || mission.etablissement_ville"
+        v-if="
+          mission.etablissement_adresse_ligne1 || mission.etablissement_ville
+        "
         class="text-sm text-gray-600"
       >
         📍
@@ -100,7 +96,9 @@
       <div v-if="mission.slots?.length" class="space-y-1 text-sm text-gray-600">
         <p
           v-for="slot in mission.slots"
-          :key="slot.id ?? slot.start ?? slot.end ?? slot.title ?? slot.created_at"
+          :key="
+            slot.id ?? slot.start ?? slot.end ?? slot.title ?? slot.created_at
+          "
         >
           📅 {{ formatDate(slot.start) }} → {{ formatDate(slot.end) }}
         </p>
@@ -155,10 +153,7 @@
         <!-- Pending payment -->
         <template v-else-if="mission.status === 'pending_payment'">
           <span class="text-sm text-yellow-600">Paiement en attente…</span>
-          <button
-            class="btn-primary hover:bg-green-700"
-            @click.stop="markPaid"
-          >
+          <button class="btn-primary hover:bg-green-700" @click.stop="markPaid">
             Marquer payé
           </button>
         </template>
@@ -191,7 +186,6 @@
 
         <!-- Entreprise : générer ou gérer facture -->
         <template v-if="!props.readonly">
-          <!-- Si pas encore de facture -->
           <div v-if="!facture">
             <button
               class="btn-primary hover:bg-green-700"
@@ -201,7 +195,6 @@
             </button>
           </div>
 
-          <!-- Si une facture existe -->
           <FactureCard
             v-else
             :facture="facture"
@@ -223,7 +216,7 @@
     </div>
   </ExpandableCard>
 
-  <!-- FactureModal pour création -->
+  <!-- FactureModal -->
   <FactureModal
     v-if="showFactureModal"
     :open="showFactureModal"
@@ -237,7 +230,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { updateMission } from "../../services/missions";
-import { listFacturesByMission, type FactureWithRelations } from "../../services/factures";
+import {
+  listFacturesByMission,
+  type FactureWithRelations,
+} from "../../services/factures";
 import FactureModal from "../factures/FactureModal.vue";
 import FactureCard from "../factures/FactureCard.vue";
 import type { MissionWithRelations } from "../../services/missions";
@@ -248,6 +244,8 @@ const props = defineProps<{
   mission: MissionWithRelations;
   readonly?: boolean;
 }>();
+
+console.log("🚀 MissionCard props.mission :", props.mission.slots);
 
 const emit = defineEmits(["updated"]);
 const loading = ref(false);
@@ -283,7 +281,6 @@ const statusClasses: Record<string, string> = {
 // ----------------------
 onMounted(async () => {
   try {
-    // Charger facture liée
     const factures = await listFacturesByMission(props.mission.id);
     facture.value = factures.length ? factures[0] : null;
   } catch (err) {
