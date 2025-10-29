@@ -13,96 +13,108 @@
  ------------------------------------------------------------- -->
 
 <template>
-  <div
-    class="border rounded-lg p-4 shadow-sm bg-white cursor-pointer hover:shadow-md transition"
-    @click.stop="expanded = !expanded"
-  >
-    <!-- Vue compacte -->
-    <div class="flex justify-between items-center">
-      <h3 class="font-semibold text-lg">📄 {{ facture.numero }}</h3>
-      <p class="text-sm bg-gray-100 px-2 py-1 rounded-full">
-        <b>{{ facture.client_name }}</b>
-      </p>
-      <span
-        class="inline-block px-2 py-1 text-xs rounded-full"
-        :class="statusClasses[facture.status]"
+  <ExpandableCard v-model:expanded="expanded" class="p-4 hover:shadow-md">
+    <template #header="{ expanded: isExpanded, toggle }">
+      <div
+        class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full"
       >
-        {{ statusLabels[facture.status] || facture.status }}
-      </span>
-    </div>
-
-    <!-- Vue détaillée -->
-    <transition name="fade">
-      <div v-if="expanded" class="mt-3 space-y-2">
-        <!-- Infos facture -->
-        <div class="flex justify-between items-center">
-          <p class="text-sm font-bold pl-4">
-            TTC : {{ facture.montant_ttc.toFixed(2) }} €
-          </p>
-          <p class="text-sm text-gray-600">
-            {{ formatDate(facture.date_emission) }}
+        <div class="flex flex-col gap-2">
+          <h3 class="font-semibold text-lg text-gray-900">
+            📄 {{ facture.numero }}
+          </h3>
+          <p class="text-sm bg-gray-100 px-2 py-1 rounded-full inline-flex w-max">
+            <b>{{ facture.client_name }}</b>
           </p>
         </div>
 
-        <!-- Paiement -->
-        <div v-if="facture.payment_link" class="text-sm mt-2">
-          <a
-            :href="facture.payment_link"
-            target="_blank"
-            class="flex items-center gap-1 text-blue-600 hover:underline"
-            @click.stop
+        <div class="flex items-center gap-3 self-start sm:self-auto">
+          <span
+            class="inline-flex px-2 py-1 text-xs rounded-full"
+            :class="statusClasses[facture.status]"
           >
-            <Icon name="link" class="w-4 h-4" />
-            Accéder au paiement
-          </a>
-        </div>
+            {{ statusLabels[facture.status] || facture.status }}
+          </span>
 
-        <!-- Actions -->
-        <div class="flex justify-between gap-2 pt-3">
-          <!-- Toujours dispo : téléchargement PDF -->
-          <button class="btn-primary p-1" @click.stop="downloadPdf">
-            <Icon name="download" class="w-4 h-4" />
+          <button
+            class="text-sm text-gray-600 hover:text-black underline transition-colors"
+            @click.stop="toggle()"
+            :aria-expanded="isExpanded"
+          >
+            {{ isExpanded ? "Réduire" : "Voir plus" }}
           </button>
-
-          <!-- Actions sensibles : uniquement si !readonly -->
-          <div v-if="!readonly" class="flex gap-2">
-            <!-- Gestion du lien paiement -->
-            <button
-              v-if="!facture.payment_link"
-              class="btn-primary p-1 text-sm"
-              @click.stop="onPaymentLink"
-            >
-              Générer lien
-            </button>
-            <button v-else class="btn-primary p-1" @click.stop="onPaymentLink">
-              <Icon name="arrow-path" class="w-4 h-4" />
-            </button>
-            <button
-              class="btn-primary p-1"
-              @click.stop="$emit('edit', facture)"
-            >
-              <Icon name="pencil" class="w-4 h-4" />
-            </button>
-            <button
-              class="btn-primary hover:bg-red-700 p-1"
-              @click.stop="onDelete"
-            >
-              <Icon name="trash" class="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
-    </transition>
-  </div>
+    </template>
+    <template #indicator></template>
+
+    <div class="mt-3 space-y-3 text-sm text-gray-700">
+      <!-- Infos facture -->
+      <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-sm font-semibold">
+          TTC : {{ facture.montant_ttc.toFixed(2) }} €
+        </p>
+        <p class="text-sm text-gray-600">
+          {{ formatDate(facture.date_emission) }}
+        </p>
+      </div>
+
+      <!-- Paiement -->
+      <div v-if="facture.payment_link" class="text-sm mt-2">
+        <a
+          :href="facture.payment_link"
+          target="_blank"
+          class="flex items-center gap-1 text-blue-600 hover:underline"
+          @click.stop
+        >
+          <Icon name="link" class="w-4 h-4" />
+          Accéder au paiement
+        </a>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex justify-between gap-2 pt-3">
+        <!-- Toujours dispo : téléchargement PDF -->
+        <button class="btn-primary p-1" @click.stop="downloadPdf">
+          <Icon name="download" class="w-4 h-4" />
+        </button>
+
+        <!-- Actions sensibles : uniquement si !readonly -->
+        <div v-if="!readonly" class="flex gap-2">
+          <!-- Gestion du lien paiement -->
+          <button
+            v-if="!facture.payment_link"
+            class="btn-primary p-1 text-sm"
+            @click.stop="onPaymentLink"
+          >
+            Générer lien
+          </button>
+          <button v-else class="btn-primary p-1" @click.stop="onPaymentLink">
+            <Icon name="arrow-path" class="w-4 h-4" />
+          </button>
+          <button class="btn-primary p-1" @click.stop="$emit('edit', facture)">
+            <Icon name="pencil" class="w-4 h-4" />
+          </button>
+          <button
+            class="btn-primary hover:bg-red-700 p-1"
+            @click.stop="onDelete"
+          >
+            <Icon name="trash" class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  </ExpandableCard>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { computed } from "vue";
 import type { FactureWithRelations } from "../../services/factures";
 import { useFactures } from "../../composables/useFactures";
 import { generateFacturePdf } from "../../utils/pdf/facturePdf";
 import { generateFacturePaymentLink } from "../../services/factures";
 import Icon from "../ui/Icon.vue";
+import ExpandableCard from "@/components/ui/ExpandableCard.vue";
+import { useExpandableCard } from "@/composables/ui/useExpandableCard";
 
 const props = defineProps<{
   facture: FactureWithRelations;
@@ -113,7 +125,7 @@ const props = defineProps<{
 const emit = defineEmits(["edit", "deleted", "updated"]);
 
 const { removeFacture } = useFactures();
-const expanded = ref(false);
+const { expanded } = useExpandableCard();
 
 // ----------------------
 // Status labels & styles
@@ -175,13 +187,3 @@ async function onDelete() {
 }
 </script>
 
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

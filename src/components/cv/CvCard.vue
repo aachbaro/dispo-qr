@@ -1,66 +1,63 @@
 <template>
-  <section
-    class="border border-black rounded-xl bg-white mt-6 p-6 shadow-sm transition-all duration-300"
+  <ExpandableCard
+    v-model:expanded="expanded"
+    class="mt-6 p-6"
+    :collapsible="hasDetails"
   >
-    <div v-if="loading" class="text-sm text-gray-500 animate-pulse">
-      Chargement du CV...
-    </div>
+    <template #header="{ expanded: isExpanded, toggle }">
+      <div>
+        <div v-if="loading" class="text-sm text-gray-500 animate-pulse">
+          Chargement du CV...
+        </div>
 
-    <div v-else>
-      <CvProfile
-        :profile="profile"
-        :entreprise="entreprise"
-        :is-owner="isOwner"
-        @updated="refresh"
-      />
-
-      <Transition name="fade">
-        <button
-          v-if="!expanded && hasDetails"
-          @click="expanded = true"
-          :aria-expanded="expanded"
-          class="mt-4 text-sm text-gray-600 hover:text-black underline transition-colors"
-        >
-          Voir plus sur {{ entreprise?.prenom || "ce profil" }}
-        </button>
-      </Transition>
-
-      <ExpandCollapse :visible="expanded && hasDetails">
-        <div class="space-y-8 mt-6">
-          <TransitionGroup name="stagger" tag="div" class="space-y-8">
-            <div
-              v-for="(section, index) in visibleSections"
-              :key="section.key"
-              class="opacity-0 animate-fadeIn"
-              :style="{ '--delay': `${index * delayStepInSeconds}s` }"
-            >
-              <component
-                :is="section.component"
-                v-bind="section.props"
-                :entreprise-slug="entrepriseSlug"
-                :is-owner="isOwner"
-                @updated="refresh"
-              />
-            </div>
-          </TransitionGroup>
+        <template v-else>
+          <CvProfile
+            :profile="profile"
+            :entreprise="entreprise"
+            :is-owner="isOwner"
+            @updated="refresh"
+          />
 
           <button
-            v-if="expanded"
-            @click="expanded = false"
-            aria-expanded="true"
-            class="mt-4 text-sm text-gray-500 hover:text-black underline transition-colors"
+            v-if="hasDetails"
+            @click.stop="toggle()"
+            :aria-expanded="isExpanded"
+            class="mt-4 text-sm text-gray-600 hover:text-black underline transition-colors"
           >
-            Réduire
+            {{
+              isExpanded
+                ? "Réduire"
+                : `Voir plus sur ${entreprise?.prenom || "ce profil"}`
+            }}
           </button>
-        </div>
-      </ExpandCollapse>
+        </template>
+      </div>
+    </template>
+    <template #indicator></template>
+
+    <div v-if="!loading && hasDetails" class="space-y-8 mt-6">
+      <div
+        v-for="(section, index) in visibleSections"
+        :key="section.key"
+        class="fade-in"
+        :style="{ animationDelay: `${index * delayStepInSeconds}s` }"
+      >
+        <component
+          :is="section.component"
+          v-bind="section.props"
+          :entreprise-slug="entrepriseSlug"
+          :is-owner="isOwner"
+          @updated="refresh"
+        />
+      </div>
     </div>
-  </section>
+  </ExpandableCard>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, toRefs, watch, type Component } from "vue";
-import ExpandCollapse from "@/components/ui/ExpandCollapse.vue";
+import ExpandableCard from "@/components/ui/ExpandableCard.vue";
+import { useExpandableCard } from "@/composables/ui/useExpandableCard";
 import { useCv } from "./useCv";
 import CvProfile from "./CvProfile.vue";
 import CvSkills from "./CvSkills.vue";
@@ -74,7 +71,7 @@ const props = defineProps<{
 
 const { isOwner } = toRefs(props);
 
-const expanded = ref(false);
+const { expanded, close } = useExpandableCard();
 const loading = ref(false);
 const { entreprise, profile, skills, experiences, education, fetchCv } = useCv();
 
@@ -132,54 +129,20 @@ watch(
   () => props.entrepriseRef,
   (nextRef, prevRef) => {
     if (nextRef && nextRef !== prevRef) {
-      expanded.value = false;
+      close();
       refresh();
+    }
+  }
+);
+
+watch(
+  hasDetails,
+  (value) => {
+    if (!value) {
+      close();
     }
   }
 );
 
 onMounted(refresh);
 </script>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-.stagger-enter-active {
-  transition: all 0.6s ease;
-}
-
-.stagger-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.stagger-enter-to {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.7s ease forwards;
-  animation-delay: var(--delay, 0s);
-}
-</style>

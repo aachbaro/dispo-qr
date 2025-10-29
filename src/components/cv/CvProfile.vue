@@ -31,7 +31,7 @@
       <button
         v-if="isOwner"
         class="px-3 py-1 border rounded text-sm"
-        @click="toggleEdit"
+        @click.stop="toggleEdit"
       >
         {{ editMode ? "Annuler" : "Modifier" }}
       </button>
