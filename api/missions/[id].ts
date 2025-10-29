@@ -17,7 +17,7 @@
 // ⚠️ Remarques :
 //   - Rôle issu de user.role (AuthUser enrichi)
 //   - Suppression de user_metadata / app_metadata
-//   - canAccessSensitive(user, entreprise) contrôle les droits
+//   - canAccessSensitive(user, entreprise) contrôle les droits 
 //
 // -------------------------------------------------------------
 
