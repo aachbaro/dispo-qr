@@ -116,9 +116,7 @@ const visibleSections = computed(() => sections.value.filter((section) => sectio
 const hasDetails = computed(() => visibleSections.value.length > 0);
 
 async function refresh() {
-  if (!props.entrepriseRef) {
-    return;
-  }
+  if (!props.entrepriseRef) return;
 
   try {
     loading.value = true;
