@@ -16,6 +16,7 @@
 //   - Ici : uniquement les appels directs à Supabase / API
 // -------------------------------------------------------------
 
+import { request } from "./api";
 import { supabase } from "./supabase";
 
 // ----------------------
@@ -79,20 +80,22 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
  * Inscription classique via backend custom
  * (utile si tu veux une API d’inscription spécifique)
  */
+export interface RegisterResponse {
+  entreprise?: { slug?: string | null } | null;
+  [key: string]: any;
+}
+
 export async function register(payload: {
   email: string;
   password: string;
   role: UserRole;
   entreprise?: { nom: string; prenom: string };
-}) {
-  const res = await fetch("/api/auth/register", {
+}): Promise<RegisterResponse> {
+  return request<RegisterResponse>("/api/auth/register", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    skipAuth: true,
   });
-
-  if (!res.ok) throw new Error("Erreur inscription");
-  return res.json();
 }
 
 /**

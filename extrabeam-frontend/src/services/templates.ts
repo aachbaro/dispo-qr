@@ -17,7 +17,7 @@
 // -------------------------------------------------------------
 
 import { request } from "./api";
-import type { Tables, TablesInsert, TablesUpdate } from "../../types/database";
+import type { Tables, TablesInsert, TablesUpdate } from "../../../types/database";
 
 export type MissionTemplate = Tables<"mission_templates">;
 export type MissionTemplateInsert = TablesInsert<"mission_templates">;

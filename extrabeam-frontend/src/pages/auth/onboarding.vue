@@ -69,6 +69,7 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "@/composables/useAuth";
+import { ApiError, request } from "@/services/api";
 import { supabase } from "@/services/supabase";
 
 const router = useRouter();
@@ -92,12 +93,8 @@ async function handleSubmit() {
     if (!token) throw new Error("Session expired, please log in again.");
 
     // 🔹 Update profile via API
-    const res = await fetch("/api/profiles/me", {
+    const { profile } = await request<{ profile: any }>("/api/profiles/me", {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
       body: JSON.stringify({
         role: role.value,
         first_name: first_name.value,
@@ -105,13 +102,6 @@ async function handleSubmit() {
         phone: phone.value,
       }),
     });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || "Profile update failed");
-    }
-
-    const { profile } = await res.json();
     if (!profile) throw new Error("Profile update failed (empty response)");
     console.log("✅ Profile updated:", profile);
 
@@ -140,7 +130,11 @@ async function handleSubmit() {
       router.push("/client");
     }
   } catch (err: any) {
-    error.value = err.message || "An unexpected error occurred.";
+    if (err instanceof ApiError) {
+      error.value = err.body?.error || "An unexpected error occurred.";
+    } else {
+      error.value = err?.message || "An unexpected error occurred.";
+    }
     console.error("❌ Onboarding error:", err);
   } finally {
     loading.value = false;

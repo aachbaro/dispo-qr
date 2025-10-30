@@ -46,6 +46,9 @@ export class ApiError extends Error {
 // Helpers
 // ----------------------
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+const ABSOLUTE_URL_REGEX = /^https?:\/\//i;
+
 /**
  * Construit les headers d’authentification pour les requêtes API.
  * Récupère le token stocké dans localStorage et l’ajoute en tant que Bearer.
@@ -53,6 +56,31 @@ export class ApiError extends Error {
 export function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem("authToken");
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Calcule l'URL finale en fonction de la configuration Vite.
+ * - Supporte les URLs absolues (http/https)
+ * - Si VITE_API_URL se termine par /api et que l'URL commence par /api,
+ *   on évite le doublon en retirant le préfixe /api de l'URL relative.
+ */
+export function resolveApiUrl(path: string): string {
+  if (ABSOLUTE_URL_REGEX.test(path)) {
+    return path;
+  }
+
+  if (!API_BASE_URL) {
+    return path;
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (API_BASE_URL.endsWith("/api") && normalizedPath.startsWith("/api")) {
+    const trimmed = normalizedPath.slice(4);
+    return `${API_BASE_URL}${trimmed}`;
+  }
+
+  return `${API_BASE_URL}${normalizedPath}`;
 }
 
 // ----------------------
@@ -79,11 +107,13 @@ export async function request<T>(
     ...(options.headers || {}),
   };
 
+  const resolvedUrl = resolveApiUrl(url);
+
   if (import.meta.env.VITE_DEBUG_API) {
-    console.log("🌍 Fetch:", url, options.method || "GET", { headers });
+    console.log("🌍 Fetch:", resolvedUrl, options.method || "GET", { headers });
   }
 
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetch(resolvedUrl, { ...options, headers });
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

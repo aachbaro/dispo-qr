@@ -100,7 +100,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
-import { supabase } from "../services/supabase";
+import { ApiError } from "@/services/api";
+import { register as registerUser } from "@/services/auth";
+import { supabase } from "@/services/supabase";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits(["close", "registered"]);
@@ -128,23 +130,12 @@ async function handleRegister() {
 
   try {
     // 1️⃣ Appel à ton API backend pour créer user + profile + entreprise
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: email.value,
-        password: password.value,
-        role: role.value,
-        entreprise: role.value === "freelance" ? entreprise.value : undefined,
-      }),
+    const data = await registerUser({
+      email: email.value,
+      password: password.value,
+      role: role.value,
+      entreprise: role.value === "freelance" ? entreprise.value : undefined,
     });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Erreur inscription");
-    }
-
-    const data = await res.json();
     console.log("✅ Utilisateur inscrit:", data);
 
     emit("registered", data);
@@ -170,7 +161,11 @@ async function handleRegister() {
 
     emit("close");
   } catch (err: any) {
-    error.value = err.message || "❌ Erreur lors de l'inscription.";
+    if (err instanceof ApiError) {
+      error.value = err.body?.error || "❌ Erreur lors de l'inscription.";
+    } else {
+      error.value = err?.message || "❌ Erreur lors de l'inscription.";
+    }
     console.error(err);
   } finally {
     loading.value = false;
