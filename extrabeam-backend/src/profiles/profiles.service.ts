@@ -1,5 +1,31 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+// src/profiles/profiles.service.ts
+// -------------------------------------------------------------
+// Service : Gestion des profils utilisateurs
+// -------------------------------------------------------------
+//
+// 📌 Description :
+//   - Gère la création et mise à jour des profils Supabase (`profiles`)
+//   - Synchronise automatiquement les entités liées :
+//       • Entreprise (freelance)
+//       • Client (espace client)
+//   - Garantit la cohérence des slugs entreprises et la génération automatique
+//
+// 🧱 Architecture :
+//   - Utilise SupabaseService (client admin) pour toutes les opérations DB
+//   - Appelé par ProfilesController et AuthService (après inscription)
+//   - Typage fort basé sur `types/database.ts`
+//
+// 🔒 Sécurité :
+//   - L’utilisateur ne peut modifier que son propre profil
+//   - Vérifie les rôles avant de créer entreprise/client associés
+//
+// ⚠️ Remarques :
+//   - Le slug entreprise est toujours unique (format prénom-nom)
+//   - Le champ `email` est fallback sur `''` pour éviter les null Supabase
+//
+// -------------------------------------------------------------
 
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type { Tables, TablesInsert } from '../common/types/database';
 import type { AuthUser } from '../common/auth/auth.types';
 import { SupabaseService } from '../common/supabase/supabase.service';
@@ -7,6 +33,10 @@ import { SupabaseService } from '../common/supabase/supabase.service';
 @Injectable()
 export class ProfilesService {
   constructor(private readonly supabase: SupabaseService) {}
+
+  // -------------------------------------------------------------
+  // 🧩 Helpers internes
+  // -------------------------------------------------------------
 
   private normalizeSlugSource(value: string) {
     return value
@@ -20,6 +50,7 @@ export class ProfilesService {
   private async generateUniqueSlug(firstName: string, lastName: string) {
     const base = this.normalizeSlugSource(`${firstName}-${lastName}`);
     const admin = this.supabase.getAdminClient();
+
     let slug = base;
     let i = 1;
 
@@ -31,19 +62,23 @@ export class ProfilesService {
         .maybeSingle();
 
       if (error) {
-        throw new BadRequestException('Erreur vérification slug');
+        throw new BadRequestException('Erreur lors de la vérification du slug');
       }
-      if (!data) {
-        break;
-      }
+
+      if (!data) break;
       slug = `${base}-${i++}`;
     }
 
     return slug;
   }
 
+  // -------------------------------------------------------------
+  // 🔍 Lecture du profil utilisateur
+  // -------------------------------------------------------------
+
   async getProfile(user: AuthUser) {
     const admin = this.supabase.getAdminClient();
+
     const { data: profile, error } = await admin
       .from('profiles')
       .select('id, email, role, first_name, last_name, phone, created_at')
@@ -51,9 +86,10 @@ export class ProfilesService {
       .maybeSingle();
 
     if (error) {
-      throw new BadRequestException(error.message);
+      throw new BadRequestException(`Erreur récupération profil : ${error.message}`);
     }
 
+    // Récupération éventuelle du slug entreprise (freelance)
     let slug: string | null = null;
     if (profile?.role === 'freelance') {
       const { data: entreprise } = await admin
@@ -67,7 +103,7 @@ export class ProfilesService {
     return {
       profile: {
         id: user.id,
-        email: user.email,
+        email: user.email ?? '',
         role: profile?.role ?? null,
         first_name: profile?.first_name ?? null,
         last_name: profile?.last_name ?? null,
@@ -78,33 +114,40 @@ export class ProfilesService {
     };
   }
 
+  // -------------------------------------------------------------
+  // ✏️ Création ou mise à jour du profil utilisateur
+  // -------------------------------------------------------------
+
   async upsertProfile(user: AuthUser, payload: Partial<Tables<'profiles'>>) {
     const admin = this.supabase.getAdminClient();
     const { role, first_name, last_name, phone } = payload;
 
     if (!role) {
-      throw new BadRequestException("Champ 'role' obligatoire");
+      throw new BadRequestException("Le champ 'role' est obligatoire");
     }
 
+    // Vérifie si le profil existe déjà
     const { data: existingProfile } = await admin
       .from('profiles')
       .select('id')
       .eq('id', user.id)
       .maybeSingle();
 
-    const profileData: Partial<Tables<'profiles'>> = {
-      id: user.id,
-      email: user.email,
+    // Données normalisées
+    const profileData: TablesInsert<'profiles'> = {
+      id: user.id!, // id toujours requis par la table
+      email: user.email ?? '',
       role,
-      first_name,
-      last_name,
-      phone,
+      first_name: first_name ?? null,
+      last_name: last_name ?? null,
+      phone: phone ?? null,
     };
 
+    // Insertion ou mise à jour
     if (!existingProfile) {
-      const { error: insertError } = await admin.from('profiles').insert([profileData]);
+      const { error: insertError } = await admin.from('profiles').insert(profileData);
       if (insertError) {
-        throw new BadRequestException(insertError.message);
+        throw new BadRequestException(`Erreur création profil : ${insertError.message}`);
       }
     } else {
       const { error: updateError } = await admin
@@ -112,10 +155,13 @@ export class ProfilesService {
         .update(profileData)
         .eq('id', user.id);
       if (updateError) {
-        throw new BadRequestException(updateError.message);
+        throw new BadRequestException(`Erreur mise à jour profil : ${updateError.message}`);
       }
     }
 
+    // -------------------------------------------------------------
+    // 🏢 Si role = freelance → création entreprise associée
+    // -------------------------------------------------------------
     if (role === 'freelance') {
       const { data: existingEnt } = await admin
         .from('entreprise')
@@ -125,11 +171,12 @@ export class ProfilesService {
 
       if (!existingEnt) {
         const slug = await this.generateUniqueSlug(first_name || 'extra', last_name || 'user');
+
         const entrepriseData: TablesInsert<'entreprise'> = {
           user_id: user.id,
           prenom: first_name || '',
           nom: last_name || '',
-          email: user.email,
+          email: user.email ?? '',
           slug,
           adresse_ligne1: 'à compléter',
           siret: '',
@@ -137,13 +184,16 @@ export class ProfilesService {
           bic: '',
         };
 
-        const { error: entError } = await admin.from('entreprise').insert([entrepriseData]);
+        const { error: entError } = await admin.from('entreprise').insert(entrepriseData);
         if (entError) {
           console.warn('⚠️ Erreur création entreprise:', entError.message);
         }
       }
     }
 
+    // -------------------------------------------------------------
+    // 👤 Si role = client → création client associée
+    // -------------------------------------------------------------
     if (role === 'client') {
       const { data: existingClient } = await admin
         .from('clients')
@@ -157,10 +207,7 @@ export class ProfilesService {
           role: 'client',
         };
 
-        const { error: insertClientError } = await admin
-          .from('clients')
-          .insert([clientData]);
-
+        const { error: insertClientError } = await admin.from('clients').insert(clientData);
         if (insertClientError) {
           console.warn('⚠️ Erreur création client:', insertClientError.message);
         }
