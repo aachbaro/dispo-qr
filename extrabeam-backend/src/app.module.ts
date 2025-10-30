@@ -26,11 +26,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
+import { AppController } from './app.controller';
 import { SupabaseModule } from './common/supabase/supabase.module';
 import { AuthCommonModule } from './common/auth/auth.module';
 import { MailerModule } from './common/mailer/mailer.module';
 import { AuthModule } from './auth/auth.module';
 import { ProfilesModule } from './profiles/profiles.module';
+import { EntreprisesModule } from './entreprises/entreprises.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { ProfilesModule } from './profiles/profiles.module';
     // 🧩 Modules métiers
     AuthModule,
     ProfilesModule,
+    EntreprisesModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
