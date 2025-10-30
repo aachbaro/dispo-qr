@@ -1,0 +1,54 @@
+// src/clients/clients.controller.ts
+// -------------------------------------------------------------
+// Contrôleur : Clients
+// -------------------------------------------------------------
+//
+// 📌 Description :
+//   - Expose les routes pour gérer les liens client ↔ entreprise
+//
+// 📍 Endpoints :
+//   - GET    /api/clients
+//   - POST   /api/clients/attach
+//   - DELETE /api/clients/:id
+//
+// 🔒 Règles d’accès :
+//   - JwtAuthGuard (owner/admin)
+//
+// -------------------------------------------------------------
+
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+
+import type { AuthUser } from '../common/auth/auth.types';
+import { User } from '../common/auth/decorators/user.decorator';
+import { JwtAuthGuard } from '../common/auth/guards/jwt.guard';
+import type { AttachClientDto } from './dto/attach-client.dto';
+import { ClientsService } from './clients.service';
+
+@Controller('clients')
+@UseGuards(JwtAuthGuard)
+export class ClientsController {
+  constructor(private readonly clientsService: ClientsService) {}
+
+  @Get()
+  async list(@Query('entrepriseRef') entrepriseRef: string, @User() user: AuthUser) {
+    return this.clientsService.listClients(entrepriseRef ?? '', user);
+  }
+
+  @Post('attach')
+  async attach(
+    @Body() dto: AttachClientDto,
+    @Query('entrepriseRef') entrepriseRef: string,
+    @User() user: AuthUser,
+  ) {
+    return this.clientsService.attachClient(entrepriseRef ?? '', dto, user);
+  }
+
+  @Delete(':id')
+  async detach(
+    @Param('id', ParseUUIDPipe) clientId: string,
+    @Query('entrepriseRef') entrepriseRef: string,
+    @User() user: AuthUser,
+  ) {
+    return this.clientsService.detachClient(entrepriseRef ?? '', clientId, user);
+  }
+}
