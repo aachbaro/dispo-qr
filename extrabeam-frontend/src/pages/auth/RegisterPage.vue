@@ -116,6 +116,8 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useAuth } from "@/composables/useAuth";
+import { ApiError } from "@/services/api";
+import { register as registerUser } from "@/services/auth";
 
 const router = useRouter();
 const { loginGoogle, loginMagicLink } = useAuth();
@@ -137,23 +139,12 @@ async function handleRegister() {
   error.value = "";
 
   try {
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: email.value,
-        password: password.value,
-        role: role.value,
-        entreprise: role.value === "freelance" ? entreprise.value : undefined,
-      }),
+    const data = await registerUser({
+      email: email.value,
+      password: password.value,
+      role: role.value,
+      entreprise: role.value === "freelance" ? entreprise.value : undefined,
     });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Erreur d'inscription.");
-    }
-
-    const data = await res.json();
     console.log("✅ Utilisateur inscrit:", data);
 
     // Redirection selon type
@@ -163,7 +154,11 @@ async function handleRegister() {
       router.push("/dashboard");
     }
   } catch (err: any) {
-    error.value = err.message || "❌ Erreur lors de l'inscription.";
+    if (err instanceof ApiError) {
+      error.value = err.body?.error || "❌ Erreur lors de l'inscription.";
+    } else {
+      error.value = err?.message || "❌ Erreur lors de l'inscription.";
+    }
   } finally {
     loading.value = false;
   }
