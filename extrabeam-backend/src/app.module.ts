@@ -33,6 +33,13 @@ import { MailerModule } from './common/mailer/mailer.module';
 import { AuthModule } from './auth/auth.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { EntreprisesModule } from './entreprises/entreprises.module';
+import { MissionsModule } from './missions/missions.module';
+import { FacturesModule } from './factures/factures.module';
+import { ClientsModule } from './clients/clients.module';
+import { MissionTemplatesModule } from './mission-templates/mission-templates.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PaymentsModule } from './payments/payments.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -50,6 +57,13 @@ import { EntreprisesModule } from './entreprises/entreprises.module';
     AuthModule,
     ProfilesModule,
     EntreprisesModule,
+    MissionsModule,
+    FacturesModule,
+    ClientsModule,
+    MissionTemplatesModule,
+    NotificationsModule,
+    PaymentsModule,
+    UploadsModule,
   ],
   controllers: [AppController],
 })
