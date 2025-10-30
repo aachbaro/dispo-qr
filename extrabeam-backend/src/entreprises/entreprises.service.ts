@@ -65,12 +65,21 @@ export class EntreprisesService {
     private readonly accessService: AccessService,
   ) {}
 
+  /**
+   * 🧩 Convertit un enregistrement entreprise complet en vue publique
+   * Accepte `null` et `undefined` sans conflit de typage
+   */
   private mapToPublicEntreprise(entreprise: Tables<'entreprise'>): PublicEntreprise {
-    const publicView: Partial<Tables<'entreprise'>> = {};
+    const result = {} as Record<
+      keyof PublicEntreprise,
+      PublicEntreprise[keyof PublicEntreprise]
+    >;
+
     for (const key of PUBLIC_ENTREPRISE_COLUMNS) {
-      publicView[key] = entreprise[key];
+      result[key] = (entreprise[key] ?? null) as PublicEntreprise[keyof PublicEntreprise];
     }
-    return publicView as PublicEntreprise;
+
+    return result as PublicEntreprise;
   }
 
   private handleSupabaseError(error: any, notFoundMessage = 'Entreprise non trouvée'): never {
