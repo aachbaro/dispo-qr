@@ -17,12 +17,34 @@
 //
 // -------------------------------------------------------------
 
-import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 
 import type { AuthUser } from '../common/auth/auth.types';
 import { AccessService } from '../common/auth/access.service';
 import { SupabaseService } from '../common/supabase/supabase.service';
-import type { AttachClientDto } from './dto/attach-client.dto';
+import type { Database } from '../types/database';
+import { AttachClientDto } from './dto/attach-client.dto';
+
+type Table<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Row'];
+type Insert<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Insert'];
+
+type ClientContactRow = Table<'client_contacts'>;
+type ClientContactInsert = Insert<'client_contacts'>;
+type ClientRow = Table<'clients'>;
+type EntrepriseRow = Table<'entreprise'>;
+
+export type ClientContactWithRelations = ClientContactRow & {
+  client: ClientRow | null;
+  entreprise: EntrepriseRow | null;
+};
 
 @Injectable()
 export class ClientsService {
@@ -31,7 +53,7 @@ export class ClientsService {
     private readonly accessService: AccessService,
   ) {}
 
-  private ensureOwner(user: AuthUser | null) {
+  private ensureOwner(user: AuthUser | null): asserts user is AuthUser {
     if (!user) {
       throw new BadRequestException('Authentification requise');
     }
@@ -40,24 +62,36 @@ export class ClientsService {
     }
   }
 
-  async listClients(entrepriseRef: string, user: AuthUser | null) {
-    this.ensureOwner(user);
-    const ref = entrepriseRef || user?.slug || user?.id;
-    if (!ref) {
+  private async resolveEntreprise(
+    user: AuthUser,
+    ref: string | number | null | undefined,
+  ): Promise<EntrepriseRow> {
+    const resolvedRef = this.accessService.resolveEntrepriseRef(user, ref);
+    if (!resolvedRef) {
       throw new BadRequestException('Référence entreprise manquante');
     }
-
-    const entreprise = await this.accessService.findEntreprise(String(ref));
-    if (!this.accessService.canAccessEntreprise(user!, entreprise)) {
+    const entreprise = await this.accessService.findEntreprise(resolvedRef);
+    if (!this.accessService.canAccessEntreprise(user, entreprise)) {
       throw new ForbiddenException('Accès interdit');
     }
+    return entreprise;
+  }
+
+  /** 👥 Liste les clients associés à une entreprise. */
+  async listClients(
+    entrepriseRef: string,
+    user: AuthUser | null,
+  ): Promise<{ contacts: ClientContactWithRelations[] }> {
+    this.ensureOwner(user);
+    const entreprise = await this.resolveEntreprise(user, entrepriseRef);
 
     const admin = this.supabaseService.getAdminClient();
     const { data, error } = await admin
       .from('client_contacts')
       .select('id, created_at, client:client_id(*), entreprise:entreprise_id(*)')
       .eq('entreprise_id', entreprise.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .returns<ClientContactWithRelations[]>();
 
     if (error) {
       throw new InternalServerErrorException(error.message);
@@ -66,21 +100,17 @@ export class ClientsService {
     return { contacts: data ?? [] };
   }
 
-  async attachClient(entrepriseRef: string, dto: AttachClientDto, user: AuthUser | null) {
+  /** 🔗 Attache un client à une entreprise. */
+  async attachClient(
+    entrepriseRef: string,
+    dto: AttachClientDto,
+    user: AuthUser | null,
+  ): Promise<{ attached: true }> {
     this.ensureOwner(user);
     if (!dto?.client_id) {
       throw new BadRequestException('client_id requis');
     }
-
-    const ref = entrepriseRef || user?.slug || user?.id;
-    if (!ref) {
-      throw new BadRequestException('Référence entreprise manquante');
-    }
-
-    const entreprise = await this.accessService.findEntreprise(String(ref));
-    if (!this.accessService.canAccessEntreprise(user!, entreprise)) {
-      throw new ForbiddenException('Accès interdit');
-    }
+    const entreprise = await this.resolveEntreprise(user, entrepriseRef);
 
     const admin = this.supabaseService.getAdminClient();
 
@@ -89,16 +119,18 @@ export class ClientsService {
       .select('id')
       .eq('entreprise_id', entreprise.id)
       .eq('client_id', dto.client_id)
+      .returns<ClientContactRow[]>()
       .maybeSingle();
 
     if (existing) {
       return { attached: true };
     }
 
-    const { error } = await admin.from('client_contacts').insert({
+    const insert: ClientContactInsert = {
       entreprise_id: entreprise.id,
       client_id: dto.client_id,
-    });
+    };
+    const { error } = await admin.from('client_contacts').insert(insert);
 
     if (error) {
       throw new InternalServerErrorException(error.message);
@@ -107,17 +139,14 @@ export class ClientsService {
     return { attached: true };
   }
 
-  async detachClient(entrepriseRef: string, clientId: string, user: AuthUser | null) {
+  /** ❌ Détache un client d'une entreprise. */
+  async detachClient(
+    entrepriseRef: string,
+    clientId: ClientRow['id'],
+    user: AuthUser | null,
+  ): Promise<{ detached: true }> {
     this.ensureOwner(user);
-    const ref = entrepriseRef || user?.slug || user?.id;
-    if (!ref) {
-      throw new BadRequestException('Référence entreprise manquante');
-    }
-
-    const entreprise = await this.accessService.findEntreprise(String(ref));
-    if (!this.accessService.canAccessEntreprise(user!, entreprise)) {
-      throw new ForbiddenException('Accès interdit');
-    }
+    const entreprise = await this.resolveEntreprise(user, entrepriseRef);
 
     const admin = this.supabaseService.getAdminClient();
     const { error, count } = await admin
