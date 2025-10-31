@@ -9,7 +9,7 @@
 //       • Profil principal
 //       • Compétences
 //       • Expériences
-//       • Formation
+//       • Formations
 //
 // 📍 Endpoints principaux :
 //   - GET    /api/entreprises/:ref/cv               → CV complet
@@ -29,9 +29,20 @@
 //
 // -------------------------------------------------------------
 
-import { Body, Controller, Get, Param, Put } from '@nestjs/common';
-import { CvService } from './cv.service';
-import type { CvProfile, CvSkill, CvExperience, CvEducation } from './cv.types';
+import { Body, Controller, Get, Param, Put } from '@nestjs/common'
+import { CvService } from './cv.service'
+import type { Database } from '../../types/database'
+
+// -------------------------------------------------------------
+// Typages dérivés de Supabase
+// -------------------------------------------------------------
+type Table<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Row']
+
+type CvProfile = Table<'cv_profiles'>
+type CvSkill = Table<'cv_skills'>
+type CvExperience = Table<'cv_experiences'>
+type CvEducation = Table<'cv_education'>
 
 @Controller('entreprises/:ref/cv')
 export class CvController {
@@ -44,19 +55,19 @@ export class CvController {
   async getFullCv(
     @Param('ref') ref: string,
   ): Promise<{
-    profile: CvProfile | null;
-    skills: CvSkill[];
-    experiences: CvExperience[];
-    education: CvEducation[];
+    profile: CvProfile | null
+    skills: CvSkill[]
+    experiences: CvExperience[]
+    education: CvEducation[]
   }> {
     const [profile, skills, experiences, education] = await Promise.all([
       this.cvService.getProfile(ref),
       this.cvService.getSkills(ref),
       this.cvService.getExperiences(ref),
       this.cvService.getEducation(ref),
-    ]);
+    ])
 
-    return { profile, skills, experiences, education };
+    return { profile, skills, experiences, education }
   }
 
   // -------------------------------------------------------------
@@ -64,7 +75,7 @@ export class CvController {
   // -------------------------------------------------------------
   @Get('profile')
   async getProfile(@Param('ref') ref: string): Promise<CvProfile | null> {
-    return this.cvService.getProfile(ref);
+    return this.cvService.getProfile(ref)
   }
 
   // -------------------------------------------------------------
@@ -75,7 +86,7 @@ export class CvController {
     @Param('ref') ref: string,
     @Body() dto: Partial<CvProfile>,
   ): Promise<CvProfile> {
-    return this.cvService.updateProfile(ref, dto);
+    return this.cvService.updateProfile(ref, dto)
   }
 
   // -------------------------------------------------------------
@@ -83,7 +94,7 @@ export class CvController {
   // -------------------------------------------------------------
   @Get('skills')
   async getSkills(@Param('ref') ref: string): Promise<CvSkill[]> {
-    return this.cvService.getSkills(ref);
+    return this.cvService.getSkills(ref)
   }
 
   // -------------------------------------------------------------
@@ -91,7 +102,7 @@ export class CvController {
   // -------------------------------------------------------------
   @Get('experiences')
   async getExperiences(@Param('ref') ref: string): Promise<CvExperience[]> {
-    return this.cvService.getExperiences(ref);
+    return this.cvService.getExperiences(ref)
   }
 
   // -------------------------------------------------------------
@@ -99,6 +110,6 @@ export class CvController {
   // -------------------------------------------------------------
   @Get('education')
   async getEducation(@Param('ref') ref: string): Promise<CvEducation[]> {
-    return this.cvService.getEducation(ref);
+    return this.cvService.getEducation(ref)
   }
 }

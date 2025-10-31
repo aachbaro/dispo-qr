@@ -4,8 +4,8 @@
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - Point central pour la gestion du CV lié à une entreprise (freelance)
-//   - Fournit les méthodes CRUD pour les différentes sections du CV :
+//   - Gère les différentes sections du CV liées à une entreprise (freelance)
+//   - Fournit les opérations CRUD pour :
 //       • Profil principal
 //       • Compétences
 //       • Expériences
@@ -13,21 +13,32 @@
 //
 // 🧱 Architecture :
 //   - Appelé par CvController
-//   - Utilise SupabaseService pour les requêtes à la base
+//   - Utilise SupabaseService pour interagir avec la base
 //
 // 🔒 Règles d’accès :
 //   - Lecture publique
 //   - Écriture réservée au propriétaire ou admin
 //
 // ⚠️ Remarques :
-//   - Les méthodes sont typées et prêtes à être branchées à Supabase
-//   - Implémentations temporaires → valeurs simulées pour éviter erreurs
+//   - Implémentation simplifiée (mock ou lecture Supabase à ajouter)
+//   - Typage fort basé sur src/types/database.ts
 //
 // -------------------------------------------------------------
 
-import { Injectable } from '@nestjs/common';
-import type { CvProfile, CvSkill, CvExperience, CvEducation } from './cv.types';
-import { SupabaseService } from '../../common/supabase/supabase.service';
+import { Injectable, InternalServerErrorException } from '@nestjs/common'
+import { SupabaseService } from '../../common/supabase/supabase.service'
+import type { Database } from '../../types/database'
+
+// -------------------------------------------------------------
+// Typages dérivés de Supabase
+// -------------------------------------------------------------
+type Table<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Row']
+
+type CvProfile = Table<'cv_profiles'>
+type CvSkill = Table<'cv_skills'>
+type CvExperience = Table<'cv_experiences'>
+type CvEducation = Table<'cv_education'>
 
 @Injectable()
 export class CvService {
@@ -37,57 +48,111 @@ export class CvService {
   // 👤 Profil principal
   // -------------------------------------------------------------
   async getProfile(ref: string): Promise<CvProfile | null> {
-    // TODO: Requête Supabase (filtrer par slug entreprise)
-    console.log(`Fetching CV profile for entreprise ${ref}`);
-    return null;
+    const client = this.supabase.getAdminClient();
+    const { data, error } = await client
+      .from('cv_profiles')
+      .select('*')
+      .eq('entreprise_ref', ref)
+      .maybeSingle();
+
+    if (error) {
+      throw new InternalServerErrorException(error.message)
+    }
+
+    return data ?? null;
   }
 
-  async updateProfile(ref: string, dto: Partial<CvProfile>): Promise<CvProfile> {
-    // TODO: Update Supabase row
-    console.log(`Updating CV profile for entreprise ${ref}`, dto);
-    return { ...dto, entreprise_ref: ref } as CvProfile;
+  async updateProfile(
+    ref: string,
+    dto: Partial<CvProfile>,
+  ): Promise<CvProfile> {
+    const client = this.supabase.getAdminClient();
+    const { id, ...safeDto } = dto;
+
+    const { data, error } = await client
+      .from('cv_profiles')
+      .update(safeDto)
+      .eq('entreprise_ref', ref)
+      .select()
+      .single();
+
+    if (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+
+    return data;
   }
 
   // -------------------------------------------------------------
   // 🧠 Compétences
   // -------------------------------------------------------------
   async getSkills(ref: string): Promise<CvSkill[]> {
-    console.log(`Fetching skills for entreprise ${ref}`);
-    return [];
+    const client = this.supabase.getAdminClient()
+    const { data, error } = await client
+      .from('cv_skills')
+      .select('*')
+      .eq('entreprise_ref', ref)
+      .order('id', { ascending: true })
+
+    if (error) {
+      throw new InternalServerErrorException(error.message);
+    }
+
+    return data ?? [];
   }
 
   // -------------------------------------------------------------
   // 💼 Expériences
   // -------------------------------------------------------------
   async getExperiences(ref: string): Promise<CvExperience[]> {
-    console.log(`Fetching experiences for entreprise ${ref}`);
-    return [];
+    const client = this.supabase.getAdminClient()
+    const { data, error } = await client
+      .from('cv_experiences')
+      .select('*')
+      .eq('entreprise_ref', ref)
+      .order('start_date', { ascending: false })
+
+    if (error) {
+      throw new InternalServerErrorException(error.message)
+    }
+
+    return data ?? [];
   }
 
   // -------------------------------------------------------------
   // 🎓 Formations
   // -------------------------------------------------------------
   async getEducation(ref: string): Promise<CvEducation[]> {
-    console.log(`Fetching education for entreprise ${ref}`);
-    return [];
+    const client = this.supabase.getAdminClient()
+    const { data, error } = await client
+      .from('cv_education')
+      .select('*')
+      .eq('entreprise_ref', ref)
+      .order('start_date', { ascending: false })
+
+    if (error) {
+      throw new InternalServerErrorException(error.message)
+    }
+
+    return data ?? []
   }
 
   // -------------------------------------------------------------
   // 🧩 CV complet
   // -------------------------------------------------------------
   async getFullCv(ref: string): Promise<{
-    profile: CvProfile | null;
-    skills: CvSkill[];
-    experiences: CvExperience[];
-    education: CvEducation[];
+    profile: CvProfile | null
+    skills: CvSkill[]
+    experiences: CvExperience[]
+    education: CvEducation[]
   }> {
     const [profile, skills, experiences, education] = await Promise.all([
       this.getProfile(ref),
       this.getSkills(ref),
       this.getExperiences(ref),
       this.getEducation(ref),
-    ]);
+    ])
 
-    return { profile, skills, experiences, education };
+    return { profile, skills, experiences, education }
   }
 }
