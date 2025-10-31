@@ -1,4 +1,26 @@
-import { Type } from 'class-transformer'
+// src/missions/dto/mission-update.dto.ts
+// -------------------------------------------------------------
+// DTO : Mise à jour d’une mission
+// -------------------------------------------------------------
+//
+// 📌 Description :
+//   - Définit la charge utile pour la modification d’une mission existante
+//   - Gère la mise à jour des slots associés
+//
+// 📍 Endpoints concernés :
+//   - PUT /api/missions/:id
+//
+// 🔒 Règles d’accès :
+//   - Authentification requise (JwtAuthGuard)
+//   - Vérification des droits via AccessService
+//
+// ⚙️ Stack :
+//   - TypeScript + class-validator + class-transformer
+//   - Typage basé sur Supabase (`src/types/database.ts`)
+//
+// -------------------------------------------------------------
+
+import { Type } from 'class-transformer';
 import {
   IsArray,
   IsEnum,
@@ -6,94 +28,107 @@ import {
   IsOptional,
   IsString,
   ValidateNested,
-} from 'class-validator'
+} from 'class-validator';
 
-import type { Database } from '../../types/database'
-import { MissionSlotDto } from './mission-create.dto'
+import type { Database } from '../../types/database';
+import { MissionSlotDto } from './mission-create.dto';
 
+// -------------------------------------------------------------
+// 🧱 Types utilitaires Supabase
+// -------------------------------------------------------------
 type Update<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Update']
+  Database['public']['Tables'][Name]['Update'];
 type Enum<Name extends keyof Database['public']['Enums']> =
-  Database['public']['Enums'][Name]
+  Database['public']['Enums'][Name];
 
-type MissionUpdate = Update<'missions'>
-type MissionStatus = Enum<'mission_status'>
-type MissionMode = Enum<'mission_mode'>
+// -------------------------------------------------------------
+// 💾 Typages dérivés
+// -------------------------------------------------------------
+type MissionUpdate = Update<'missions'>;
+type MissionStatus = Enum<'mission_status'>;
+type MissionMode = Enum<'mission_mode'>;
 
+// -------------------------------------------------------------
+// 🧩 Interface : Charge utile brute
+// -------------------------------------------------------------
 export interface MissionUpdatePayload extends MissionUpdate {
-  slots?: MissionSlotDto[] | null
+  slots?: MissionSlotDto[] | null;
 }
 
+// -------------------------------------------------------------
+// 🚀 DTO principal : MissionUpdateDto
+// -------------------------------------------------------------
 export class MissionUpdateDto implements MissionUpdatePayload {
   @IsOptional()
   @IsString()
-  client_id?: MissionUpdate['client_id']
+  client_id?: MissionUpdate['client_id'];
 
   @IsOptional()
   @IsString()
-  contact_email?: MissionUpdate['contact_email']
+  contact_email?: MissionUpdate['contact_email'];
 
   @IsOptional()
   @IsString()
-  contact_name?: MissionUpdate['contact_name']
+  contact_name?: MissionUpdate['contact_name'];
 
   @IsOptional()
   @IsString()
-  contact_phone?: MissionUpdate['contact_phone']
+  contact_phone?: MissionUpdate['contact_phone'];
 
   @IsOptional()
   @IsString()
-  created_at?: MissionUpdate['created_at']
+  created_at?: MissionUpdate['created_at'];
 
   @IsOptional()
   @IsString()
-  devis_url?: MissionUpdate['devis_url']
+  devis_url?: MissionUpdate['devis_url'];
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  entreprise_id?: MissionUpdate['entreprise_id']
+  entreprise_id?: MissionUpdate['entreprise_id'];
 
   @IsOptional()
   @IsString()
-  etablissement?: MissionUpdate['etablissement']
+  etablissement?: MissionUpdate['etablissement'];
 
   @IsOptional()
   @IsString()
-  etablissement_adresse_ligne1?: MissionUpdate['etablissement_adresse_ligne1']
+  etablissement_adresse_ligne1?: MissionUpdate['etablissement_adresse_ligne1'];
 
   @IsOptional()
   @IsString()
-  etablissement_adresse_ligne2?: MissionUpdate['etablissement_adresse_ligne2']
+  etablissement_adresse_ligne2?: MissionUpdate['etablissement_adresse_ligne2'];
 
   @IsOptional()
   @IsString()
-  etablissement_code_postal?: MissionUpdate['etablissement_code_postal']
+  etablissement_code_postal?: MissionUpdate['etablissement_code_postal'];
 
   @IsOptional()
   @IsString()
-  etablissement_pays?: MissionUpdate['etablissement_pays']
+  etablissement_pays?: MissionUpdate['etablissement_pays'];
 
   @IsOptional()
   @IsString()
-  etablissement_ville?: MissionUpdate['etablissement_ville']
+  etablissement_ville?: MissionUpdate['etablissement_ville'];
 
   @IsOptional()
   @IsString()
-  freelance_id?: MissionUpdate['freelance_id']
+  freelance_id?: MissionUpdate['freelance_id'];
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  id?: MissionUpdate['id']
+  id?: MissionUpdate['id'];
 
   @IsOptional()
   @IsString()
-  instructions?: MissionUpdate['instructions']
+  instructions?: MissionUpdate['instructions'];
 
   @IsOptional()
-  @IsEnum(['remote', 'on_site', 'hybrid'] satisfies MissionMode[])
-  mode?: MissionUpdate['mode']
+  // ⚠️ Adapter les valeurs à ton enum réel Supabase (ex: 'freelance' | 'salarié')
+  @IsEnum(['freelance', 'salarié'] satisfies MissionMode[])
+  mode?: MissionUpdate['mode'];
 
   @IsOptional()
   @IsEnum([
@@ -105,11 +140,11 @@ export class MissionUpdateDto implements MissionUpdatePayload {
     'refused',
     'realized',
   ] satisfies MissionStatus[])
-  status?: MissionUpdate['status']
+  status?: MissionUpdate['status'];
 
   @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => MissionSlotDto)
   @IsArray()
-  slots?: MissionUpdatePayload['slots']
+  slots?: MissionUpdatePayload['slots'];
 }
