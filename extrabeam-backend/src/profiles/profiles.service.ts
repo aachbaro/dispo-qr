@@ -25,10 +25,36 @@
 //
 // -------------------------------------------------------------
 
-import { BadRequestException, Injectable } from '@nestjs/common';
-import type { Tables, TablesInsert } from '../common/types/database';
-import type { AuthUser } from '../common/auth/auth.types';
-import { SupabaseService } from '../common/supabase/supabase.service';
+import { BadRequestException, Injectable } from '@nestjs/common'
+
+import type { AuthUser } from '../common/auth/auth.types'
+import { SupabaseService } from '../common/supabase/supabase.service'
+import type { Database } from '../types/database'
+
+type Table<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Row']
+type Insert<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Insert']
+
+type ProfileRow = Table<'profiles'>
+type ProfileInsert = Insert<'profiles'>
+type EntrepriseInsert = Insert<'entreprise'>
+type ClientInsert = Insert<'clients'>
+
+type ProfileSelection = Pick<
+  ProfileRow,
+  'id' | 'email' | 'role' | 'first_name' | 'last_name' | 'phone' | 'created_at'
+>
+
+export type ProfileSummary = {
+  profile: Pick<
+    ProfileRow,
+    'id' | 'role' | 'first_name' | 'last_name' | 'phone' | 'created_at'
+  > & {
+    email: string
+    slug: string | null
+  }
+}
 
 @Injectable()
 export class ProfilesService {
@@ -44,60 +70,62 @@ export class ProfilesService {
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
+      .replace(/(^-|-$)+/g, '')
   }
 
   private async generateUniqueSlug(firstName: string, lastName: string) {
-    const base = this.normalizeSlugSource(`${firstName}-${lastName}`);
-    const admin = this.supabase.getAdminClient();
+    const base = this.normalizeSlugSource(`${firstName}-${lastName}`)
+    const admin = this.supabase.getAdminClient()
 
-    let slug = base;
-    let i = 1;
+    let slug = base
+    let i = 1
 
     while (true) {
       const { data, error } = await admin
         .from('entreprise')
         .select('id')
         .eq('slug', slug)
-        .maybeSingle();
+        .maybeSingle<Pick<Table<'entreprise'>, 'id'>>()
 
       if (error) {
-        throw new BadRequestException('Erreur lors de la vérification du slug');
+        throw new BadRequestException('Erreur lors de la vérification du slug')
       }
 
-      if (!data) break;
-      slug = `${base}-${i++}`;
+      if (!data) break
+      slug = `${base}-${i++}`
     }
 
-    return slug;
+    return slug
   }
 
   // -------------------------------------------------------------
   // 🔍 Lecture du profil utilisateur
   // -------------------------------------------------------------
 
-  async getProfile(user: AuthUser) {
-    const admin = this.supabase.getAdminClient();
+  async getProfile(user: AuthUser): Promise<ProfileSummary> {
+    const admin = this.supabase.getAdminClient()
 
     const { data: profile, error } = await admin
       .from('profiles')
       .select('id, email, role, first_name, last_name, phone, created_at')
       .eq('id', user.id)
-      .maybeSingle();
+      .maybeSingle<ProfileSelection>()
 
     if (error) {
-      throw new BadRequestException(`Erreur récupération profil : ${error.message}`);
+      throw new BadRequestException(
+        `Erreur récupération profil : ${error.message}`,
+      )
     }
 
     // Récupération éventuelle du slug entreprise (freelance)
-    let slug: string | null = null;
+    let slug: string | null = null
     if (profile?.role === 'freelance') {
       const { data: entreprise } = await admin
         .from('entreprise')
         .select('slug')
         .eq('user_id', user.id)
-        .maybeSingle();
-      slug = entreprise?.slug ?? null;
+        .maybeSingle<Pick<Table<'entreprise'>, 'slug'>>()
+      slug = entreprise?.slug ?? null
     }
 
     return {
@@ -111,51 +139,65 @@ export class ProfilesService {
         slug,
         created_at: profile?.created_at ?? null,
       },
-    };
+    }
   }
 
   // -------------------------------------------------------------
   // ✏️ Création ou mise à jour du profil utilisateur
   // -------------------------------------------------------------
 
-  async upsertProfile(user: AuthUser, payload: Partial<Tables<'profiles'>>) {
-    const admin = this.supabase.getAdminClient();
-    const { role, first_name, last_name, phone } = payload;
+  async upsertProfile(
+    user: AuthUser,
+    payload: Partial<ProfileRow>,
+  ): Promise<ProfileSummary> {
+    const admin = this.supabase.getAdminClient()
+    const { role, first_name, last_name, phone } = payload
+
+    const userId = user.id
+    if (!userId) {
+      throw new BadRequestException('Utilisateur sans identifiant')
+    }
 
     if (!role) {
-      throw new BadRequestException("Le champ 'role' est obligatoire");
+      throw new BadRequestException("Le champ 'role' est obligatoire")
     }
 
     // Vérifie si le profil existe déjà
     const { data: existingProfile } = await admin
       .from('profiles')
       .select('id')
-      .eq('id', user.id)
-      .maybeSingle();
+      .eq('id', userId)
+      .maybeSingle<Pick<ProfileRow, 'id'>>()
 
     // Données normalisées
-    const profileData: TablesInsert<'profiles'> = {
-      id: user.id!, // id toujours requis par la table
+    const profileData: ProfileInsert = {
+      id: userId,
       email: user.email ?? '',
       role,
       first_name: first_name ?? null,
       last_name: last_name ?? null,
       phone: phone ?? null,
-    };
+    }
 
     // Insertion ou mise à jour
     if (!existingProfile) {
-      const { error: insertError } = await admin.from('profiles').insert(profileData);
+      const { error: insertError } = await admin
+        .from('profiles')
+        .insert(profileData)
       if (insertError) {
-        throw new BadRequestException(`Erreur création profil : ${insertError.message}`);
+        throw new BadRequestException(
+          `Erreur création profil : ${insertError.message}`,
+        )
       }
     } else {
       const { error: updateError } = await admin
         .from('profiles')
         .update(profileData)
-        .eq('id', user.id);
+        .eq('id', userId)
       if (updateError) {
-        throw new BadRequestException(`Erreur mise à jour profil : ${updateError.message}`);
+        throw new BadRequestException(
+          `Erreur mise à jour profil : ${updateError.message}`,
+        )
       }
     }
 
@@ -166,14 +208,17 @@ export class ProfilesService {
       const { data: existingEnt } = await admin
         .from('entreprise')
         .select('id, slug')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', userId)
+        .maybeSingle<Pick<Table<'entreprise'>, 'id' | 'slug'>>()
 
       if (!existingEnt) {
-        const slug = await this.generateUniqueSlug(first_name || 'extra', last_name || 'user');
+        const slug = await this.generateUniqueSlug(
+          first_name || 'extra',
+          last_name || 'user',
+        )
 
-        const entrepriseData: TablesInsert<'entreprise'> = {
-          user_id: user.id,
+        const entrepriseData: EntrepriseInsert = {
+          user_id: userId,
           prenom: first_name || '',
           nom: last_name || '',
           email: user.email ?? '',
@@ -182,11 +227,14 @@ export class ProfilesService {
           siret: '',
           iban: '',
           bic: '',
-        };
+        }
 
-        const { error: entError } = await admin.from('entreprise').insert(entrepriseData);
+        const { error: entError } = await admin
+          .from('entreprise')
+          .insert(entrepriseData)
         if (entError) {
-          console.warn('⚠️ Erreur création entreprise:', entError.message);
+          // TODO: remplacer par un système de journalisation applicatif
+          console.warn('⚠️ Erreur création entreprise:', entError.message)
         }
       }
     }
@@ -198,22 +246,25 @@ export class ProfilesService {
       const { data: existingClient } = await admin
         .from('clients')
         .select('id')
-        .eq('id', user.id)
-        .maybeSingle();
+        .eq('id', userId)
+        .maybeSingle<Pick<Table<'clients'>, 'id'>>()
 
       if (!existingClient) {
-        const clientData: TablesInsert<'clients'> = {
-          id: user.id,
+        const clientData: ClientInsert = {
+          id: userId,
           role: 'client',
-        };
+        }
 
-        const { error: insertClientError } = await admin.from('clients').insert(clientData);
+        const { error: insertClientError } = await admin
+          .from('clients')
+          .insert(clientData)
         if (insertClientError) {
-          console.warn('⚠️ Erreur création client:', insertClientError.message);
+          // TODO: remplacer par un système de journalisation applicatif
+          console.warn('⚠️ Erreur création client:', insertClientError.message)
         }
       }
     }
 
-    return { profile: profileData };
+    return this.getProfile(user)
   }
 }

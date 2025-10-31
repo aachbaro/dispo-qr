@@ -17,8 +17,22 @@
 //
 // -------------------------------------------------------------
 
-import type { Enums } from '../../common/types/database';
+import { IsEnum } from 'class-validator'
 
-export interface UpdateMissionStatusDto {
-  status: Enums<'mission_status'>;
+import type { Database } from '../../types/database'
+
+type Enum<Name extends keyof Database['public']['Enums']> =
+  Database['public']['Enums'][Name]
+
+export class MissionUpdateStatusDto {
+  @IsEnum([
+    'proposed',
+    'validated',
+    'pending_payment',
+    'paid',
+    'completed',
+    'refused',
+    'realized',
+  ] satisfies Array<Enum<'mission_status'>>)
+  status!: Enum<'mission_status'>
 }
