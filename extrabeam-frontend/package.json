@@ -1,14 +1,15 @@
 {
-  "name": "dispo-qr",
+  "name": "extrabeam-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "tailwind-init": "tailwindcss init -p",
-    "db:types": "supabase gen types typescript --project-id zoojscjpdakwxukkhele --schema public > ../types/database.ts",
+
+    "db:types": "supabase gen types typescript --project-id zoojscjpdakwxukkhele --schema public > src/types/database.ts",
     "db:backup": "powershell -Command \"supabase db dump -f ../supabase/migrations/$(Get-Date -Format yyyyMMdd_HHmmss)_backup.sql\"",
     "db:migrate": "powershell -Command \"supabase db diff --use-migra -f $(Get-Date -Format yyyyMMdd_HHmmss)_migration; supabase db push\"",
     "db:reset": "supabase db reset"

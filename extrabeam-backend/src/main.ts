@@ -37,14 +37,24 @@ async function bootstrap() {
   // -------------------------------------------------------------
   // 🌍 Configuration CORS
   // -------------------------------------------------------------
+  const allowedOrigins = [
+    'http://localhost:5173', // Frontend local (Vite)
+    'http://127.0.0.1:5173', // Variante locale
+    'https://extrabeam.app', // Domaine prod
+    'https://www.extrabeam.app',
+  ];
+
   app.enableCors({
-    origin: [
-      process.env.APP_URL || 'http://localhost:5173', // ton frontend Vue/Vite
-      'http://localhost:3000', // fallback
-    ],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    origin: (origin, callback) => {
+      // Autorise les requêtes sans origin (ex: Postman, curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      console.warn(`❌ CORS refusé pour l'origine : ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
   });
 
   // -------------------------------------------------------------

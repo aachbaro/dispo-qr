@@ -33,7 +33,7 @@ import type {
   Tables,
   TablesInsert,
   TablesUpdate,
-} from "../../../types/database";
+} from "../types/database";
 
 export type CvProfile = Tables<"cv_profiles"> | null;
 export type CvSkill = Tables<"cv_skills">;

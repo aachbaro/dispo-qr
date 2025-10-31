@@ -15,7 +15,7 @@
 // -------------------------------------------------------------
 
 import { request } from "./api";
-import type { Tables } from "../../../types/database";
+import type { Tables } from "../types/database";
 
 export type Profile = Tables<"profiles">;
 

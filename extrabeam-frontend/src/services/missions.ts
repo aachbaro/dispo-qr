@@ -25,7 +25,7 @@
 // -------------------------------------------------------------
 
 import { request } from "./api";
-import type { Tables, TablesInsert, TablesUpdate } from "../../../types/database";
+import type { Tables, TablesInsert, TablesUpdate } from "../types/database";
 import type { Slot } from "./slots";
 
 // ----------------------
