@@ -32,8 +32,8 @@ import {
 } from 'class-validator';
 
 import type { Database } from '../../types/database';
-import { FACTURE_STATUS_VALUES, FactureStatusValue } from './facture-status.constants';
-
+import { FACTURE_STATUS_VALUES } from './facture-status.constants'
+import type { FactureStatusValue } from './facture-status.constants'
 // -------------------------------------------------------------
 // Supabase typing helpers
 // -------------------------------------------------------------
