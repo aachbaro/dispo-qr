@@ -21,8 +21,8 @@ import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query, UseGu
 import type { AuthUser } from '../common/auth/auth.types';
 import { User } from '../common/auth/decorators/user.decorator';
 import { JwtAuthGuard } from '../common/auth/guards/jwt.guard';
-import type { AttachClientDto } from './dto/attach-client.dto';
-import { ClientsService } from './clients.service';
+import { AttachClientDto } from './dto/attach-client.dto';
+import { ClientContactWithRelations, ClientsService } from './clients.service';
 
 @Controller('clients')
 @UseGuards(JwtAuthGuard)
@@ -30,7 +30,10 @@ export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
   @Get()
-  async list(@Query('entrepriseRef') entrepriseRef: string, @User() user: AuthUser) {
+  async list(
+    @Query('entrepriseRef') entrepriseRef: string,
+    @User() user: AuthUser,
+  ): Promise<{ contacts: ClientContactWithRelations[] }> {
     return this.clientsService.listClients(entrepriseRef ?? '', user);
   }
 
@@ -39,7 +42,7 @@ export class ClientsController {
     @Body() dto: AttachClientDto,
     @Query('entrepriseRef') entrepriseRef: string,
     @User() user: AuthUser,
-  ) {
+  ): Promise<{ attached: true }> {
     return this.clientsService.attachClient(entrepriseRef ?? '', dto, user);
   }
 
@@ -48,7 +51,7 @@ export class ClientsController {
     @Param('id', ParseUUIDPipe) clientId: string,
     @Query('entrepriseRef') entrepriseRef: string,
     @User() user: AuthUser,
-  ) {
+  ): Promise<{ detached: true }> {
     return this.clientsService.detachClient(entrepriseRef ?? '', clientId, user);
   }
 }

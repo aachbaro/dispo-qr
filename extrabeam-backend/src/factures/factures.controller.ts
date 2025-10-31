@@ -28,9 +28,9 @@ import { Body, Controller, Get, Param, ParseIntPipe, Post, Put, Query, UseGuards
 import type { AuthUser } from '../common/auth/auth.types';
 import { User } from '../common/auth/decorators/user.decorator';
 import { JwtAuthGuard } from '../common/auth/guards/jwt.guard';
-import type { CreateFactureDto } from './dto/create-facture.dto';
-import type { UpdateFactureDto } from './dto/update-facture.dto';
-import { FacturesService } from './factures.service';
+import { FactureCreateDto } from './dto/facture-create.dto';
+import { FactureUpdateDto } from './dto/facture-update.dto';
+import { FacturesService, FactureWithRelations } from './factures.service';
 
 @Controller('factures')
 @UseGuards(JwtAuthGuard)
@@ -38,19 +38,28 @@ export class FacturesController {
   constructor(private readonly facturesService: FacturesService) {}
 
   @Get()
-  async listFactures(@Query('entrepriseRef') entrepriseRef: string, @User() user: AuthUser) {
+  async listFactures(
+    @Query('entrepriseRef') entrepriseRef: string,
+    @User() user: AuthUser,
+  ): Promise<{ factures: FactureWithRelations[] }> {
     const factures = await this.facturesService.listFactures(entrepriseRef ?? '', user);
     return { factures };
   }
 
   @Get(':id')
-  async getFacture(@Param('id', ParseIntPipe) id: number, @User() user: AuthUser) {
+  async getFacture(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: AuthUser,
+  ): Promise<{ facture: FactureWithRelations }> {
     const facture = await this.facturesService.getFacture(id, user);
     return { facture };
   }
 
   @Post()
-  async createFacture(@Body() dto: CreateFactureDto, @User() user: AuthUser) {
+  async createFacture(
+    @Body() dto: FactureCreateDto,
+    @User() user: AuthUser,
+  ): Promise<{ facture: FactureWithRelations }> {
     const facture = await this.facturesService.createFacture(dto, user);
     return { facture };
   }
@@ -58,15 +67,18 @@ export class FacturesController {
   @Put(':id')
   async updateFacture(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateFactureDto,
+    @Body() dto: FactureUpdateDto,
     @User() user: AuthUser,
-  ) {
+  ): Promise<{ facture: FactureWithRelations }> {
     const facture = await this.facturesService.updateFacture(id, dto, user);
     return { facture };
   }
 
   @Post(':id/send')
-  async sendFacture(@Param('id', ParseIntPipe) id: number, @User() user: AuthUser) {
+  async sendFacture(
+    @Param('id', ParseIntPipe) id: number,
+    @User() user: AuthUser,
+  ): Promise<{ sent: true }> {
     return this.facturesService.sendFacture(id, user);
   }
 }

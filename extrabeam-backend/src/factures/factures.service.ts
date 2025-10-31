@@ -40,20 +40,35 @@ import {
 import type { AuthUser } from '../common/auth/auth.types';
 import { AccessService } from '../common/auth/access.service';
 import { SupabaseService } from '../common/supabase/supabase.service';
-import type { Tables } from '../common/types/database';
-import type { CreateFactureDto } from './dto/create-facture.dto';
-import type { UpdateFactureDto } from './dto/update-facture.dto';
+import type { Database } from '../types/database';
+import { FactureCreateDto } from './dto/facture-create.dto';
+import { FactureUpdateDto } from './dto/facture-update.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
+
+type Table<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Row'];
+type Insert<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Insert'];
+type Update<Name extends keyof Database['public']['Tables']> =
+  Database['public']['Tables'][Name]['Update'];
+
+type FactureRow = Table<'factures'>;
+type FactureInsert = Insert<'factures'>;
+type FactureUpdate = Update<'factures'>;
+type MissionRow = Table<'missions'>;
+type SlotRow = Table<'slots'>;
+type EntrepriseRow = Table<'entreprise'>;
+type ProfileRow = Table<'profiles'>;
 
 const ENTREPRISE_ROLES = new Set(['freelance', 'entreprise', 'admin']);
 const FACTURE_SELECT = '*, missions(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))';
 
-export type FactureWithRelations = Tables<'factures'> & {
-  missions: (Tables<'missions'> & {
-    slots?: Tables<'slots'>[];
-    entreprise?: Tables<'entreprise'> | null;
-    client?: Tables<'profiles'> | null;
+export type FactureWithRelations = FactureRow & {
+  missions: (MissionRow & {
+    slots?: SlotRow[];
+    entreprise?: EntrepriseRow | null;
+    client?: ProfileRow | null;
   }) | null;
 };
 
@@ -74,8 +89,15 @@ export class FacturesService {
     }
   }
 
-  private async loadEntrepriseForUser(user: AuthUser, ref: string): Promise<Tables<'entreprise'>> {
-    const entreprise = await this.accessService.findEntreprise(ref);
+  private async loadEntrepriseForUser(
+    user: AuthUser,
+    ref: string | number | null | undefined,
+  ): Promise<EntrepriseRow> {
+    const resolvedRef = this.accessService.resolveEntrepriseRef(user, ref);
+    if (!resolvedRef) {
+      throw new BadRequestException('Référence entreprise manquante');
+    }
+    const entreprise = await this.accessService.findEntreprise(resolvedRef);
     if (!this.accessService.canAccessEntreprise(user, entreprise)) {
       throw new ForbiddenException("Accès interdit à l'entreprise");
     }
@@ -88,7 +110,8 @@ export class FacturesService {
       .from('factures')
       .select(FACTURE_SELECT)
       .eq('id', id)
-      .maybeSingle<FactureWithRelations>();
+      .returns<FactureWithRelations[]>()
+      .maybeSingle();
 
     if (error) {
       if (error.code === 'PGRST116') {
@@ -110,31 +133,32 @@ export class FacturesService {
     }
   }
 
-  async listFactures(entrepriseRef: string, user: AuthUser | null): Promise<FactureWithRelations[]> {
+  /** 🧾 Liste les factures visibles par l'entreprise authentifiée. */
+  async listFactures(
+    entrepriseRef: string,
+    user: AuthUser | null,
+  ): Promise<FactureWithRelations[]> {
     this.ensureUser(user);
     this.assertEntrepriseRole(user);
 
-    const ref = entrepriseRef || user.slug || user.id;
-    if (!ref) {
-      throw new BadRequestException('Référence entreprise manquante');
-    }
-
-    const entreprise = await this.loadEntrepriseForUser(user, String(ref));
+    const entreprise = await this.loadEntrepriseForUser(user, entrepriseRef);
     const admin = this.supabaseService.getAdminClient();
 
     const { data, error } = await admin
       .from('factures')
       .select(FACTURE_SELECT)
       .eq('entreprise_id', entreprise.id)
-      .order('date_emission', { ascending: false });
+      .order('date_emission', { ascending: false })
+      .returns<FactureWithRelations[]>();
 
     if (error) {
       throw new InternalServerErrorException(error.message);
     }
 
-    return (data as FactureWithRelations[]) ?? [];
+    return data ?? [];
   }
 
+  /** 🔍 Récupère une facture après vérification des droits d'accès. */
   async getFacture(id: number, user: AuthUser | null): Promise<FactureWithRelations> {
     this.ensureUser(user);
 
@@ -159,13 +183,17 @@ export class FacturesService {
     return facture;
   }
 
-  private async computeFromMission(missionId: number, entrepriseId: number) {
+  private async computeFromMission(
+    missionId: number,
+    entrepriseId: number,
+  ): Promise<{ hours: number; rate: number; montant_ht: number; montant_ttc: number }> {
     const admin = this.supabaseService.getAdminClient();
-
+    type SlotTiming = Pick<SlotRow, 'start' | 'end'>;
     const { data: slots, error: slotsError } = await admin
       .from('slots')
       .select('start, end')
-      .eq('mission_id', missionId);
+      .eq('mission_id', missionId)
+      .returns<SlotTiming[]>();
 
     if (slotsError) {
       throw new InternalServerErrorException(slotsError.message);
@@ -194,23 +222,22 @@ export class FacturesService {
     };
   }
 
-  async createFacture(input: CreateFactureDto, user: AuthUser | null): Promise<FactureWithRelations> {
+  /** 🧾 Crée une facture pour une entreprise donnée. */
+  async createFacture(
+    input: FactureCreateDto,
+    user: AuthUser | null,
+  ): Promise<FactureWithRelations> {
     this.ensureUser(user);
     this.assertEntrepriseRole(user);
 
-    const ref = input.entreprise_id ? String(input.entreprise_id) : user.slug || user.id;
-    if (!ref) {
-      throw new BadRequestException('Référence entreprise manquante');
-    }
-
-    const entreprise = await this.loadEntrepriseForUser(user, ref);
+    const entreprise = await this.loadEntrepriseForUser(user, input.entreprise_id);
 
     const admin = this.supabaseService.getAdminClient();
-
-    const payload: CreateFactureDto = {
-      ...input,
+    const { generatePaymentLink, entreprise_id: _ignoreEntrepriseId, mission_id, ...rest } = input;
+    const payload: FactureInsert = {
+      ...rest,
       entreprise_id: entreprise.id,
-      mission_id: input.mission_id ?? null,
+      mission_id: mission_id ?? null,
     };
 
     if (payload.mission_id) {
@@ -228,16 +255,15 @@ export class FacturesService {
       }
     }
 
-    const { generatePaymentLink, ...factureData } = payload;
-
     const { data, error } = await admin
       .from('factures')
-      .insert(factureData)
+      .insert(payload)
       .select()
-      .single<Tables<'factures'>>();
+      .returns<FactureRow[]>()
+      .single();
 
     if (error) {
-      if ((error as any).code === '23505') {
+      if (error.code === '23505') {
         throw new BadRequestException('Numéro de facture déjà utilisé');
       }
       throw new InternalServerErrorException(error.message);
@@ -259,7 +285,12 @@ export class FacturesService {
     return facture;
   }
 
-  async updateFacture(id: number, input: UpdateFactureDto, user: AuthUser | null): Promise<FactureWithRelations> {
+  /** ✏️ Met à jour une facture existante. */
+  async updateFacture(
+    id: number,
+    input: FactureUpdateDto,
+    user: AuthUser | null,
+  ): Promise<FactureWithRelations> {
     this.ensureUser(user);
 
     const facture = await this.fetchFacture(id);
@@ -275,9 +306,10 @@ export class FacturesService {
     }
 
     const admin = this.supabaseService.getAdminClient();
-    const payload: UpdateFactureDto = {
-      ...input,
-      mission_id: input.mission_id ?? null,
+    const { mission_id, ...rest } = input;
+    const payload: FactureUpdate = {
+      ...rest,
+      mission_id: mission_id ?? null,
     };
 
     const { error } = await admin
@@ -303,6 +335,7 @@ export class FacturesService {
     return this.fetchFacture(id);
   }
 
+  /** ✉️ Déclenche l'envoi d'une facture au client final. */
   async sendFacture(id: number, user: AuthUser | null): Promise<{ sent: true }> {
     this.ensureUser(user);
     const facture = await this.fetchFacture(id);
