@@ -23,31 +23,42 @@
 //
 // -------------------------------------------------------------
 
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common'
 
-import type { AuthUser } from '../common/auth/auth.types';
-import { User } from '../common/auth/decorators/user.decorator';
-import { OptionalJwtAuthGuard } from '../common/auth/guards/optional-jwt.guard';
-import { EntreprisesService } from './entreprises.service';
+import type { AuthUser } from '../common/auth/auth.types'
+import { User } from '../common/auth/decorators/user.decorator'
+import { OptionalJwtAuthGuard } from '../common/auth/guards/optional-jwt.guard'
+import {
+  EntreprisesService,
+  type EntrepriseDetail,
+  type EntrepriseOverview,
+  type PublicEntreprise,
+} from './entreprises.service'
 
 @Controller('entreprises')
 export class EntreprisesController {
   constructor(private readonly entreprisesService: EntreprisesService) {}
 
   @Get()
-  async listEntreprises() {
-    return this.entreprisesService.getPublicEntreprises();
+  async listEntreprises(): Promise<{ entreprises: PublicEntreprise[] }> {
+    return this.entreprisesService.getPublicEntreprises()
   }
 
   @Get(':ref')
   @UseGuards(OptionalJwtAuthGuard)
-  async getEntreprise(@Param('ref') ref: string, @User() user: AuthUser | null) {
-    return this.entreprisesService.getEntreprise(ref, user ?? null);
+  async getEntreprise(
+    @Param('ref') ref: string,
+    @User() user: AuthUser | null,
+  ): Promise<EntrepriseDetail> {
+    return this.entreprisesService.getEntreprise(ref, user ?? null)
   }
 
   @Get(':ref/overview')
   @UseGuards(OptionalJwtAuthGuard)
-  async getEntrepriseOverview(@Param('ref') ref: string, @User() user: AuthUser | null) {
-    return this.entreprisesService.getEntrepriseOverview(ref, user ?? null);
+  async getEntrepriseOverview(
+    @Param('ref') ref: string,
+    @User() user: AuthUser | null,
+  ): Promise<EntrepriseOverview> {
+    return this.entreprisesService.getEntrepriseOverview(ref, user ?? null)
   }
 }
