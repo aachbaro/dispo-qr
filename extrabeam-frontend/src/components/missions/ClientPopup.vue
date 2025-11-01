@@ -227,10 +227,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
-import { createMission, createPublicMission } from "../../services/missions";
+import { computed, onMounted, ref, watch } from "vue";
+import {
+  createMission,
+  createPublicMission,
+  type MissionPayload,
+} from "../../services/missions";
 import { listTemplates, type MissionTemplate } from "../../services/templates";
-import { useUserStore } from "../../stores/user"; // ⚡ ajoute ton store utilisateur si existant
+import { useUserStore } from "../../stores/user";
 
 const props = defineProps<{
   open: boolean;
@@ -241,7 +245,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits(["close", "created"]);
 
-const userStore = useUserStore(); // ⚡ permet de savoir si connecté
+const userStore = useUserStore();
 
 // Templates
 const templates = ref<MissionTemplate[]>([]);
@@ -287,7 +291,14 @@ const instructions = ref("");
 const mode = ref<"freelance" | "salarié">("freelance");
 
 // Slots dynamiques
-const slots = ref([
+interface SlotForm {
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+}
+
+const slots = ref<SlotForm[]>([
   {
     startDate: props.initialDate || "",
     endDate: props.initialDate || "",
@@ -326,7 +337,7 @@ function removeSlot(index: number) {
 
 // Validation
 const minDate = new Date().toISOString().slice(0, 10);
-function isSlotInvalid(slot: any) {
+function isSlotInvalid(slot: SlotForm) {
   if (!slot.startDate || !slot.endDate || !slot.startTime || !slot.endTime)
     return true;
   const s = new Date(`${slot.startDate}T${slot.startTime}`);
@@ -349,7 +360,7 @@ async function onConfirm() {
     title: null,
   }));
 
-  const payload = {
+  const payload: MissionPayload = {
     etablissement: etablissement.value,
     etablissement_adresse_ligne1: adresseLigne1.value,
     etablissement_adresse_ligne2: adresseLigne2.value || null,
@@ -363,10 +374,11 @@ async function onConfirm() {
     mode: mode.value,
     slots: slotsPayload,
     entreprise_ref: props.slug,
-  } as any;
+  };
 
   try {
-    const { mission } = userStore.isLoggedIn
+    const isAuthenticated = userStore?.isLoggedIn === true;
+    const { mission } = isAuthenticated
       ? await createMission(payload)
       : await createPublicMission(payload);
 
