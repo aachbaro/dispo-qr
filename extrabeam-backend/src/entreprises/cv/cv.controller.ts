@@ -1,54 +1,21 @@
-// src/entreprises/cv/cv.controller.ts
-// -------------------------------------------------------------
-// Contrôleur : Entreprises › CV (profil complet + sous-sections)
-// -------------------------------------------------------------
-//
-// 📌 Description :
-//   - Point d’entrée des opérations CV liées à une entreprise (freelance)
-//   - Permet la lecture et la mise à jour du profil complet :
-//       • Profil principal
-//       • Compétences
-//       • Expériences
-//       • Formations
-//
-// 📍 Endpoints principaux :
-//   - GET    /api/entreprises/:ref/cv               → CV complet
-//   - GET    /api/entreprises/:ref/cv/profile       → Profil principal
-//   - PUT    /api/entreprises/:ref/cv/profile       → Mise à jour profil
-//   - GET    /api/entreprises/:ref/cv/skills        → Liste des skills
-//   - GET    /api/entreprises/:ref/cv/experiences   → Liste des expériences
-//   - GET    /api/entreprises/:ref/cv/education     → Liste des formations
-//
-// 🔒 Règles d’accès :
-//   - Lecture publique (GET)
-//   - Écriture réservée à l’owner ou admin (PUT)
-//
-// ⚠️ Remarques :
-//   - getFullCv() regroupe toutes les sous-sections pour un rendu complet
-//   - Les méthodes sous-jacentes (getProfile, getSkills, etc.) existent déjà
-//
-// -------------------------------------------------------------
-
-import { Body, Controller, Get, Param, Put } from '@nestjs/common'
+import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common'
 
 import { CvService } from './cv.service'
-import type { Table } from '../../types/aliases'
+import { JwtAuthGuard } from '../../common/auth/guards/jwt.guard'
+import { RolesGuard } from '../../common/auth/guards/roles.guard'
+import { User } from '../../common/auth/decorators/user.decorator'
+import type { AuthUser } from '../../common/auth/auth.types'
+import type { Database } from '../../types/database'
 
-// -------------------------------------------------------------
-// Typages dérivés de Supabase
-// -------------------------------------------------------------
-type CvProfile = Table<'cv_profiles'>
-type CvSkill = Table<'cv_skills'>
-type CvExperience = Table<'cv_experiences'>
-type CvEducation = Table<'cv_education'>
+type CvProfile = Database['public']['Tables']['cv_profiles']['Row']
+type CvSkill = Database['public']['Tables']['cv_skills']['Row']
+type CvExperience = Database['public']['Tables']['cv_experiences']['Row']
+type CvEducation = Database['public']['Tables']['cv_education']['Row']
 
 @Controller('entreprises/:ref/cv')
 export class CvController {
   constructor(private readonly cvService: CvService) {}
 
-  // -------------------------------------------------------------
-  // 🧱 GET /api/entreprises/:ref/cv
-  // -------------------------------------------------------------
   @Get()
   async getFullCv(
     @Param('ref') ref: string,
@@ -68,44 +35,31 @@ export class CvController {
     return { profile, skills, experiences, education }
   }
 
-  // -------------------------------------------------------------
-  // 👤 GET /api/entreprises/:ref/cv/profile
-  // -------------------------------------------------------------
   @Get('profile')
   async getProfile(@Param('ref') ref: string): Promise<CvProfile | null> {
     return this.cvService.getProfile(ref)
   }
 
-  // -------------------------------------------------------------
-  // 🛠️ PUT /api/entreprises/:ref/cv/profile
-  // -------------------------------------------------------------
   @Put('profile')
+  @UseGuards(JwtAuthGuard, RolesGuard)
   async updateProfile(
     @Param('ref') ref: string,
+    @User() user: AuthUser,
     @Body() dto: Partial<CvProfile>,
   ): Promise<CvProfile> {
-    return this.cvService.updateProfile(ref, dto)
+    return this.cvService.updateProfile(ref, dto, user)
   }
 
-  // -------------------------------------------------------------
-  // 🧠 GET /api/entreprises/:ref/cv/skills
-  // -------------------------------------------------------------
   @Get('skills')
   async getSkills(@Param('ref') ref: string): Promise<CvSkill[]> {
     return this.cvService.getSkills(ref)
   }
 
-  // -------------------------------------------------------------
-  // 💼 GET /api/entreprises/:ref/cv/experiences
-  // -------------------------------------------------------------
   @Get('experiences')
   async getExperiences(@Param('ref') ref: string): Promise<CvExperience[]> {
     return this.cvService.getExperiences(ref)
   }
 
-  // -------------------------------------------------------------
-  // 🎓 GET /api/entreprises/:ref/cv/education
-  // -------------------------------------------------------------
   @Get('education')
   async getEducation(@Param('ref') ref: string): Promise<CvEducation[]> {
     return this.cvService.getEducation(ref)

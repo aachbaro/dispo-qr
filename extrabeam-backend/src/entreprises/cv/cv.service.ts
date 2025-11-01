@@ -1,53 +1,29 @@
-// src/entreprises/cv/cv.service.ts
-// -------------------------------------------------------------
-// Service : Entreprises › CV
-// -------------------------------------------------------------
-//
-// 📌 Description :
-//   - Gère les différentes sections du CV liées à une entreprise (freelance)
-//   - Fournit les opérations CRUD pour :
-//       • Profil principal
-//       • Compétences
-//       • Expériences
-//       • Formations
-//
-// 🧱 Architecture :
-//   - Appelé par CvController
-//   - Utilise SupabaseService pour interagir avec la base
-//
-// 🔒 Règles d’accès :
-//   - Lecture publique
-//   - Écriture réservée au propriétaire ou admin
-//
-// ⚠️ Remarques :
-//   - Implémentation simplifiée (mock ou lecture Supabase à ajouter)
-//   - Typage fort basé sur src/types/database.ts
-//
-// -------------------------------------------------------------
+import {
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common'
 
-import { Injectable, InternalServerErrorException } from '@nestjs/common'
-
+import { AccessService } from '../../common/auth/access.service'
+import type { AuthUser } from '../../common/auth/auth.types'
 import { SupabaseService } from '../../common/supabase/supabase.service'
-import type { Table } from '../../types/aliases'
+import type { Database } from '../../types/database'
 
-// -------------------------------------------------------------
-// Typages dérivés de Supabase
-// -------------------------------------------------------------
-type CvProfile = Table<'cv_profiles'>
-type CvSkill = Table<'cv_skills'>
-type CvExperience = Table<'cv_experiences'>
-type CvEducation = Table<'cv_education'>
+type CvProfile = Database['public']['Tables']['cv_profiles']['Row']
+type CvSkill = Database['public']['Tables']['cv_skills']['Row']
+type CvExperience = Database['public']['Tables']['cv_experiences']['Row']
+type CvEducation = Database['public']['Tables']['cv_education']['Row']
 
 @Injectable()
 export class CvService {
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly accessService: AccessService,
+  ) {}
 
-  // -------------------------------------------------------------
-  // 👤 Profil principal
-  // -------------------------------------------------------------
   async getProfile(ref: string): Promise<CvProfile | null> {
-    const client = this.supabase.getAdminClient()
-    const { data, error } = await client
+    const { data, error } = await this.supabase
+      .getAdminClient()
       .from('cv_profiles')
       .select('*')
       .eq('entreprise_ref', ref)
@@ -63,15 +39,20 @@ export class CvService {
   async updateProfile(
     ref: string,
     dto: Partial<CvProfile>,
+    user: AuthUser,
   ): Promise<CvProfile> {
-    const client = this.supabase.getAdminClient()
-    const { id, ...safeDto } = dto
+    const entreprise = await this.accessService.findEntreprise(ref)
 
-    const { data, error } = await client
+    if (!this.accessService.canAccessEntreprise(user, entreprise)) {
+      throw new ForbiddenException('Accès interdit')
+    }
+
+    const { data, error } = await this.supabase
+      .getAdminClient()
       .from('cv_profiles')
-      .update(safeDto)
+      .update(dto)
       .eq('entreprise_ref', ref)
-      .select()
+      .select('*')
       .single()
 
     if (error) {
@@ -81,12 +62,9 @@ export class CvService {
     return data
   }
 
-  // -------------------------------------------------------------
-  // 🧠 Compétences
-  // -------------------------------------------------------------
   async getSkills(ref: string): Promise<CvSkill[]> {
-    const client = this.supabase.getAdminClient()
-    const { data, error } = await client
+    const { data, error } = await this.supabase
+      .getAdminClient()
       .from('cv_skills')
       .select('*')
       .eq('entreprise_ref', ref)
@@ -99,12 +77,9 @@ export class CvService {
     return data ?? []
   }
 
-  // -------------------------------------------------------------
-  // 💼 Expériences
-  // -------------------------------------------------------------
   async getExperiences(ref: string): Promise<CvExperience[]> {
-    const client = this.supabase.getAdminClient()
-    const { data, error } = await client
+    const { data, error } = await this.supabase
+      .getAdminClient()
       .from('cv_experiences')
       .select('*')
       .eq('entreprise_ref', ref)
@@ -117,12 +92,9 @@ export class CvService {
     return data ?? []
   }
 
-  // -------------------------------------------------------------
-  // 🎓 Formations
-  // -------------------------------------------------------------
   async getEducation(ref: string): Promise<CvEducation[]> {
-    const client = this.supabase.getAdminClient()
-    const { data, error } = await client
+    const { data, error } = await this.supabase
+      .getAdminClient()
       .from('cv_education')
       .select('*')
       .eq('entreprise_ref', ref)
@@ -133,24 +105,5 @@ export class CvService {
     }
 
     return data ?? []
-  }
-
-  // -------------------------------------------------------------
-  // 🧩 CV complet
-  // -------------------------------------------------------------
-  async getFullCv(ref: string): Promise<{
-    profile: CvProfile | null
-    skills: CvSkill[]
-    experiences: CvExperience[]
-    education: CvEducation[]
-  }> {
-    const [profile, skills, experiences, education] = await Promise.all([
-      this.getProfile(ref),
-      this.getSkills(ref),
-      this.getExperiences(ref),
-      this.getEducation(ref),
-    ])
-
-    return { profile, skills, experiences, education }
   }
 }
