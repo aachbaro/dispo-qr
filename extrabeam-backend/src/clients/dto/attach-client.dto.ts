@@ -8,17 +8,14 @@
 //
 // -------------------------------------------------------------
 
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator'
 
-import type { Database } from '../../types/database';
+import type { Table } from '../../types/aliases'
 
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row'];
-
-type ClientRow = Table<'clients'>;
+type ClientRow = Table<'clients'>
 
 export class AttachClientDto {
   @IsString()
   @IsNotEmpty()
-  client_id!: ClientRow['id'];
+  client_id!: ClientRow['id']
 }

@@ -38,20 +38,14 @@ import {
   UseGuards,
 } from '@nestjs/common'
 
-import type { AuthUser } from '../common/auth/auth.types'
 import { User } from '../common/auth/decorators/user.decorator'
 import { JwtAuthGuard } from '../common/auth/guards/jwt.guard'
-import type { Database } from '../types/database'
 import { MissionCreateDto } from './dto/mission-create.dto'
 import { MissionUpdateDto } from './dto/mission-update.dto'
 import { MissionUpdateStatusDto } from './dto/update-mission-status.dto'
 import { MissionsService, type MissionWithRelations } from './missions.service'
-
-type Enum<Name extends keyof Database['public']['Enums']> =
-  Database['public']['Enums'][Name]
-
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row']
+import type { AuthUser } from '../common/auth/auth.types'
+import type { Enum, Table } from '../types/aliases'
 
 type MissionStatus = Enum<'mission_status'>
 type MissionRow = Table<'missions'>

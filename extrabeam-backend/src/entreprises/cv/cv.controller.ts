@@ -30,15 +30,13 @@
 // -------------------------------------------------------------
 
 import { Body, Controller, Get, Param, Put } from '@nestjs/common'
+
 import { CvService } from './cv.service'
-import type { Database } from '../../types/database'
+import type { Table } from '../../types/aliases'
 
 // -------------------------------------------------------------
 // Typages dérivés de Supabase
 // -------------------------------------------------------------
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row']
-
 type CvProfile = Table<'cv_profiles'>
 type CvSkill = Table<'cv_skills'>
 type CvExperience = Table<'cv_experiences'>

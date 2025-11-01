@@ -3,68 +3,86 @@
 // Service : Paiements Stripe
 // -------------------------------------------------------------
 
-import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
-import Stripe from 'stripe';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common'
+import Stripe from 'stripe'
 
-import type { AuthUser } from '../common/auth/auth.types';
-import { AccessService } from '../common/auth/access.service';
-import { SupabaseService } from '../common/supabase/supabase.service';
-import type { Tables } from '../common/types/database';
-import { NotificationsService } from '../notifications/notifications.service';
+import { AccessService } from '../common/auth/access.service'
+import { SupabaseService } from '../common/supabase/supabase.service'
+import { NotificationsService } from '../notifications/notifications.service'
+import type { AuthUser } from '../common/auth/auth.types'
+import type { FactureWithRelations } from '../factures/factures.service'
+import type { Table } from '../types/aliases'
 
-const ENTREPRISE_ROLES = new Set(['freelance', 'entreprise', 'admin']);
+type EntrepriseRow = Table<'entreprise'>
+type FactureWithEntreprise = FactureWithRelations & {
+  entreprise?: EntrepriseRow | null
+}
+
+const ENTREPRISE_ROLES = new Set(['freelance', 'entreprise', 'admin'])
+const FACTURE_SELECT =
+  '*, entreprise:entreprise_id(*), missions(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))'
 
 @Injectable()
 export class PaymentsService {
-  private readonly stripe: Stripe;
+  private readonly stripe: Stripe
 
   constructor(
     private readonly supabaseService: SupabaseService,
     private readonly accessService: AccessService,
     private readonly notificationsService: NotificationsService,
   ) {
-    const secretKey = process.env.STRIPE_SECRET_KEY;
+    const secretKey = process.env.STRIPE_SECRET_KEY
     if (!secretKey) {
-      throw new Error('STRIPE_SECRET_KEY manquant');
+      throw new Error('STRIPE_SECRET_KEY manquant')
     }
-    this.stripe = new Stripe(secretKey, { apiVersion: '2024-06-20' as any });
+    this.stripe = new Stripe(secretKey, {
+      apiVersion: '2024-06-20' as Stripe.LatestApiVersion,
+    })
   }
 
   private ensureUser(user: AuthUser | null): asserts user is AuthUser {
     if (!user) {
-      throw new UnauthorizedException('Authentification requise');
+      throw new UnauthorizedException('Authentification requise')
     }
   }
 
-  async createCheckoutForFacture(factureId: number, user: AuthUser | null) {
-    this.ensureUser(user);
+  async createCheckoutForFacture(
+    factureId: number,
+    user: AuthUser | null,
+  ): Promise<{ url: string; sessionId: string; paymentIntent: string }> {
+    this.ensureUser(user)
     if (!ENTREPRISE_ROLES.has(user.role ?? '')) {
-      throw new ForbiddenException('Accès réservé aux entreprises');
+      throw new ForbiddenException('Accès réservé aux entreprises')
     }
 
-    const admin = this.supabaseService.getAdminClient();
+    const admin = this.supabaseService.getAdminClient()
     const { data, error } = await admin
       .from('factures')
-      .select('*, entreprise:entreprise_id(*), missions(*, client:client_id(*))')
+      .select(FACTURE_SELECT)
       .eq('id', factureId)
-      .maybeSingle<
-        Tables<'factures'> & {
-          entreprise?: Tables<'entreprise'> | null;
-          missions?: (Tables<'missions'> & { client?: Tables<'profiles'> | null }) | null;
-        }
-      >();
+      .returns<FactureWithEntreprise[]>()
+      .maybeSingle()
 
     if (error || !data) {
-      throw new NotFoundException('Facture introuvable');
+      throw new NotFoundException('Facture introuvable')
     }
 
-    const entreprise = data.entreprise ?? (await this.accessService.findEntreprise(String(data.entreprise_id)));
+    const entreprise =
+      data.entreprise ??
+      (await this.accessService.findEntreprise(String(data.entreprise_id)))
     if (!this.accessService.canAccessEntreprise(user, entreprise)) {
-      throw new ForbiddenException('Accès interdit');
+      throw new ForbiddenException('Accès interdit')
     }
 
     if (!data.montant_ttc || data.montant_ttc <= 0) {
-      throw new BadRequestException('Montant TTC invalide');
+      throw new BadRequestException('Montant TTC invalide')
     }
 
     const session = await this.stripe.checkout.sessions.create({
@@ -90,61 +108,66 @@ export class PaymentsService {
         entreprise_id: entreprise.id.toString(),
         ...(data.mission_id ? { mission_id: data.mission_id.toString() } : {}),
       },
-    });
+    })
+
+    if (!session.url) {
+      throw new InternalServerErrorException('Session Stripe sans URL')
+    }
+
+    const paymentIntentId =
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : session.payment_intent?.id ?? ''
 
     const { error: updateError } = await admin
       .from('factures')
       .update({
         stripe_session_id: session.id,
-        stripe_payment_intent: session.payment_intent?.toString() ?? null,
+        stripe_payment_intent: paymentIntentId || null,
         payment_link: session.url,
         status: 'pending_payment',
       })
-      .eq('id', data.id);
+      .eq('id', data.id)
 
     if (updateError) {
-      throw new InternalServerErrorException(updateError.message);
+      throw new InternalServerErrorException(updateError.message)
     }
 
-    await this.notificationsService.sendFactureNotification(data.id, user);
+    await this.notificationsService.sendFactureNotification(data.id, user)
 
-    return { url: session.url!, sessionId: session.id, paymentIntent: session.payment_intent?.toString() ?? '' };
+    return { url: session.url, sessionId: session.id, paymentIntent: paymentIntentId }
   }
 
-  async handleWebhook(rawBody: Buffer, signature: string) {
-    let event: Stripe.Event;
+  async handleWebhook(rawBody: Buffer, signature: string): Promise<void> {
+    let event: Stripe.Event
     try {
       event = this.stripe.webhooks.constructEvent(
         rawBody,
         signature,
         process.env.STRIPE_WEBHOOK_SECRET as string,
-      );
+      )
     } catch (error) {
-      throw new UnauthorizedException(`Webhook Error: ${(error as Error).message}`);
+      throw new UnauthorizedException(`Webhook Error: ${(error as Error).message}`)
     }
 
-    const admin = this.supabaseService.getAdminClient();
+    const admin = this.supabaseService.getAdminClient()
 
     if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const factureId = session.metadata?.facture_id;
+      const session = event.data.object as Stripe.Checkout.Session
+      const factureId = session.metadata?.facture_id
       if (!factureId) {
-        throw new NotFoundException('Facture manquante');
+        throw new NotFoundException('Facture manquante')
       }
 
       const { data, error } = await admin
         .from('factures')
-        .select('*, entreprise:entreprise_id(*), missions(*, client:client_id(*))')
+        .select(FACTURE_SELECT)
         .eq('id', Number(factureId))
-        .maybeSingle<
-          Tables<'factures'> & {
-            entreprise?: Tables<'entreprise'> | null;
-            missions?: (Tables<'missions'> & { client?: Tables<'profiles'> | null }) | null;
-          }
-        >();
+        .returns<FactureWithEntreprise[]>()
+        .maybeSingle()
 
       if (error || !data) {
-        throw new NotFoundException('Facture introuvable');
+        throw new NotFoundException('Facture introuvable')
       }
 
       await admin
@@ -152,40 +175,37 @@ export class PaymentsService {
         .update({
           status: 'paid',
           stripe_session_id: session.id,
-          stripe_payment_intent: session.payment_intent?.toString() ?? null,
+          stripe_payment_intent:
+            typeof session.payment_intent === 'string'
+              ? session.payment_intent
+              : session.payment_intent?.id ?? null,
         })
-        .eq('id', Number(factureId));
+        .eq('id', Number(factureId))
 
       if (data.mission_id) {
         await admin
           .from('missions')
           .update({ status: 'paid' })
-          .eq('id', data.mission_id);
+          .eq('id', data.mission_id)
       }
 
-      const entreprise = data.entreprise ?? null;
+      const entreprise = data.entreprise ?? null
       if (entreprise) {
-        await this.notificationsService.notifyFactureCreated(
-          {
-            ...data,
-            missions: data.missions ?? null,
-          } as any,
-          entreprise,
-        );
+        await this.notificationsService.notifyFactureCreated(data, entreprise)
       }
     }
 
     if (event.type === 'payment_intent.payment_failed') {
-      const intent = event.data.object as Stripe.PaymentIntent;
-      const factureId = intent.metadata?.facture_id;
+      const intent = event.data.object as Stripe.PaymentIntent
+      const factureId = intent.metadata?.facture_id
       if (!factureId) {
-        return;
+        return
       }
 
       await admin
         .from('factures')
         .update({ status: 'canceled' })
-        .eq('id', Number(factureId));
+        .eq('id', Number(factureId))
     }
   }
 }

@@ -20,19 +20,16 @@
 //
 // -------------------------------------------------------------
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common'
 
-import type { Database } from '../../types/database';
-import { SupabaseService } from '../supabase/supabase.service';
-import type { AuthUser } from './auth.types';
+import { SupabaseService } from '../supabase/supabase.service'
+import type { AuthUser } from './auth.types'
+import type { Table } from '../../types/aliases'
 
 // -------------------------------------------------------------
 // 🧩 Typage Supabase
 // -------------------------------------------------------------
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row'];
-
-type EntrepriseRow = Table<'entreprise'>;
+type EntrepriseRow = Table<'entreprise'>
 
 // -------------------------------------------------------------
 // 🚀 Service principal
@@ -49,14 +46,14 @@ export class AccessService {
     ref?: string | number | null,
   ): string | null {
     const normalizedRef =
-      typeof ref === 'string' ? ref.trim() : ref ?? null;
+      typeof ref === 'string' ? ref.trim() : ref ?? null
 
     const resolved =
       normalizedRef !== null && normalizedRef !== ''
         ? normalizedRef
-        : user.slug ?? user.id ?? null;
+        : user.slug ?? user.id ?? null
 
-    return resolved === null ? null : String(resolved);
+    return resolved === null ? null : String(resolved)
   }
 
   // -------------------------------------------------------------
@@ -85,7 +82,7 @@ export class AccessService {
       throw new NotFoundException('Entreprise non trouvée')
     }
 
-    return data;
+    return data
   }
 
   // -------------------------------------------------------------
@@ -93,13 +90,13 @@ export class AccessService {
   // -------------------------------------------------------------
   canAccessEntreprise(user: AuthUser | null, entreprise: EntrepriseRow): boolean {
     if (!user) {
-      return false;
+      return false
     }
 
     if (user.role === 'admin') {
-      return true;
+      return true
     }
 
-    return user.id === entreprise.user_id;
+    return user.id === entreprise.user_id
   }
 }

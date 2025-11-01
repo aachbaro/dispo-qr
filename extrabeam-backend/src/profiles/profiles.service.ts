@@ -27,14 +27,9 @@
 
 import { BadRequestException, Injectable } from '@nestjs/common'
 
-import type { AuthUser } from '../common/auth/auth.types'
 import { SupabaseService } from '../common/supabase/supabase.service'
-import type { Database } from '../types/database'
-
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row']
-type Insert<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Insert']
+import type { AuthUser } from '../common/auth/auth.types'
+import type { Insert, Table } from '../types/aliases'
 
 type ProfileRow = Table<'profiles'>
 type ProfileInsert = Insert<'profiles'>

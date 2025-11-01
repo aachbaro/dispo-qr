@@ -1,9 +1,6 @@
 import { IsNumber, IsOptional, IsString } from 'class-validator'
 
-import type { Database } from '../../types/database'
-
-type Insert<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Insert']
+import type { Insert } from '../../types/aliases'
 
 type EntrepriseInsert = Insert<'entreprise'>
 

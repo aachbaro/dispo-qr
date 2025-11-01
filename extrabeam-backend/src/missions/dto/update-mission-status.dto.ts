@@ -19,10 +19,7 @@
 
 import { IsEnum } from 'class-validator'
 
-import type { Database } from '../../types/database'
-
-type Enum<Name extends keyof Database['public']['Enums']> =
-  Database['public']['Enums'][Name]
+import type { Enum } from '../../types/aliases'
 
 export class MissionUpdateStatusDto {
   @IsEnum([
