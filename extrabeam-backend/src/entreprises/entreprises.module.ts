@@ -22,7 +22,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuthCommonModule } from '../common/auth/auth.module';
-import { CvModule } from './cv';
+import { CvModule } from './cv/cv.module';
 import { EntreprisesController } from './entreprises.controller';
 import { EntreprisesService } from './entreprises.service';
 import { SlotsModule } from './slots';
