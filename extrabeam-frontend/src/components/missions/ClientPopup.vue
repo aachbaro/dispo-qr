@@ -21,7 +21,7 @@
       >
         <!-- Header -->
         <div class="px-5 py-4 border-b">
-          <h2 class="text-lg font-semibold">Demander une mission</h2>
+          <h2 class="text-lg font-semibold">Demander   sd une mission</h2>
         </div>
 
         <!-- Body -->
@@ -228,10 +228,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
-import { createMission } from "../../services/missions";
+import { createMission, createPublicMission } from "../../services/missions";
 import { listTemplates, type MissionTemplate } from "../../services/templates";
+import { useUserStore } from "../../stores/user"; // ⚡ ajoute ton store utilisateur si existant
 
-// ✅ déclarer props correctement
 const props = defineProps<{
   open: boolean;
   slug?: string;
@@ -241,11 +241,12 @@ const props = defineProps<{
 }>();
 const emit = defineEmits(["close", "created"]);
 
+const userStore = useUserStore(); // ⚡ permet de savoir si connecté
+
 // Templates
 const templates = ref<MissionTemplate[]>([]);
 const selectedTemplateId = ref<number | "">("");
 
-// Charger les templates
 onMounted(async () => {
   try {
     const { templates: data } = await listTemplates();
@@ -323,18 +324,8 @@ function removeSlot(index: number) {
   slots.value.splice(index, 1);
 }
 
-// Date utils
-function toYMD(dt: Date) {
-  return dt.toISOString().slice(0, 10);
-}
-function parseYMD(s: string) {
-  if (!s) return null;
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-const minDate = toYMD(new Date());
-
 // Validation
+const minDate = new Date().toISOString().slice(0, 10);
 function isSlotInvalid(slot: any) {
   if (!slot.startDate || !slot.endDate || !slot.startTime || !slot.endTime)
     return true;
@@ -348,6 +339,7 @@ const isInvalid = computed(() => slots.value.some(isSlotInvalid));
 function onCancel() {
   emit("close");
 }
+
 async function onConfirm() {
   if (isInvalid.value) return;
 
@@ -357,28 +349,32 @@ async function onConfirm() {
     title: null,
   }));
 
+  const payload = {
+    etablissement: etablissement.value,
+    etablissement_adresse_ligne1: adresseLigne1.value,
+    etablissement_adresse_ligne2: adresseLigne2.value || null,
+    etablissement_code_postal: codePostal.value,
+    etablissement_ville: ville.value,
+    etablissement_pays: pays.value,
+    contact_name: contactName.value,
+    contact_email: contactEmail.value,
+    contact_phone: contactPhone.value,
+    instructions: instructions.value,
+    mode: mode.value,
+    slots: slotsPayload,
+    entreprise_ref: props.slug,
+  } as any;
+
   try {
-    const { mission } = await createMission({
-      etablissement: etablissement.value,
-      etablissement_adresse_ligne1: adresseLigne1.value,
-      etablissement_adresse_ligne2: adresseLigne2.value || null,
-      etablissement_code_postal: codePostal.value,
-      etablissement_ville: ville.value,
-      etablissement_pays: pays.value,
-      contact_name: contactName.value,
-      contact_email: contactEmail.value,
-      contact_phone: contactPhone.value,
-      instructions: instructions.value,
-      mode: mode.value,
-      slots: slotsPayload,
-      entreprise_ref: props.slug, // ⚡ slug passé ici
-    } as any); // 👈 cast en any pour pas casser TS
+    const { mission } = userStore.isLoggedIn
+      ? await createMission(payload)
+      : await createPublicMission(payload);
 
     emit("created", mission);
     emit("close");
   } catch (err) {
     console.error("❌ Erreur lors de la création de mission:", err);
-    alert("Erreur lors de l'envoi");
+    alert("Erreur lors de l'envoi de la mission.");
   }
 }
 </script>

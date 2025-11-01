@@ -4,24 +4,21 @@
 // -------------------------------------------------------------
 //
 // 📌 Description :
-//   - Liste les missions de l'utilisateur connecté (entreprise/client)
-//   - Créé de nouvelles missions pour l'entreprise propriétaire
-//   - Mise à jour / suppression via l'endpoint unifié /api/missions/[id]
+//   - Liste et crée des missions (publiques et authentifiées)
+//   - Gère également la mise à jour / suppression
 //
 // 📍 Endpoints API :
-//   - GET    /api/missions             → missions de l'utilisateur
-//   - POST   /api/missions             → créer une mission (+ slots)
+//   - GET    /api/missions             → missions de l'utilisateur connecté
+//   - POST   /api/missions             → création authentifiée
+//   - POST   /api/missions/public      → création publique (visiteurs)
 //   - GET    /api/missions/[id]        → récupérer une mission
 //   - PUT    /api/missions/[id]        → mettre à jour une mission
 //   - DELETE /api/missions/[id]        → supprimer une mission
 //
 // 🔒 Règles d’accès :
-//   - Clients : lecture seule (missions où client_id = user.id)
-//   - Entreprises/Admin : accès missions entreprise + création
+//   - Auth requis sauf pour `/public`
+//   - Slots liés à la mission envoyés via `slots`
 //
-// ⚠️ Remarques :
-//   - Les slots sont envoyés dans `slots` (table dédiée)
-//   - Typage basé sur types/database.ts généré via Supabase
 // -------------------------------------------------------------
 
 import { request } from "./api";
@@ -53,7 +50,7 @@ export type MissionPayload = MissionInsert & {
 // ----------------------
 
 /**
- * ➕ Créer une mission (owner uniquement)
+ * ➕ Créer une mission (authentifiée)
  */
 export async function createMission(
   payload: MissionPayload
@@ -65,7 +62,20 @@ export async function createMission(
 }
 
 /**
- * 📜 Lister les missions d’une entreprise
+ * 🌍 Créer une mission publique (visiteur non connecté)
+ */
+export async function createPublicMission(
+  payload: MissionPayload
+): Promise<{ mission: MissionWithRelations }> {
+  return request<{ mission: MissionWithRelations }>("/api/missions/public", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    skipAuth: true, // ⬅️ très important
+  });
+}
+
+/**
+ * 📜 Lister les missions de l’utilisateur connecté
  */
 export async function listMissions(
   params: { status?: Mission["status"] } = {}
