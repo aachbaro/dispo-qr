@@ -26,8 +26,18 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
-} from '@nestjs/common';
-import { SupabaseService } from '../common/supabase/supabase.service';
+} from '@nestjs/common'
+import { SupabaseService } from '../common/supabase/supabase.service'
+
+type PublicUrlResult = {
+  data: { publicUrl: string }
+  error: { message: string } | null
+}
+
+type SignedUploadResult = {
+  data: { signedUrl: string; token: string } | null
+  error: { message: string } | null
+}
 
 @Injectable()
 export class UploadsService {
@@ -39,24 +49,21 @@ export class UploadsService {
   // Retourne l’URL publique d’un fichier déjà uploadé
   // (si le bucket est configuré en "public" côté Supabase)
   // -------------------------------------------------------------
-  async getPublicUrl(bucket: string, path: string) {
+  async getPublicUrl(bucket: string, path: string): Promise<{ publicUrl: string }> {
     if (!bucket || !path) {
-      throw new BadRequestException('Bucket et path requis');
+      throw new BadRequestException('Bucket et path requis')
     }
 
-    const client = this.supabaseService.getAdminClient();
+    const client = this.supabaseService.getAdminClient()
     const result = client.storage
       .from(bucket)
-      .getPublicUrl(path) as {
-        data: { publicUrl: string };
-        error: { message: string } | null;
-      };
+      .getPublicUrl(path) as PublicUrlResult
 
     if (result.error) {
-      throw new InternalServerErrorException(result.error.message);
+      throw new InternalServerErrorException(result.error.message)
     }
 
-    return { publicUrl: result.data.publicUrl };
+    return { publicUrl: result.data.publicUrl }
   }
 
   // -------------------------------------------------------------
@@ -67,25 +74,25 @@ export class UploadsService {
   //
   // ⚠️ Compatibilité Supabase v2.x : pas de paramètre expiresIn.
   // -------------------------------------------------------------
-  async createSignedUploadUrl(bucket: string, path: string) {
+  async createSignedUploadUrl(
+    bucket: string,
+    path: string,
+  ): Promise<{ url: string; token: string }> {
     if (!bucket || !path) {
-      throw new BadRequestException('Bucket et path requis');
+      throw new BadRequestException('Bucket et path requis')
     }
 
-    const client = this.supabaseService.getAdminClient();
+    const client = this.supabaseService.getAdminClient()
     const { data, error } = (await client.storage
       .from(bucket)
-      .createSignedUploadUrl(path)) as {
-      data: { signedUrl: string; token: string } | null;
-      error: { message: string } | null;
-    };
+      .createSignedUploadUrl(path)) as SignedUploadResult
 
     if (error || !data) {
       throw new InternalServerErrorException(
         error?.message ?? 'Impossible de générer le lien signé',
-      );
+      )
     }
 
-    return { url: data.signedUrl, token: data.token };
+    return { url: data.signedUrl, token: data.token }
   }
 }

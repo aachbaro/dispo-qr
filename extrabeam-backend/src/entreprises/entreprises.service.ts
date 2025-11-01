@@ -20,10 +20,10 @@
 
 import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common'
 
-import type { AuthUser } from '../common/auth/auth.types'
 import { AccessService } from '../common/auth/access.service'
 import { SupabaseService } from '../common/supabase/supabase.service'
-import type { Database } from '../types/database'
+import type { AuthUser } from '../common/auth/auth.types'
+import type { Table } from '../types/aliases'
 
 // -------------------------------------------------------------
 // Typing reference summary
@@ -32,9 +32,6 @@ import type { Database } from '../types/database'
 // - PublicEntreprise = Pick<EntrepriseRow, PUBLIC_ENTREPRISE_COLUMNS>
 // - EntrepriseOverview = { mode: 'owner' | 'public'; ... }
 // -------------------------------------------------------------
-
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row']
 
 export type EntrepriseRow = Table<'entreprise'>
 

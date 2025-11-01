@@ -1,14 +1,11 @@
 import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common'
 
-import type { AuthUser } from '../common/auth/auth.types'
 import { User } from '../common/auth/decorators/user.decorator'
 import { JwtAuthGuard } from '../common/auth/guards/jwt.guard'
 import { RolesGuard } from '../common/auth/guards/roles.guard'
-import type { Database } from '../types/database'
 import { ProfilesService, type ProfileSummary } from './profiles.service'
-
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row']
+import type { AuthUser } from '../common/auth/auth.types'
+import type { Table } from '../types/aliases'
 
 type ProfileRow = Table<'profiles'>
 

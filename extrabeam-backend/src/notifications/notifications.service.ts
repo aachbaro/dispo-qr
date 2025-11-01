@@ -9,23 +9,44 @@
 //
 // -------------------------------------------------------------
 
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 
-import type { AuthUser } from '../common/auth/auth.types';
-import { AccessService } from '../common/auth/access.service';
-import { SupabaseService } from '../common/supabase/supabase.service';
-import type { Tables } from '../common/types/database';
-import type { FactureWithRelations } from '../factures/factures.service';
-import { NotificationsService as MailerNotificationsService } from '../common/mailer/notifications.service';
+import { AccessService } from '../common/auth/access.service'
+import { NotificationsService as MailerNotificationsService } from '../common/mailer/notifications.service'
+import { SupabaseService } from '../common/supabase/supabase.service'
+import type { AuthUser } from '../common/auth/auth.types'
 import type {
   ClientDTO,
   EntrepriseDTO,
   FactureDTO,
   MissionDTO,
-} from '../common/mailer/email-templates.service';
+} from '../common/mailer/email-templates.service'
+import type { FactureWithRelations } from '../factures/factures.service'
+import type { Table } from '../types/aliases'
 
-const MISSION_SELECT = '*, slots(*), entreprise:entreprise_id(*), client:client_id(*)';
-const FACTURE_SELECT = '*, missions(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))';
+type MissionWithRelations = Table<'missions'> & {
+  slots?: Table<'slots'>[] | null
+  entreprise?: Table<'entreprise'> | null
+  client?: Table<'profiles'> | null
+}
+
+type FactureMailPayload = FactureDTO & {
+  missions?: {
+    client?: Table<'profiles'> | null
+    contact_email?: string | null
+    client_id?: string | null
+  } | null
+  contact_email?: string | null
+  mission_id?: number | null
+}
+
+type MissionMailerPayload = MissionDTO & {
+  client?: Table<'profiles'> | null
+  client_id?: string | null
+}
+
+const MISSION_SELECT = '*, slots(*), entreprise:entreprise_id(*), client:client_id(*)'
+const FACTURE_SELECT = '*, missions(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))'
 
 @Injectable()
 export class NotificationsService {
@@ -35,7 +56,7 @@ export class NotificationsService {
     private readonly mailerNotifications: MailerNotificationsService,
   ) {}
 
-  private toEntrepriseDTO(entreprise: Tables<'entreprise'> | null): EntrepriseDTO {
+  private toEntrepriseDTO(entreprise: Table<'entreprise'> | null): EntrepriseDTO {
     return {
       id: entreprise?.id ?? 0,
       nom: entreprise?.nom ?? null,
@@ -43,10 +64,10 @@ export class NotificationsService {
       email: entreprise?.email ?? null,
       telephone: entreprise?.telephone ?? null,
       slug: entreprise?.slug ?? null,
-    };
+    }
   }
 
-  private toMissionDTO(mission: Tables<'missions'> & { slots?: Tables<'slots'>[] | null }): MissionDTO {
+  private toMissionDTO(mission: MissionWithRelations): MissionDTO {
     return {
       id: mission.id,
       etablissement: mission.etablissement ?? null,
@@ -57,22 +78,25 @@ export class NotificationsService {
       contact_email: mission.contact_email ?? null,
       contact_phone: mission.contact_phone ?? null,
       slots: (mission.slots ?? []).map((slot) => ({
-        start: slot.start!,
-        end: slot.end!,
+        start: slot.start ?? '',
+        end: slot.end ?? '',
         title: slot.title ?? null,
       })),
-    };
+    }
   }
 
-  private toClientDTO(client: Tables<'profiles'> | null): ClientDTO {
+  private toClientDTO(client: Table<'profiles'> | null): ClientDTO {
     if (!client) {
-      return { id: null, name: null, email: null };
+      return { id: null, name: null, email: null }
     }
+    const first = client.first_name ?? ''
+    const last = client.last_name ?? ''
+    const fullName = `${first} ${last}`.trim()
     return {
       id: client.id ?? null,
-      name: `${client.first_name ?? ''} ${client.last_name ?? ''}`.trim() || null,
+      name: fullName.length > 0 ? fullName : null,
       email: client.email ?? null,
-    };
+    }
   }
 
   private toFactureDTO(facture: FactureWithRelations): FactureDTO {
@@ -83,93 +107,130 @@ export class NotificationsService {
       montant_ttc: facture.montant_ttc ?? null,
       status: (facture.status ?? 'pending_payment') as FactureDTO['status'],
       payment_link: facture.payment_link ?? null,
-    };
+    }
   }
 
-  async notifyFactureCreated(facture: FactureWithRelations, entreprise: Tables<'entreprise'>) {
-    const entrepriseDto = this.toEntrepriseDTO(entreprise);
-    const factureDto = this.toFactureDTO(facture);
-
-    await this.mailerNotifications.billingStatusChangedForEntreprise(entrepriseDto, factureDto);
-
-    const client = facture.missions?.client ?? null;
-    const clientDto: ClientDTO = {
-      id: client?.id ?? facture.missions?.client_id ?? null,
-      name: client ? `${client.first_name ?? ''} ${client.last_name ?? ''}`.trim() || null : null,
-      email: client?.email ?? facture.contact_email ?? null,
-    };
-
-    const enrichedFacture = {
-      ...factureDto,
+  private buildFactureMailPayload(facture: FactureWithRelations): FactureMailPayload {
+    return {
+      ...this.toFactureDTO(facture),
       payment_link: facture.payment_link ?? null,
-    } as FactureDTO;
-
-    await this.mailerNotifications.invoiceCreatedToClient({
-      ...facture,
-      ...enrichedFacture,
-    } as any, entrepriseDto);
+      missions: facture.missions
+        ? {
+            client: facture.missions.client ?? null,
+            contact_email: facture.missions.contact_email ?? null,
+            client_id: facture.missions.client_id ?? null,
+          }
+        : null,
+      contact_email: facture.contact_email ?? null,
+      mission_id: facture.mission_id ?? null,
+    }
   }
 
-  async sendFactureNotification(id: number, user: AuthUser | null): Promise<{ sent: true }> {
+  async notifyFactureCreated(
+    facture: FactureWithRelations,
+    entreprise: Table<'entreprise'>,
+  ): Promise<void> {
+    const entrepriseDto = this.toEntrepriseDTO(entreprise)
+    const factureMailPayload = this.buildFactureMailPayload(facture)
+
+    await this.mailerNotifications.billingStatusChangedForEntreprise(
+      entrepriseDto,
+      factureMailPayload,
+    )
+
+    await this.mailerNotifications.invoiceCreatedToClient(
+      factureMailPayload,
+      entrepriseDto,
+    )
+  }
+
+  async sendFactureNotification(
+    id: number,
+    user: AuthUser | null,
+  ): Promise<{ sent: true }> {
     if (!user) {
-      throw new ForbiddenException('Authentification requise');
+      throw new ForbiddenException('Authentification requise')
     }
 
-    const admin = this.supabase.getAdminClient();
+    const admin = this.supabase.getAdminClient()
     const { data, error } = await admin
       .from('factures')
       .select(FACTURE_SELECT)
       .eq('id', id)
-      .maybeSingle<FactureWithRelations>();
+      .returns<FactureWithRelations[]>()
+      .maybeSingle()
 
     if (error || !data) {
-      throw new NotFoundException('Facture introuvable');
+      throw new NotFoundException('Facture introuvable')
     }
 
-    const entreprise = data.missions?.entreprise ?? (await this.accessService.findEntreprise(String(data.entreprise_id)));
+    const entreprise =
+      data.missions?.entreprise ??
+      (await this.accessService.findEntreprise(String(data.entreprise_id)))
     if (!this.accessService.canAccessEntreprise(user, entreprise)) {
-      throw new ForbiddenException('Accès interdit');
+      throw new ForbiddenException('Accès interdit')
     }
 
-    await this.notifyFactureCreated(data, entreprise);
-    if (data.payment_link) {
-      await this.mailerNotifications.paymentLinkToClient(data as any, this.toEntrepriseDTO(entreprise));
+    const entrepriseDto = this.toEntrepriseDTO(entreprise)
+    const factureMailPayload = this.buildFactureMailPayload(data)
+    await this.notifyFactureCreated(data, entreprise)
+
+    if (factureMailPayload.payment_link) {
+      await this.mailerNotifications.paymentLinkToClient(
+        factureMailPayload,
+        entrepriseDto,
+      )
     }
 
-    return { sent: true };
+    return { sent: true }
   }
 
-  async sendMissionNotification(id: number, user: AuthUser | null): Promise<{ sent: true }> {
+  async sendMissionNotification(
+    id: number,
+    user: AuthUser | null,
+  ): Promise<{ sent: true }> {
     if (!user) {
-      throw new ForbiddenException('Authentification requise');
+      throw new ForbiddenException('Authentification requise')
     }
 
-    const admin = this.supabase.getAdminClient();
+    const admin = this.supabase.getAdminClient()
     const { data, error } = await admin
       .from('missions')
       .select(MISSION_SELECT)
       .eq('id', id)
-      .maybeSingle<Tables<'missions'> & { slots?: Tables<'slots'>[]; entreprise?: Tables<'entreprise'> | null; client?: Tables<'profiles'> | null }>();
+      .returns<MissionWithRelations[]>()
+      .maybeSingle()
 
     if (error || !data) {
-      throw new NotFoundException('Mission introuvable');
+      throw new NotFoundException('Mission introuvable')
     }
 
-    const entreprise = data.entreprise ?? (data.entreprise_id ? await this.accessService.findEntreprise(String(data.entreprise_id)) : null);
+    const entreprise = data.entreprise ?? (data.entreprise_id
+      ? await this.accessService.findEntreprise(String(data.entreprise_id))
+      : null)
     if (!entreprise || !this.accessService.canAccessEntreprise(user, entreprise)) {
-      throw new ForbiddenException('Accès interdit');
+      throw new ForbiddenException('Accès interdit')
     }
 
-    const entrepriseDto = this.toEntrepriseDTO(entreprise);
-    const missionDto = this.toMissionDTO({ ...data, slots: data.slots ?? [] });
-    const clientDto = this.toClientDTO(data.client ?? null);
+    const entrepriseDto = this.toEntrepriseDTO(entreprise)
+    const missionDto = this.toMissionDTO(data)
+    const clientDto = this.toClientDTO(data.client ?? null)
+    const missionMailPayload: MissionMailerPayload = {
+      ...missionDto,
+      client_id: data.client_id ?? null,
+      client: data.client ?? null,
+    }
 
     await this.mailerNotifications.missionStatusChangedToClient(
-      { ...missionDto, client_id: data.client_id ?? null } as any,
+      missionMailPayload,
       entrepriseDto,
-    );
-    await this.mailerNotifications.missionAckToClient(clientDto, missionDto, entrepriseDto);
+    )
+    await this.mailerNotifications.missionAckToClient(
+      clientDto,
+      missionDto,
+      entrepriseDto,
+    )
 
-    return { sent: true };
+    return { sent: true }
   }
 }

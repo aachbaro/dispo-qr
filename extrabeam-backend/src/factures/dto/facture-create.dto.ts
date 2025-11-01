@@ -29,133 +29,130 @@ import {
   IsOptional,
   IsString,
   Min,
-} from 'class-validator';
+} from 'class-validator'
 
-import type { Database } from '../../types/database';
 import { FACTURE_STATUS_VALUES } from './facture-status.constants'
 import type { FactureStatusValue } from './facture-status.constants'
+import type { Insert } from '../../types/aliases'
 // -------------------------------------------------------------
 // Supabase typing helpers
 // -------------------------------------------------------------
-type Insert<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Insert'];
+type FactureInsert = Insert<'factures'>
 
-type FactureInsert = Insert<'factures'>;
+type NullableNumber = number | null
 
-type NullableNumber = number | null;
-
-type NullableString = string | null;
+type NullableString = string | null
 
 export class FactureCreateDto {
   @IsOptional()
   @IsString()
-  client_address_ligne1?: NullableString;
+  client_address_ligne1?: NullableString
 
   @IsOptional()
   @IsString()
-  client_address_ligne2?: NullableString;
+  client_address_ligne2?: NullableString
 
   @IsOptional()
   @IsString()
-  client_code_postal?: NullableString;
+  client_code_postal?: NullableString
 
   @IsString()
   @IsNotEmpty()
-  client_name!: FactureInsert['client_name'];
+  client_name!: FactureInsert['client_name']
 
   @IsOptional()
   @IsString()
-  client_pays?: NullableString;
+  client_pays?: NullableString
 
   @IsOptional()
   @IsString()
-  client_ville?: NullableString;
+  client_ville?: NullableString
 
   @IsOptional()
   @IsString()
-  conditions_paiement?: NullableString;
+  conditions_paiement?: NullableString
 
   @IsOptional()
   @IsEmail()
-  contact_email?: NullableString;
+  contact_email?: NullableString
 
   @IsOptional()
   @IsString()
-  contact_name?: NullableString;
+  contact_name?: NullableString
 
   @IsOptional()
   @IsString()
-  contact_phone?: NullableString;
+  contact_phone?: NullableString
 
   @IsOptional()
   @IsDateString()
-  date_emission?: FactureInsert['date_emission'];
+  date_emission?: FactureInsert['date_emission']
 
   @IsOptional()
   @IsString()
-  description?: NullableString;
+  description?: NullableString
 
   @IsOptional()
   @IsInt()
-  entreprise_id?: FactureInsert['entreprise_id'];
+  entreprise_id?: FactureInsert['entreprise_id']
 
   @IsOptional()
   @IsNumber()
-  hours?: NullableNumber;
+  hours?: NullableNumber
 
   @IsOptional()
   @IsString()
-  mention_tva?: NullableString;
+  mention_tva?: NullableString
 
   @IsOptional()
   @IsInt()
-  mission_id?: FactureInsert['mission_id'];
+  mission_id?: FactureInsert['mission_id']
 
   @IsNumber()
   @Min(0)
-  montant_ht!: FactureInsert['montant_ht'];
+  montant_ht!: FactureInsert['montant_ht']
 
   @IsNumber()
   @Min(0)
-  montant_ttc!: FactureInsert['montant_ttc'];
+  montant_ttc!: FactureInsert['montant_ttc']
 
   @IsString()
   @IsNotEmpty()
-  numero!: FactureInsert['numero'];
+  numero!: FactureInsert['numero']
 
   @IsOptional()
   @IsString()
-  payment_link?: NullableString;
+  payment_link?: NullableString
 
   @IsOptional()
   @IsString()
-  penalites_retard?: NullableString;
+  penalites_retard?: NullableString
 
   @IsOptional()
   @IsNumber()
-  rate?: NullableNumber;
+  rate?: NullableNumber
 
   @IsOptional()
   @IsEnum(FACTURE_STATUS_VALUES)
-  status?: FactureStatusValue;
+  status?: FactureStatusValue
 
   @IsOptional()
   @IsString()
-  stripe_payment_intent?: NullableString;
+  stripe_payment_intent?: NullableString
 
   @IsOptional()
   @IsString()
-  stripe_session_id?: NullableString;
+  stripe_session_id?: NullableString
 
   @IsOptional()
   @IsNumber()
-  tva?: NullableNumber;
+  tva?: NullableNumber
 
   @IsOptional()
   @IsString()
-  url?: NullableString;
+  url?: NullableString
 
   @IsOptional()
   @IsBoolean()
-  generatePaymentLink?: boolean;
+  generatePaymentLink?: boolean
 }

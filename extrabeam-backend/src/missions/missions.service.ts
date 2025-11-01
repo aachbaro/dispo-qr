@@ -36,22 +36,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 
-import type { AuthUser } from '../common/auth/auth.types'
 import { AccessService } from '../common/auth/access.service'
 import { SupabaseService } from '../common/supabase/supabase.service'
-import type { Database } from '../types/database'
+import type { AuthUser } from '../common/auth/auth.types'
+import type { Enum, Insert, Table } from '../types/aliases'
 import type {
   MissionCreatePayload,
   MissionSlotDto,
 } from './dto/mission-create.dto'
 import type { MissionUpdatePayload } from './dto/mission-update.dto'
-
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row']
-type Insert<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Insert']
-type Enum<Name extends keyof Database['public']['Enums']> =
-  Database['public']['Enums'][Name]
 
 type MissionRow = Table<'missions'>
 type MissionInsert = Insert<'missions'>

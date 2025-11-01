@@ -26,15 +26,13 @@
 // -------------------------------------------------------------
 
 import { Injectable, InternalServerErrorException } from '@nestjs/common'
+
 import { SupabaseService } from '../../common/supabase/supabase.service'
-import type { Database } from '../../types/database'
+import type { Table } from '../../types/aliases'
 
 // -------------------------------------------------------------
 // Typages dérivés de Supabase
 // -------------------------------------------------------------
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row']
-
 type CvProfile = Table<'cv_profiles'>
 type CvSkill = Table<'cv_skills'>
 type CvExperience = Table<'cv_experiences'>
@@ -48,39 +46,39 @@ export class CvService {
   // 👤 Profil principal
   // -------------------------------------------------------------
   async getProfile(ref: string): Promise<CvProfile | null> {
-    const client = this.supabase.getAdminClient();
+    const client = this.supabase.getAdminClient()
     const { data, error } = await client
       .from('cv_profiles')
       .select('*')
       .eq('entreprise_ref', ref)
-      .maybeSingle();
+      .maybeSingle()
 
     if (error) {
       throw new InternalServerErrorException(error.message)
     }
 
-    return data ?? null;
+    return data ?? null
   }
 
   async updateProfile(
     ref: string,
     dto: Partial<CvProfile>,
   ): Promise<CvProfile> {
-    const client = this.supabase.getAdminClient();
-    const { id, ...safeDto } = dto;
+    const client = this.supabase.getAdminClient()
+    const { id, ...safeDto } = dto
 
     const { data, error } = await client
       .from('cv_profiles')
       .update(safeDto)
       .eq('entreprise_ref', ref)
       .select()
-      .single();
+      .single()
 
     if (error) {
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException(error.message)
     }
 
-    return data;
+    return data
   }
 
   // -------------------------------------------------------------
@@ -95,10 +93,10 @@ export class CvService {
       .order('id', { ascending: true })
 
     if (error) {
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException(error.message)
     }
 
-    return data ?? [];
+    return data ?? []
   }
 
   // -------------------------------------------------------------
@@ -116,7 +114,7 @@ export class CvService {
       throw new InternalServerErrorException(error.message)
     }
 
-    return data ?? [];
+    return data ?? []
   }
 
   // -------------------------------------------------------------

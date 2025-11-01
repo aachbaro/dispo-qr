@@ -1,9 +1,6 @@
 import { IsNumber, IsOptional, IsString } from 'class-validator'
 
-import type { Database } from '../../types/database'
-
-type Update<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Update']
+import type { Update } from '../../types/aliases'
 
 type EntrepriseUpdate = Update<'entreprise'>
 

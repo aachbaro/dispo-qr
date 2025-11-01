@@ -35,42 +35,35 @@ import {
   NotFoundException,
   UnauthorizedException,
   forwardRef,
-} from '@nestjs/common';
+} from '@nestjs/common'
 
-import type { AuthUser } from '../common/auth/auth.types';
-import { AccessService } from '../common/auth/access.service';
-import { SupabaseService } from '../common/supabase/supabase.service';
-import type { Database } from '../types/database';
-import { FactureCreateDto } from './dto/facture-create.dto';
-import { FactureUpdateDto } from './dto/facture-update.dto';
-import { NotificationsService } from '../notifications/notifications.service';
-import { PaymentsService } from '../payments/payments.service';
+import { AccessService } from '../common/auth/access.service'
+import { SupabaseService } from '../common/supabase/supabase.service'
+import { NotificationsService } from '../notifications/notifications.service'
+import { PaymentsService } from '../payments/payments.service'
+import { FactureCreateDto } from './dto/facture-create.dto'
+import { FactureUpdateDto } from './dto/facture-update.dto'
+import type { AuthUser } from '../common/auth/auth.types'
+import type { Insert, Table, Update } from '../types/aliases'
 
-type Table<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Row'];
-type Insert<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Insert'];
-type Update<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Update'];
+type FactureRow = Table<'factures'>
+type FactureInsert = Insert<'factures'>
+type FactureUpdate = Update<'factures'>
+type MissionRow = Table<'missions'>
+type SlotRow = Table<'slots'>
+type EntrepriseRow = Table<'entreprise'>
+type ProfileRow = Table<'profiles'>
 
-type FactureRow = Table<'factures'>;
-type FactureInsert = Insert<'factures'>;
-type FactureUpdate = Update<'factures'>;
-type MissionRow = Table<'missions'>;
-type SlotRow = Table<'slots'>;
-type EntrepriseRow = Table<'entreprise'>;
-type ProfileRow = Table<'profiles'>;
-
-const ENTREPRISE_ROLES = new Set(['freelance', 'entreprise', 'admin']);
-const FACTURE_SELECT = '*, missions(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))';
+const ENTREPRISE_ROLES = new Set(['freelance', 'entreprise', 'admin'])
+const FACTURE_SELECT = '*, missions(*, slots(*), entreprise:entreprise_id(*), client:client_id(*))'
 
 export type FactureWithRelations = FactureRow & {
   missions: (MissionRow & {
-    slots?: SlotRow[];
-    entreprise?: EntrepriseRow | null;
-    client?: ProfileRow | null;
-  }) | null;
-};
+    slots?: SlotRow[]
+    entreprise?: EntrepriseRow | null
+    client?: ProfileRow | null
+  }) | null
+}
 
 @Injectable()
 export class FacturesService {
@@ -85,7 +78,7 @@ export class FacturesService {
 
   private ensureUser(user: AuthUser | null): asserts user is AuthUser {
     if (!user) {
-      throw new UnauthorizedException('Authentification requise');
+      throw new UnauthorizedException('Authentification requise')
     }
   }
 
@@ -93,43 +86,43 @@ export class FacturesService {
     user: AuthUser,
     ref: string | number | null | undefined,
   ): Promise<EntrepriseRow> {
-    const resolvedRef = this.accessService.resolveEntrepriseRef(user, ref);
+    const resolvedRef = this.accessService.resolveEntrepriseRef(user, ref)
     if (!resolvedRef) {
-      throw new BadRequestException('Référence entreprise manquante');
+      throw new BadRequestException('Référence entreprise manquante')
     }
-    const entreprise = await this.accessService.findEntreprise(resolvedRef);
+    const entreprise = await this.accessService.findEntreprise(resolvedRef)
     if (!this.accessService.canAccessEntreprise(user, entreprise)) {
-      throw new ForbiddenException("Accès interdit à l'entreprise");
+      throw new ForbiddenException("Accès interdit à l'entreprise")
     }
-    return entreprise;
+    return entreprise
   }
 
   private async fetchFacture(id: number): Promise<FactureWithRelations> {
-    const admin = this.supabaseService.getAdminClient();
+    const admin = this.supabaseService.getAdminClient()
     const { data, error } = await admin
       .from('factures')
       .select(FACTURE_SELECT)
       .eq('id', id)
       .returns<FactureWithRelations[]>()
-      .maybeSingle();
+      .maybeSingle()
 
     if (error) {
       if (error.code === 'PGRST116') {
-        throw new NotFoundException('Facture introuvable');
+        throw new NotFoundException('Facture introuvable')
       }
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException(error.message)
     }
 
     if (!data) {
-      throw new NotFoundException('Facture introuvable');
+      throw new NotFoundException('Facture introuvable')
     }
 
-    return data;
+    return data
   }
 
   private assertEntrepriseRole(user: AuthUser) {
     if (!ENTREPRISE_ROLES.has(user.role ?? '')) {
-      throw new ForbiddenException('Accès réservé aux entreprises');
+      throw new ForbiddenException('Accès réservé aux entreprises')
     }
   }
 
@@ -138,88 +131,88 @@ export class FacturesService {
     entrepriseRef: string,
     user: AuthUser | null,
   ): Promise<FactureWithRelations[]> {
-    this.ensureUser(user);
-    this.assertEntrepriseRole(user);
+    this.ensureUser(user)
+    this.assertEntrepriseRole(user)
 
-    const entreprise = await this.loadEntrepriseForUser(user, entrepriseRef);
-    const admin = this.supabaseService.getAdminClient();
+    const entreprise = await this.loadEntrepriseForUser(user, entrepriseRef)
+    const admin = this.supabaseService.getAdminClient()
 
     const { data, error } = await admin
       .from('factures')
       .select(FACTURE_SELECT)
       .eq('entreprise_id', entreprise.id)
       .order('date_emission', { ascending: false })
-      .returns<FactureWithRelations[]>();
+      .returns<FactureWithRelations[]>()
 
     if (error) {
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException(error.message)
     }
 
-    return data ?? [];
+    return data ?? []
   }
 
   /** 🔍 Récupère une facture après vérification des droits d'accès. */
   async getFacture(id: number, user: AuthUser | null): Promise<FactureWithRelations> {
-    this.ensureUser(user);
+    this.ensureUser(user)
 
-    const facture = await this.fetchFacture(id);
-    const role = user.role ?? '';
+    const facture = await this.fetchFacture(id)
+    const role = user.role ?? ''
 
     if (ENTREPRISE_ROLES.has(role)) {
       const entreprise =
         facture.missions?.entreprise ??
-        (await this.accessService.findEntreprise(String(facture.entreprise_id)));
+        (await this.accessService.findEntreprise(String(facture.entreprise_id)))
       if (!this.accessService.canAccessEntreprise(user, entreprise)) {
-        throw new ForbiddenException('Accès interdit');
+        throw new ForbiddenException('Accès interdit')
       }
     } else if (role === 'client') {
       if (facture.missions?.client_id !== user.id) {
-        throw new ForbiddenException('Facture inaccessible');
+        throw new ForbiddenException('Facture inaccessible')
       }
     } else {
-      throw new ForbiddenException('Rôle non autorisé');
+      throw new ForbiddenException('Rôle non autorisé')
     }
 
-    return facture;
+    return facture
   }
 
   private async computeFromMission(
     missionId: number,
     entrepriseId: number,
   ): Promise<{ hours: number; rate: number; montant_ht: number; montant_ttc: number }> {
-    const admin = this.supabaseService.getAdminClient();
-    type SlotTiming = Pick<SlotRow, 'start' | 'end'>;
+    const admin = this.supabaseService.getAdminClient()
+    type SlotTiming = Pick<SlotRow, 'start' | 'end'>
     const { data: slots, error: slotsError } = await admin
       .from('slots')
       .select('start, end')
       .eq('mission_id', missionId)
-      .returns<SlotTiming[]>();
+      .returns<SlotTiming[]>()
 
     if (slotsError) {
-      throw new InternalServerErrorException(slotsError.message);
+      throw new InternalServerErrorException(slotsError.message)
     }
 
-    let totalHours = 0;
+    let totalHours = 0
     for (const slot of slots ?? []) {
       if (slot.start && slot.end) {
-        const start = new Date(slot.start).getTime();
-        const end = new Date(slot.end).getTime();
+        const start = new Date(slot.start).getTime()
+        const end = new Date(slot.end).getTime()
         if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
-          totalHours += (end - start) / (1000 * 60 * 60);
+          totalHours += (end - start) / (1000 * 60 * 60)
         }
       }
     }
 
-    const entreprise = await this.accessService.findEntreprise(String(entrepriseId));
-    const rate = entreprise.taux_horaire ?? 0;
-    const montantHt = totalHours * rate;
+    const entreprise = await this.accessService.findEntreprise(String(entrepriseId))
+    const rate = entreprise.taux_horaire ?? 0
+    const montantHt = totalHours * rate
 
     return {
       hours: totalHours,
       rate,
       montant_ht: montantHt,
       montant_ttc: montantHt,
-    };
+    }
   }
 
   /** 🧾 Crée une facture pour une entreprise donnée. */
@@ -227,31 +220,31 @@ export class FacturesService {
     input: FactureCreateDto,
     user: AuthUser | null,
   ): Promise<FactureWithRelations> {
-    this.ensureUser(user);
-    this.assertEntrepriseRole(user);
+    this.ensureUser(user)
+    this.assertEntrepriseRole(user)
 
-    const entreprise = await this.loadEntrepriseForUser(user, input.entreprise_id);
+    const entreprise = await this.loadEntrepriseForUser(user, input.entreprise_id)
 
-    const admin = this.supabaseService.getAdminClient();
-    const { generatePaymentLink, entreprise_id: _ignoreEntrepriseId, mission_id, ...rest } = input;
+    const admin = this.supabaseService.getAdminClient()
+    const { generatePaymentLink, entreprise_id: _ignoreEntrepriseId, mission_id, ...rest } = input
     const payload: FactureInsert = {
       ...rest,
       entreprise_id: entreprise.id,
       mission_id: mission_id ?? null,
-    };
+    }
 
     if (payload.mission_id) {
       const { hours, rate, montant_ht, montant_ttc } = await this.computeFromMission(
         payload.mission_id,
         entreprise.id,
-      );
-      payload.hours = hours;
-      payload.rate = rate;
-      payload.montant_ht = montant_ht;
-      payload.montant_ttc = payload.montant_ttc ?? montant_ttc;
-      payload.tva = payload.tva ?? 0;
+      )
+      payload.hours = hours
+      payload.rate = rate
+      payload.montant_ht = montant_ht
+      payload.montant_ttc = payload.montant_ttc ?? montant_ttc
+      payload.tva = payload.tva ?? 0
       if (payload.tva && payload.tva > 0) {
-        payload.montant_ttc = montant_ht + payload.tva;
+        payload.montant_ttc = montant_ht + payload.tva
       }
     }
 
@@ -260,29 +253,29 @@ export class FacturesService {
       .insert(payload)
       .select()
       .returns<FactureRow[]>()
-      .single();
+      .single()
 
     if (error) {
       if (error.code === '23505') {
-        throw new BadRequestException('Numéro de facture déjà utilisé');
+        throw new BadRequestException('Numéro de facture déjà utilisé')
       }
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException(error.message)
     }
 
     if (generatePaymentLink) {
-      await this.paymentsService.createCheckoutForFacture(data.id, user);
+      await this.paymentsService.createCheckoutForFacture(data.id, user)
     }
 
-    const facture = await this.fetchFacture(data.id);
+    const facture = await this.fetchFacture(data.id)
 
     try {
-      await this.notificationsService.notifyFactureCreated(facture, entreprise);
+      await this.notificationsService.notifyFactureCreated(facture, entreprise)
     } catch (error) {
       // Notification non bloquante
-      console.warn('Notification facture échouée:', (error as Error).message);
+      console.warn('Notification facture échouée:', (error as Error).message)
     }
 
-    return facture;
+    return facture
   }
 
   /** ✏️ Met à jour une facture existante. */
@@ -291,61 +284,61 @@ export class FacturesService {
     input: FactureUpdateDto,
     user: AuthUser | null,
   ): Promise<FactureWithRelations> {
-    this.ensureUser(user);
+    this.ensureUser(user)
 
-    const facture = await this.fetchFacture(id);
-    const role = user.role ?? '';
+    const facture = await this.fetchFacture(id)
+    const role = user.role ?? ''
 
     if (!ENTREPRISE_ROLES.has(role)) {
-      throw new ForbiddenException('Accès réservé au propriétaire');
+      throw new ForbiddenException('Accès réservé au propriétaire')
     }
 
-    const entreprise = await this.accessService.findEntreprise(String(facture.entreprise_id));
+    const entreprise = await this.accessService.findEntreprise(String(facture.entreprise_id))
     if (!this.accessService.canAccessEntreprise(user, entreprise)) {
-      throw new ForbiddenException('Accès interdit');
+      throw new ForbiddenException('Accès interdit')
     }
 
-    const admin = this.supabaseService.getAdminClient();
-    const { mission_id, ...rest } = input;
+    const admin = this.supabaseService.getAdminClient()
+    const { mission_id, ...rest } = input
     const payload: FactureUpdate = {
       ...rest,
       mission_id: mission_id ?? null,
-    };
+    }
 
     const { error } = await admin
       .from('factures')
       .update(payload)
       .eq('id', id)
-      .eq('entreprise_id', facture.entreprise_id);
+      .eq('entreprise_id', facture.entreprise_id)
 
     if (error) {
       if (error.code === '23505') {
-        throw new BadRequestException('Numéro de facture déjà utilisé');
+        throw new BadRequestException('Numéro de facture déjà utilisé')
       }
-      throw new InternalServerErrorException(error.message);
+      throw new InternalServerErrorException(error.message)
     }
 
     if (payload.status === 'paid' && facture.mission_id) {
       await admin
         .from('missions')
         .update({ status: 'paid' })
-        .eq('id', facture.mission_id);
+        .eq('id', facture.mission_id)
     }
 
-    return this.fetchFacture(id);
+    return this.fetchFacture(id)
   }
 
   /** ✉️ Déclenche l'envoi d'une facture au client final. */
   async sendFacture(id: number, user: AuthUser | null): Promise<{ sent: true }> {
-    this.ensureUser(user);
-    const facture = await this.fetchFacture(id);
+    this.ensureUser(user)
+    const facture = await this.fetchFacture(id)
 
-    const entreprise = await this.accessService.findEntreprise(String(facture.entreprise_id));
+    const entreprise = await this.accessService.findEntreprise(String(facture.entreprise_id))
     if (!this.accessService.canAccessEntreprise(user, entreprise)) {
-      throw new ForbiddenException('Accès interdit');
+      throw new ForbiddenException('Accès interdit')
     }
 
-    await this.notificationsService.sendFactureNotification(id, user);
-    return { sent: true };
+    await this.notificationsService.sendFactureNotification(id, user)
+    return { sent: true }
   }
 }

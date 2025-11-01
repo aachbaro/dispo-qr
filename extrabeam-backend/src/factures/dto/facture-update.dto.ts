@@ -16,125 +16,122 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-} from 'class-validator';
+} from 'class-validator'
 
-import type { Database } from '../../types/database';
 import { FACTURE_STATUS_VALUES } from './facture-status.constants'
 import type { FactureStatusValue } from './facture-status.constants'
+import type { Update } from '../../types/aliases'
 // -------------------------------------------------------------
 // Supabase typing helpers
 // -------------------------------------------------------------
-type Update<Name extends keyof Database['public']['Tables']> =
-  Database['public']['Tables'][Name]['Update'];
+type FactureUpdate = Update<'factures'>
 
-type FactureUpdate = Update<'factures'>;
+type NullableNumber = number | null
 
-type NullableNumber = number | null;
-
-type NullableString = string | null;
+type NullableString = string | null
 
 export class FactureUpdateDto {
   @IsOptional()
   @IsString()
-  client_address_ligne1?: NullableString;
+  client_address_ligne1?: NullableString
 
   @IsOptional()
   @IsString()
-  client_address_ligne2?: NullableString;
+  client_address_ligne2?: NullableString
 
   @IsOptional()
   @IsString()
-  client_code_postal?: NullableString;
+  client_code_postal?: NullableString
 
   @IsOptional()
   @IsString()
-  client_name?: FactureUpdate['client_name'];
+  client_name?: FactureUpdate['client_name']
 
   @IsOptional()
   @IsString()
-  client_pays?: NullableString;
+  client_pays?: NullableString
 
   @IsOptional()
   @IsString()
-  client_ville?: NullableString;
+  client_ville?: NullableString
 
   @IsOptional()
   @IsString()
-  conditions_paiement?: NullableString;
+  conditions_paiement?: NullableString
 
   @IsOptional()
   @IsEmail()
-  contact_email?: NullableString;
+  contact_email?: NullableString
 
   @IsOptional()
   @IsString()
-  contact_name?: NullableString;
+  contact_name?: NullableString
 
   @IsOptional()
   @IsString()
-  contact_phone?: NullableString;
+  contact_phone?: NullableString
 
   @IsOptional()
   @IsDateString()
-  date_emission?: FactureUpdate['date_emission'];
+  date_emission?: FactureUpdate['date_emission']
 
   @IsOptional()
   @IsString()
-  description?: NullableString;
+  description?: NullableString
 
   @IsOptional()
   @IsNumber()
-  hours?: NullableNumber;
+  hours?: NullableNumber
 
   @IsOptional()
   @IsString()
-  mention_tva?: NullableString;
+  mention_tva?: NullableString
 
   @IsOptional()
   @IsInt()
-  mission_id?: FactureUpdate['mission_id'];
+  mission_id?: FactureUpdate['mission_id']
 
   @IsOptional()
   @IsNumber()
-  montant_ht?: FactureUpdate['montant_ht'];
+  montant_ht?: FactureUpdate['montant_ht']
 
   @IsOptional()
   @IsNumber()
-  montant_ttc?: FactureUpdate['montant_ttc'];
+  montant_ttc?: FactureUpdate['montant_ttc']
 
   @IsOptional()
   @IsString()
-  numero?: FactureUpdate['numero'];
+  numero?: FactureUpdate['numero']
 
   @IsOptional()
   @IsString()
-  payment_link?: NullableString;
+  payment_link?: NullableString
 
   @IsOptional()
   @IsString()
-  penalites_retard?: NullableString;
+  penalites_retard?: NullableString
 
   @IsOptional()
   @IsNumber()
-  rate?: NullableNumber;
+  rate?: NullableNumber
 
   @IsOptional()
   @IsEnum(FACTURE_STATUS_VALUES)
-  status?: FactureStatusValue;
+  status?: FactureStatusValue
 
   @IsOptional()
   @IsString()
-  stripe_payment_intent?: NullableString;
+  stripe_payment_intent?: NullableString
 
   @IsOptional()
   @IsString()
-  stripe_session_id?: NullableString;
+  stripe_session_id?: NullableString
 
   @IsOptional()
   @IsNumber()
-  tva?: NullableNumber;
+  tva?: NullableNumber
 
   @IsOptional()
   @IsString()
-  url?: NullableString;
+  url?: NullableString
 }
