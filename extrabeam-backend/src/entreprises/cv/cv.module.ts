@@ -1,32 +1,13 @@
-// src/entreprises/cv/cv.module.ts
-// -------------------------------------------------------------
-// Module : Entreprises › CV
-// -------------------------------------------------------------
-//
-// 📌 Description :
-//   - Regroupe les contrôleurs et services liés à la gestion du CV freelance
-//   - Prépare l’implémentation future des endpoints CV, expériences, formations, compétences
-//
-// 🔌 Composition :
-//   - Controllers : CvController, ExperiencesController, EducationController, SkillsController
-//   - Providers  : CvService
-//
-// ⚠️ Remarques :
-//   - Module déclaré indépendamment pour simplifier l’extension future (guards, pipes, etc.)
-//
-// -------------------------------------------------------------
+import { Module } from '@nestjs/common'
 
-import { Module } from '@nestjs/common';
-
-import { CvController } from './cv.controller';
-import { CvService } from './cv.service';
-import { EducationController } from './education.controller';
-import { ExperiencesController } from './experiences.controller';
-import { SkillsController } from './skills.controller';
+import { AccessService } from '../../common/auth/access.service'
+import { SupabaseService } from '../../common/supabase/supabase.service'
+import { CvController } from './cv.controller'
+import { CvService } from './cv.service'
 
 @Module({
-  controllers: [CvController, ExperiencesController, EducationController, SkillsController],
-  providers: [CvService],
+  controllers: [CvController],
+  providers: [CvService, SupabaseService, AccessService],
   exports: [CvService],
 })
 export class CvModule {}
