@@ -1,0 +1,26 @@
+services:
+  extrabeam-v2-back:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.prod
+    volumes:
+      - extrabeam-v2-data:/app/data
+
+  extrabeam-v2-front:
+    build:
+      context: ./frontend
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_API_URL: /api
+        VITE_USE_MOCK_API: ${VITE_USE_MOCK_API:-false}
+        VITE_AUTH_SERVER_URL: ${VITE_AUTH_SERVER_URL:-https://auth.pascuans.dev}
+        VITE_SHOW_LOCAL_DEBUG_AUTH: ${VITE_SHOW_LOCAL_DEBUG_AUTH:-false}
+    restart: unless-stopped
+    depends_on:
+      - extrabeam-v2-back
+    ports:
+      - "${EXTRABEAM_HTTP_PORT:-8080}:80"
+
+volumes:
+  extrabeam-v2-data:

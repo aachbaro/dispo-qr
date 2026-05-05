@@ -1,0 +1,672 @@
+import datetime
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from urllib.parse import parse_qs, urlparse
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.test import override_settings
+from django.urls import reverse
+from django.utils import timezone
+from rest_framework.test import APITestCase
+
+from .models import (
+    AccountProfile,
+    Facture,
+    Mission,
+    Skill,
+    Slot,
+    Unavailability,
+    UserApiToken,
+)
+
+User = get_user_model()
+
+
+class DummyHttpResponse:
+    def __init__(self, payload: dict):
+        self.payload = json.dumps(payload).encode("utf-8")
+
+    def read(self) -> bytes:
+        return self.payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class AuthApiTests(APITestCase):
+    def test_health(self):
+        response = self.client.get(reverse("health"))
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(DEBUG=True)
+    def test_login_with_test_password(self):
+        response = self.client.post(
+            reverse("login"),
+            {"email": "adam@extrabeam.fr", "password": "test"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["user"]["email"], "adam@extrabeam.fr")
+
+    def test_register_creates_local_account(self):
+        response = self.client.post(
+            reverse("register"),
+            {
+                "display_name": "Adam",
+                "email": "adam@extrabeam.fr",
+                "password": "bonjour123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["user"]["display_name"], "Adam")
+        self.assertEqual(response.data["user"]["auth_provider"], "local")
+        self.assertEqual(response.data["user"]["role"], AccountProfile.ROLE_FREELANCE)
+        self.assertTrue(User.objects.filter(email="adam@extrabeam.fr").exists())
+        self.assertTrue(AccountProfile.objects.filter(user__email="adam@extrabeam.fr").exists())
+
+    def test_register_allows_client_role(self):
+        response = self.client.post(
+            reverse("register"),
+            {
+                "display_name": "Client Adam",
+                "email": "client@extrabeam.fr",
+                "password": "bonjour123",
+                "role": AccountProfile.ROLE_CLIENT,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["user"]["role"], AccountProfile.ROLE_CLIENT)
+        self.assertTrue(AccountProfile.objects.filter(user__email="client@extrabeam.fr", role=AccountProfile.ROLE_CLIENT).exists())
+
+    def test_register_rejects_duplicate_email(self):
+        User.objects.create_user(username="adam@extrabeam.fr", email="adam@extrabeam.fr", password="bonjour123")
+
+        response = self.client.post(
+            reverse("register"),
+            {
+                "display_name": "Adam",
+                "email": "adam@extrabeam.fr",
+                "password": "bonjour123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"], "Un compte existe deja avec cette adresse email.")
+
+    def test_login_with_registered_account(self):
+        response = self.client.post(
+            reverse("register"),
+            {
+                "display_name": "Adam",
+                "email": "adam@extrabeam.fr",
+                "password": "bonjour123",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        login_response = self.client.post(
+            reverse("login"),
+            {"email": "adam@extrabeam.fr", "password": "bonjour123"},
+            format="json",
+        )
+
+        self.assertEqual(login_response.status_code, 200)
+        self.assertEqual(login_response.data["user"]["email"], "adam@extrabeam.fr")
+        self.assertEqual(login_response.data["user"]["auth_provider"], "local")
+
+    def test_login_preserves_client_role(self):
+        response = self.client.post(
+            reverse("register"),
+            {
+                "display_name": "Client Adam",
+                "email": "client-login@extrabeam.fr",
+                "password": "bonjour123",
+                "role": AccountProfile.ROLE_CLIENT,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+        login_response = self.client.post(
+            reverse("login"),
+            {"email": "client-login@extrabeam.fr", "password": "bonjour123"},
+            format="json",
+        )
+
+        self.assertEqual(login_response.status_code, 200)
+        self.assertEqual(login_response.data["user"]["role"], AccountProfile.ROLE_CLIENT)
+
+    @override_settings(
+        GOOGLE_OAUTH_CLIENT_ID="",
+        GOOGLE_OAUTH_CLIENT_SECRET="",
+        GOOGLE_OAUTH_ALLOWED_ORIGINS=["http://127.0.0.1:5180"],
+    )
+    def test_google_login_dev_fallback(self):
+        response = self.client.post(
+            reverse("google-login"),
+            {"code": "dev-google-code"},
+            format="json",
+            HTTP_ORIGIN="http://127.0.0.1:5180",
+            HTTP_X_REQUESTED_WITH="XmlHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["user"]["email"], "adam@gmail.com")
+
+    @override_settings(
+        GOOGLE_OAUTH_CLIENT_ID="google-client-id",
+        GOOGLE_OAUTH_CLIENT_SECRET="google-client-secret",
+        GOOGLE_OAUTH_ALLOWED_ORIGINS=["http://127.0.0.1:5180"],
+    )
+    @patch("api.views.urllib_request.urlopen")
+    def test_google_login_real_exchange(self, urlopen_mock):
+        urlopen_mock.side_effect = [
+            DummyHttpResponse(
+                {
+                    "access_token": "google-access-token",
+                    "expires_in": 3599,
+                    "scope": "openid email profile",
+                    "token_type": "Bearer",
+                }
+            ),
+            DummyHttpResponse(
+                {
+                    "sub": "google-sub-123",
+                    "email": "adam@extrabeam.fr",
+                    "email_verified": True,
+                    "name": "Adam",
+                    "picture": "https://example.com/avatar.png",
+                }
+            ),
+        ]
+
+        response = self.client.post(
+            reverse("google-login"),
+            {"code": "real-google-code"},
+            format="json",
+            HTTP_ORIGIN="http://127.0.0.1:5180",
+            HTTP_X_REQUESTED_WITH="XmlHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["user"]["email"], "adam@extrabeam.fr")
+        self.assertEqual(response.data["user"]["auth_provider"], "google")
+        self.assertTrue(AccountProfile.objects.filter(google_sub="google-sub-123", user__email="adam@extrabeam.fr").exists())
+        created_profile = AccountProfile.objects.get(google_sub="google-sub-123")
+        self.assertEqual(response.data["access_token"], created_profile.api_token.token)
+
+        token_request = urlopen_mock.call_args_list[0].args[0]
+        self.assertEqual(token_request.full_url, "https://oauth2.googleapis.com/token")
+        self.assertIn("redirect_uri=http%3A%2F%2F127.0.0.1%3A5180", token_request.data.decode("utf-8"))
+        self.assertIn("code=real-google-code", token_request.data.decode("utf-8"))
+
+        userinfo_request = urlopen_mock.call_args_list[1].args[0]
+        self.assertEqual(userinfo_request.full_url, "https://openidconnect.googleapis.com/v1/userinfo")
+        self.assertEqual(userinfo_request.headers["Authorization"], "Bearer google-access-token")
+
+    @override_settings(
+        GOOGLE_OAUTH_CLIENT_ID="google-client-id",
+        GOOGLE_OAUTH_CLIENT_SECRET="google-client-secret",
+        GOOGLE_OAUTH_ALLOWED_ORIGINS=["http://127.0.0.1:5180"],
+    )
+    def test_google_login_requires_x_requested_with_header(self):
+        response = self.client.post(
+            reverse("google-login"),
+            {"code": "real-google-code"},
+            format="json",
+            HTTP_ORIGIN="http://127.0.0.1:5180",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"], "Requete Google invalide.")
+
+    @override_settings(FRONTEND_URL="http://127.0.0.1:5180")
+    def test_social_bridge_redirects_with_serialized_profile(self):
+        user = User.objects.create_user(
+            username="adam@extrabeam.fr",
+            email="adam@extrabeam.fr",
+            password="bonjour123",
+            first_name="Adam",
+        )
+        profile = AccountProfile.objects.create(
+            user=user,
+            display_name="Adam",
+            role=AccountProfile.ROLE_CLIENT,
+            auth_provider=AccountProfile.AUTH_PROVIDER_PASCUANS,
+            oidc_sub="oidc-sub-123",
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse("social-bridge"))
+
+        self.assertEqual(response.status_code, 302)
+        parsed = urlparse(response.url)
+        self.assertEqual(parsed.scheme, "http")
+        self.assertEqual(parsed.netloc, "127.0.0.1:5180")
+        self.assertEqual(parsed.path, "/auth/callback")
+
+        params = parse_qs(parsed.query)
+        self.assertEqual(params["id"], [str(profile.pk)])
+        self.assertEqual(params["email"], ["adam@extrabeam.fr"])
+        self.assertEqual(params["display_name"], ["Adam"])
+        self.assertEqual(params["role"], [AccountProfile.ROLE_CLIENT])
+        self.assertEqual(params["auth_provider"], [AccountProfile.AUTH_PROVIDER_PASCUANS])
+        self.assertEqual(params["oidc_sub"], ["oidc-sub-123"])
+
+    @override_settings(FRONTEND_URL="http://127.0.0.1:5180", OIDC_ISSUER_URL="http://127.0.0.1:8001")
+    def test_social_logout_clears_session_and_redirects_to_auth_server(self):
+        user = User.objects.create_user(
+            username="adam@extrabeam.fr",
+            email="adam@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("social-logout"), {"next": "http://127.0.0.1:5180/login"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "http://127.0.0.1:8001/logout/?next=http%3A%2F%2F127.0.0.1%3A5180%2Flogin")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+
+class ProfileApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="profile@extrabeam.fr",
+            email="profile@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.profile = AccountProfile.objects.create(
+            user=self.user,
+            display_name="Profile Owner",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="profile-owner",
+        )
+        self.token = UserApiToken.get_or_create_for_profile(self.profile)
+
+    def test_profile_patch_accepts_uploaded_avatar_and_serves_short_url(self):
+        upload_data = "data:image/jpeg;base64,QUJDREVGR0g="
+
+        with TemporaryDirectory() as tmpdir, patch(
+            "api.avatar_storage.get_avatar_storage_root",
+            return_value=Path(tmpdir),
+        ):
+            response = self.client.patch(
+                reverse("profile-overview", args=[self.profile.slug]),
+                {
+                    "display_name": "Profile Owner",
+                    "avatar_upload_data": upload_data,
+                },
+                format="json",
+                HTTP_AUTHORIZATION=f"Token {self.token.token}",
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.profile.refresh_from_db()
+            self.assertTrue(self.profile.avatar_storage_key.endswith(".jpg"))
+            self.assertIn("/api/avatars/", response.data["avatar_url"])
+
+            avatar_path = response.data["avatar_url"].replace("http://testserver", "")
+            avatar_response = self.client.get(avatar_path)
+            self.assertEqual(avatar_response.status_code, 200)
+            self.assertEqual(avatar_response["Content-Type"], "image/jpeg")
+
+    def test_profile_patch_rejects_invalid_avatar_data(self):
+        response = self.client.patch(
+            reverse("profile-overview", args=[self.profile.slug]),
+            {
+                "avatar_upload_data": "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["avatar_upload_data"][0],
+            "Format d'image invalide. Utiliser JPEG, PNG ou WebP.",
+        )
+
+
+class SlotsApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="adam@extrabeam.fr",
+            email="adam@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.profile = AccountProfile.objects.create(
+            user=self.user,
+            display_name="Adam",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="adam-extrabeam",
+        )
+        self.token = UserApiToken.get_or_create_for_profile(self.profile)
+
+    def test_slot_create_preserves_wall_clock_times(self):
+        response = self.client.post(
+            reverse("slots", args=[self.profile.slug]),
+            {
+                "title": "Disponibilite matin",
+                "start": "2026-04-14T09:00:00",
+                "end": "2026-04-14T15:00:00",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["start"], "2026-04-14T09:00:00")
+        self.assertEqual(response.data["end"], "2026-04-14T15:00:00")
+
+        slot = Slot.objects.get(pk=response.data["id"])
+        self.assertEqual(timezone.localtime(slot.start).strftime("%H:%M"), "09:00")
+        self.assertEqual(timezone.localtime(slot.end).strftime("%H:%M"), "15:00")
+
+    def test_slot_list_returns_local_wall_clock_times(self):
+        Slot.objects.create(
+            profile=self.profile,
+            title="Apres-midi client",
+            start=datetime.datetime(2026, 4, 14, 7, 0, tzinfo=datetime.timezone.utc),
+            end=datetime.datetime(2026, 4, 14, 13, 0, tzinfo=datetime.timezone.utc),
+        )
+
+        response = self.client.get(reverse("slots", args=[self.profile.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]["start"], "2026-04-14T09:00:00")
+        self.assertEqual(response.data[0]["end"], "2026-04-14T15:00:00")
+
+
+class FacturesApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="factures@extrabeam.fr",
+            email="factures@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.profile = AccountProfile.objects.create(
+            user=self.user,
+            display_name="Factures Owner",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="factures-owner",
+        )
+        self.token = UserApiToken.get_or_create_for_profile(self.profile)
+        self.mission = Mission.objects.create(
+            profile=self.profile,
+            title="Mission de design sprint",
+            client_name="Acme",
+            client_email="acme@client.fr",
+            client_phone="0600000000",
+            client_company="Acme Corp",
+            daily_rate="650.00",
+        )
+
+        self.other_user = User.objects.create_user(
+            username="other@extrabeam.fr",
+            email="other@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.other_profile = AccountProfile.objects.create(
+            user=self.other_user,
+            display_name="Other Owner",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="other-owner",
+        )
+        self.other_mission = Mission.objects.create(
+            profile=self.other_profile,
+            title="Mission externe",
+            client_name="Globex",
+        )
+
+    def test_create_facture_manually(self):
+        response = self.client.post(
+            reverse("factures", args=[self.profile.slug]),
+            {
+                "mission_id": self.mission.pk,
+                "numero": "2026-0001",
+                "date_emission": "2026-05-05",
+                "client_name": "Acme Corp",
+                "contact_name": "Eva Client",
+                "contact_email": "eva@acme.fr",
+                "description": "Sprint produit du mois de mai",
+                "hours": "7.50",
+                "rate": "80.00",
+                "montant_ht": "600.00",
+                "tva": "20.00",
+                "montant_ttc": "720.00",
+                "mention_tva": "TVA 20%",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["numero"], "2026-0001")
+        self.assertEqual(response.data["mission_id"], self.mission.pk)
+        self.assertEqual(response.data["mission_title"], self.mission.title)
+        self.assertEqual(response.data["montant_ttc"], "720.00")
+        self.assertTrue(
+            Facture.objects.filter(profile=self.profile, numero="2026-0001").exists()
+        )
+
+    def test_list_factures_requires_owner(self):
+        Facture.objects.create(
+            profile=self.profile,
+            mission=self.mission,
+            numero="2026-0002",
+            client_name="Acme Corp",
+            montant_ht="500.00",
+            montant_ttc="500.00",
+        )
+
+        unauthorized = self.client.get(reverse("factures", args=[self.profile.slug]))
+        self.assertEqual(unauthorized.status_code, 401)
+
+        forbidden = self.client.get(
+            reverse("factures", args=[self.profile.slug]),
+            HTTP_AUTHORIZATION=f"Token {UserApiToken.get_or_create_for_profile(self.other_profile).token}",
+        )
+        self.assertEqual(forbidden.status_code, 403)
+
+        owner = self.client.get(
+            reverse("factures", args=[self.profile.slug]),
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+        self.assertEqual(owner.status_code, 200)
+        self.assertEqual(len(owner.data), 1)
+
+    def test_facture_rejects_foreign_mission(self):
+        response = self.client.post(
+            reverse("factures", args=[self.profile.slug]),
+            {
+                "mission_id": self.other_mission.pk,
+                "numero": "2026-0003",
+                "client_name": "Globex",
+                "montant_ht": "500.00",
+                "montant_ttc": "500.00",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["mission_id"][0],
+            "La mission choisie n'appartient pas à ce profil.",
+        )
+
+    def test_update_and_delete_facture(self):
+        facture = Facture.objects.create(
+            profile=self.profile,
+            mission=self.mission,
+            numero="2026-0004",
+            client_name="Acme Corp",
+            montant_ht="400.00",
+            montant_ttc="400.00",
+        )
+
+        patch_response = self.client.patch(
+            reverse("facture-detail", args=[self.profile.slug, facture.pk]),
+            {
+                "status": Facture.STATUS_PAID,
+                "contact_name": "Eva Client",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(patch_response.status_code, 200)
+        self.assertEqual(patch_response.data["status"], Facture.STATUS_PAID)
+        self.assertEqual(patch_response.data["contact_name"], "Eva Client")
+
+        delete_response = self.client.delete(
+            reverse("facture-detail", args=[self.profile.slug, facture.pk]),
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+        self.assertEqual(delete_response.status_code, 204)
+        self.assertFalse(Facture.objects.filter(pk=facture.pk).exists())
+
+
+class AdminApiTests(APITestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_user(
+            username="admin@extrabeam.fr",
+            email="admin@extrabeam.fr",
+            password="bonjour123",
+            is_staff=True,
+        )
+        self.admin_profile = AccountProfile.objects.create(
+            user=self.admin_user,
+            display_name="Admin",
+            role=AccountProfile.ROLE_ADMIN,
+            auth_provider=AccountProfile.AUTH_PROVIDER_PASCUANS,
+        )
+        self.admin_token = UserApiToken.get_or_create_for_profile(self.admin_profile)
+
+        self.freelance_user = User.objects.create_user(
+            username="freelance@extrabeam.fr",
+            email="freelance@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.freelance_profile = AccountProfile.objects.create(
+            user=self.freelance_user,
+            display_name="Freelance Adam",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            job_title="Full-stack freelance",
+            location="Lille",
+            bio="Disponible pour des missions produit.",
+            phone="0601020304",
+        )
+
+        Skill.objects.create(profile=self.freelance_profile, name="Django")
+        Skill.objects.create(profile=self.freelance_profile, name="React")
+        mission = Mission.objects.create(
+            profile=self.freelance_profile,
+            title="Refonte plateforme",
+            status=Mission.STATUS_ONGOING,
+            client_name="Acme",
+        )
+        Slot.objects.create(
+            profile=self.freelance_profile,
+            mission=mission,
+            title="Atelier kickoff",
+            start="2026-04-14T09:00:00Z",
+            end="2026-04-14T11:00:00Z",
+        )
+        Unavailability.objects.create(
+            profile=self.freelance_profile,
+            recurrence_type=Unavailability.RECURRENCE_WEEKLY,
+            weekday=3,
+            start_time="14:00:00",
+            end_time="18:00:00",
+        )
+
+        self.client_user = User.objects.create_user(
+            username="client@extrabeam.fr",
+            email="client@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.client_profile = AccountProfile.objects.create(
+            user=self.client_user,
+            display_name="Client Eve",
+            role=AccountProfile.ROLE_CLIENT,
+            auth_provider=AccountProfile.AUTH_PROVIDER_GOOGLE,
+        )
+        self.client_token = UserApiToken.get_or_create_for_profile(self.client_profile)
+
+    def test_admin_overview_requires_admin_role(self):
+        response = self.client.get(
+            reverse("admin-overview"),
+            HTTP_AUTHORIZATION=f"Token {self.client_token.token}",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"], "Acces admin requis.")
+
+    def test_admin_overview_returns_summary_and_accounts(self):
+        response = self.client.get(
+            reverse("admin-overview"),
+            HTTP_AUTHORIZATION=f"Token {self.admin_token.token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["summary"]["total_accounts"], 3)
+        self.assertEqual(response.data["summary"]["freelance_accounts"], 1)
+        self.assertEqual(response.data["summary"]["client_accounts"], 1)
+        self.assertEqual(response.data["summary"]["admin_accounts"], 1)
+        self.assertEqual(response.data["summary"]["total_skills"], 2)
+        self.assertEqual(response.data["summary"]["total_slots"], 1)
+        self.assertEqual(response.data["summary"]["total_unavailabilities"], 1)
+        self.assertEqual(response.data["summary"]["total_missions"], 1)
+        self.assertEqual(len(response.data["accounts"]), 3)
+
+        freelance_entry = next(
+            account for account in response.data["accounts"]
+            if account["email"] == "freelance@extrabeam.fr"
+        )
+        self.assertEqual(freelance_entry["skill_count"], 2)
+        self.assertEqual(freelance_entry["mission_count"], 1)
+        self.assertEqual(freelance_entry["slot_count"], 1)
+        self.assertEqual(freelance_entry["unavailability_count"], 1)
+
+    def test_admin_overview_supports_role_and_query_filters(self):
+        response = self.client.get(
+            reverse("admin-overview"),
+            {"role": AccountProfile.ROLE_FREELANCE, "q": "Lille"},
+            HTTP_AUTHORIZATION=f"Token {self.admin_token.token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["accounts"]), 1)
+        self.assertEqual(response.data["accounts"][0]["email"], "freelance@extrabeam.fr")
+
+    def test_admin_account_detail_returns_full_account_payload(self):
+        response = self.client.get(
+            reverse("admin-account-detail", args=[self.freelance_profile.pk]),
+            HTTP_AUTHORIZATION=f"Token {self.admin_token.token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["account"]["email"], "freelance@extrabeam.fr")
+        self.assertEqual(response.data["account"]["role"], AccountProfile.ROLE_FREELANCE)
+        self.assertEqual(response.data["stats"]["skill_count"], 2)
+        self.assertEqual(len(response.data["skills"]), 2)
+        self.assertEqual(len(response.data["missions"]), 1)
+        self.assertEqual(len(response.data["slots"]), 1)
+        self.assertEqual(len(response.data["unavailabilities"]), 1)

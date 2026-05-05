@@ -1,0 +1,28 @@
+FROM node:20-slim AS builder
+
+ARG VITE_GOOGLE_CLIENT_ID=
+ARG VITE_API_URL=/api
+ARG VITE_USE_MOCK_API=false
+ARG VITE_AUTH_SERVER_URL=https://auth.pascuans.dev
+ARG VITE_SHOW_LOCAL_DEBUG_AUTH=false
+
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_USE_MOCK_API=$VITE_USE_MOCK_API
+ENV VITE_AUTH_SERVER_URL=$VITE_AUTH_SERVER_URL
+ENV VITE_SHOW_LOCAL_DEBUG_AUTH=$VITE_SHOW_LOCAL_DEBUG_AUTH
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80

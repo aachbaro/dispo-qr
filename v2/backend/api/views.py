@@ -1,0 +1,881 @@
+"""
+api/views.py
+Layer  : Backend — vues REST
+Role   : Endpoints de l'API ExtraBeam v2.
+         Auth (login, register, Google OAuth) + Profile/Slots/Unavailabilities.
+Depends: api.accounts, api.models, api.serializers, api.token_auth
+"""
+
+import json
+from urllib import error, parse, request as urllib_request
+from uuid import NAMESPACE_URL, uuid5
+
+from django.conf import settings
+from django.db.models import Count, Q
+from django.http import FileResponse
+from django.shortcuts import get_object_or_404
+from rest_framework import serializers, status
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from .accounts import (
+    authenticate_local_account,
+    get_or_create_google_account,
+    register_local_account,
+    serialize_profile,
+)
+from .avatar_storage import get_avatar_file_path, guess_avatar_content_type
+from .models import (
+    AccountProfile,
+    Facture,
+    Mission,
+    Skill,
+    Slot,
+    Unavailability,
+    UserApiToken,
+)
+from .serializers import (
+    AdminAccountDetailSerializer,
+    AdminAccountSummarySerializer,
+    FactureSerializer,
+    MissionSerializer,
+    ProfilePublicSerializer,
+    ProfileUpdateSerializer,
+    SkillSerializer,
+    SlotSerializer,
+    UnavailabilitySerializer,
+)
+from .token_auth import ProfileTokenAuthentication
+
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def build_mock_user(email: str, display_name: str | None = None, avatar_url: str | None = None) -> dict:
+    resolved_display_name = display_name or email.split("@")[0]
+    return {
+        "id": str(uuid5(NAMESPACE_URL, email)),
+        "email": email,
+        "display_name": resolved_display_name,
+        "avatar_url": avatar_url,
+        "role": AccountProfile.ROLE_FREELANCE,
+        "slug": None,
+        "token": None,
+    }
+
+
+class GoogleOAuthError(Exception):
+    pass
+
+
+def get_request_profile(request: Request) -> AccountProfile | None:
+    if not request.user.is_authenticated:
+        return None
+    return getattr(request.user, "account_profile", None)
+
+
+def require_admin_profile(request: Request) -> tuple[AccountProfile | None, Response | None]:
+    if not request.user.is_authenticated:
+        return None, Response({"error": "Authentification requise."}, status=401)
+
+    profile = get_request_profile(request)
+    if not profile or profile.role != AccountProfile.ROLE_ADMIN:
+        return None, Response({"error": "Acces admin requis."}, status=403)
+
+    return profile, None
+
+
+# ---------------------------------------------------------------------------
+# Sérialiseurs de requête
+# ---------------------------------------------------------------------------
+
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField(
+        error_messages={
+            "required": "L'adresse email est requise.",
+            "blank": "L'adresse email est requise.",
+            "invalid": "Adresse email invalide.",
+        }
+    )
+    password = serializers.CharField(
+        error_messages={
+            "required": "Le mot de passe est requis.",
+            "blank": "Le mot de passe est requis.",
+        }
+    )
+
+
+class RegisterSerializer(serializers.Serializer):
+    display_name = serializers.CharField(
+        max_length=150,
+        error_messages={
+            "required": "Le nom affiché est requis.",
+            "blank": "Le nom affiché est requis.",
+            "max_length": "Le nom affiché est trop long.",
+        },
+    )
+    email = serializers.EmailField(
+        error_messages={
+            "required": "L'adresse email est requise.",
+            "blank": "L'adresse email est requise.",
+            "invalid": "Adresse email invalide.",
+        }
+    )
+    password = serializers.CharField(
+        min_length=8,
+        error_messages={
+            "required": "Le mot de passe est requis.",
+            "blank": "Le mot de passe est requis.",
+            "min_length": "Le mot de passe doit contenir au moins 8 caractères.",
+        },
+    )
+    role = serializers.ChoiceField(
+        choices=[AccountProfile.ROLE_FREELANCE, AccountProfile.ROLE_CLIENT],
+        required=False,
+        default=AccountProfile.ROLE_FREELANCE,
+        error_messages={
+            "invalid_choice": "Le role choisi est invalide.",
+        },
+    )
+
+
+class GoogleLoginSerializer(serializers.Serializer):
+    code = serializers.CharField()
+
+
+# ---------------------------------------------------------------------------
+# Vues — Auth
+# ---------------------------------------------------------------------------
+
+class HealthView(APIView):
+    def get(self, request: Request) -> Response:
+        return Response({"status": "ok", "service": "extrabeam-v2-backend"})
+
+
+class LoginView(APIView):
+    def post(self, request: Request) -> Response:
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"]
+        password = serializer.validated_data["password"]
+
+        profile = authenticate_local_account(email=email, password=password)
+        if profile:
+            api_token = UserApiToken.get_or_create_for_profile(profile)
+            return Response({
+                "user": serialize_profile(profile, request),
+                "access_token": api_token.token,
+            })
+
+        if password != "test" or not settings.DEBUG:
+            return Response(
+                {"error": "Identifiants incorrects"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response({
+            "user": build_mock_user(email=email),
+            "access_token": "dev-login-token",
+        })
+
+
+class RegisterView(APIView):
+    def post(self, request: Request) -> Response:
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            profile = register_local_account(
+                email=serializer.validated_data["email"],
+                password=serializer.validated_data["password"],
+                display_name=serializer.validated_data["display_name"].strip(),
+                role=serializer.validated_data["role"],
+            )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_token = UserApiToken.get_or_create_for_profile(profile)
+        return Response(
+            {
+                "user": serialize_profile(profile, request),
+                "access_token": api_token.token,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Vues — Google OAuth
+# ---------------------------------------------------------------------------
+
+def normalize_origin(value: str) -> str:
+    return value.rstrip("/")
+
+
+def get_allowed_google_origins() -> set[str]:
+    return {normalize_origin(origin) for origin in settings.GOOGLE_OAUTH_ALLOWED_ORIGINS if origin}
+
+
+def build_google_claims(payload: dict) -> dict:
+    subject = payload.get("sub")
+    email = payload.get("email")
+    if not subject or not email:
+        raise GoogleOAuthError("Le compte Google n'a pas retourné les informations attendues.")
+    return {
+        "sub": subject,
+        "email": email,
+        "display_name": payload.get("name") or email.split("@")[0],
+        "avatar_url": payload.get("picture"),
+    }
+
+
+def parse_google_error_response(raw_body: str) -> str:
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return "La connexion Google a échoué."
+    if isinstance(payload, dict):
+        if isinstance(payload.get("error_description"), str):
+            return payload["error_description"]
+        nested_error = payload.get("error")
+        if isinstance(nested_error, dict) and isinstance(nested_error.get("message"), str):
+            return nested_error["message"]
+        if isinstance(nested_error, str):
+            return nested_error
+    return "La connexion Google a échoué."
+
+
+def google_post_form(url: str, form_data: dict[str, str]) -> dict:
+    encoded_data = parse.urlencode(form_data).encode("utf-8")
+    http_request = urllib_request.Request(
+        url,
+        data=encoded_data,
+        headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib_request.urlopen(http_request, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise GoogleOAuthError(parse_google_error_response(body)) from exc
+    except error.URLError as exc:
+        raise GoogleOAuthError("Impossible de joindre Google pour le moment.") from exc
+    except json.JSONDecodeError as exc:
+        raise GoogleOAuthError("La réponse Google est invalide.") from exc
+
+
+def google_get_json(url: str, access_token: str) -> dict:
+    http_request = urllib_request.Request(
+        url,
+        headers={"Accept": "application/json", "Authorization": f"Bearer {access_token}"},
+        method="GET",
+    )
+    try:
+        with urllib_request.urlopen(http_request, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise GoogleOAuthError(parse_google_error_response(body)) from exc
+    except error.URLError as exc:
+        raise GoogleOAuthError("Impossible de joindre Google pour le moment.") from exc
+    except json.JSONDecodeError as exc:
+        raise GoogleOAuthError("La réponse Google est invalide.") from exc
+
+
+def validate_google_popup_request(request: Request) -> str:
+    requested_with = request.headers.get("X-Requested-With", "")
+    if requested_with.lower() != "xmlhttprequest":
+        raise GoogleOAuthError("Requete Google invalide.")
+    origin = normalize_origin(request.headers.get("Origin", ""))
+    if not origin:
+        raise GoogleOAuthError("Origine Google manquante.")
+    if origin not in get_allowed_google_origins():
+        raise GoogleOAuthError("Origine Google non autorisée.")
+    return origin
+
+
+def exchange_google_code(code: str, origin: str) -> str:
+    if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
+        raise GoogleOAuthError("Les credentials Google ne sont pas configurés sur le backend.")
+    token_payload = google_post_form(GOOGLE_TOKEN_URL, {
+        "code": code,
+        "client_id": settings.GOOGLE_OAUTH_CLIENT_ID,
+        "client_secret": settings.GOOGLE_OAUTH_CLIENT_SECRET,
+        "redirect_uri": origin,
+        "grant_type": "authorization_code",
+    })
+    access_token = token_payload.get("access_token")
+    if not isinstance(access_token, str) or not access_token:
+        raise GoogleOAuthError("Google n'a pas retourné de token d'accès.")
+    return access_token
+
+
+def fetch_google_claims(access_token: str) -> dict:
+    userinfo = google_get_json(GOOGLE_USERINFO_URL, access_token)
+    if userinfo.get("email_verified") is False:
+        raise GoogleOAuthError("L'adresse email Google n'est pas vérifiée.")
+    return build_google_claims(userinfo)
+
+
+class GoogleLoginView(APIView):
+    def post(self, request: Request) -> Response:
+        serializer = GoogleLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        code = serializer.validated_data["code"]
+
+        try:
+            origin = validate_google_popup_request(request)
+        except GoogleOAuthError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if code == "dev-google-code" and not settings.GOOGLE_OAUTH_CLIENT_ID:
+            return Response({
+                "user": build_mock_user(email="adam@gmail.com", display_name="Adam"),
+                "access_token": "dev-google-token",
+            })
+
+        try:
+            google_access_token = exchange_google_code(code=code, origin=origin)
+            claims = fetch_google_claims(google_access_token)
+            profile = get_or_create_google_account(
+                email=claims["email"],
+                display_name=claims["display_name"],
+                avatar_url=claims["avatar_url"],
+                google_sub=claims["sub"],
+            )
+        except GoogleOAuthError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_token = UserApiToken.get_or_create_for_profile(profile)
+        return Response({
+            "user": serialize_profile(profile, request),
+            "access_token": api_token.token,
+        })
+
+
+# ---------------------------------------------------------------------------
+# Vues — Profil public
+# ---------------------------------------------------------------------------
+
+class ProfileOverviewView(APIView):
+    """
+    GET /api/profiles/:slug/
+    Public. Retourne les infos du profil + unavailabilities + mode (owner/public).
+    Les slots sont chargés séparément par l'agenda (GET /api/profiles/:slug/slots/).
+    """
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request, slug: str) -> Response:
+        profile = get_object_or_404(
+            AccountProfile.objects.select_related("user").prefetch_related("skills"),
+            slug=slug,
+        )
+        is_owner = (
+            request.user.is_authenticated
+            and hasattr(request.user, "account_profile")
+            and request.user.account_profile.slug == slug
+        )
+        if profile.role == AccountProfile.ROLE_CLIENT and not is_owner:
+            return Response({"error": "Ce profil n'est pas public."}, status=404)
+        return Response({
+            "profile": ProfilePublicSerializer(
+                profile, context={"request": request}
+            ).data,
+            "unavailabilities": UnavailabilitySerializer(
+                profile.unavailabilities.all(), many=True
+            ).data,
+            "mode": "owner" if is_owner else "public",
+        })
+
+    def patch(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+        serializer = ProfileUpdateSerializer(
+            profile, data=request.data, partial=True, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        profile.refresh_from_db()
+        return Response(
+            ProfilePublicSerializer(profile, context={"request": request}).data
+        )
+
+
+class AvatarFileView(APIView):
+    """GET /api/avatars/:avatar_id/"""
+
+    def get(self, request: Request, avatar_id: str):
+        profile = get_object_or_404(AccountProfile, avatar_storage_key=avatar_id)
+        file_path = get_avatar_file_path(profile.avatar_storage_key)
+        if not file_path.exists():
+            return Response({"error": "Avatar introuvable."}, status=404)
+
+        return FileResponse(
+            file_path.open("rb"),
+            content_type=guess_avatar_content_type(profile.avatar_storage_key),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Vues — Skills
+# ---------------------------------------------------------------------------
+
+class SkillsView(APIView):
+    """GET + POST /api/profiles/:slug/skills/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request, slug: str) -> Response:
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        return Response(SkillSerializer(profile.skills.all(), many=True).data)
+
+    def post(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+        name = str(request.data.get("name", "")).strip()
+        if not name:
+            return Response({"error": "Le nom est requis."}, status=400)
+        skill, created = Skill.objects.get_or_create(profile=profile, name=name)
+        return Response(SkillSerializer(skill).data, status=201 if created else 200)
+
+
+class SkillDetailView(APIView):
+    """DELETE /api/profiles/:slug/skills/:skill_id/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def delete(self, request: Request, slug: str, skill_id: int) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+        skill = get_object_or_404(Skill, pk=skill_id, profile=profile)
+        skill.delete()
+        return Response(status=204)
+
+
+# ---------------------------------------------------------------------------
+# Vues — Slots
+# ---------------------------------------------------------------------------
+
+class SlotsView(APIView):
+    """GET + POST /api/profiles/:slug/slots/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request, slug: str) -> Response:
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        qs = profile.slots.all()
+        from_date = request.query_params.get("from")
+        to_date = request.query_params.get("to")
+        if from_date:
+            qs = qs.filter(start__date__gte=from_date)
+        if to_date:
+            qs = qs.filter(end__date__lte=to_date)
+        return Response(SlotSerializer(qs, many=True).data)
+
+    def post(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+        serializer = SlotSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        slot = serializer.save(profile=profile)
+        return Response(SlotSerializer(slot).data, status=201)
+
+
+class SlotDetailView(APIView):
+    """PATCH + DELETE /api/profiles/:slug/slots/:slot_id/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def patch(self, request: Request, slug: str, slot_id: int) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+        slot = get_object_or_404(Slot, pk=slot_id, profile=profile)
+        serializer = SlotSerializer(slot, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(SlotSerializer(slot).data)
+
+    def delete(self, request: Request, slug: str, slot_id: int) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+        slot = get_object_or_404(Slot, pk=slot_id, profile=profile)
+        slot.delete()
+        return Response(status=204)
+
+
+# ---------------------------------------------------------------------------
+# Vues — Unavailabilities
+# ---------------------------------------------------------------------------
+
+class UnavailabilitiesView(APIView):
+    """GET + POST /api/profiles/:slug/unavailabilities/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request, slug: str) -> Response:
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        return Response(
+            UnavailabilitySerializer(profile.unavailabilities.all(), many=True).data
+        )
+
+    def post(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+        serializer = UnavailabilitySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        unavailability = serializer.save(profile=profile)
+        return Response(UnavailabilitySerializer(unavailability).data, status=201)
+
+
+class UnavailabilityDetailView(APIView):
+    """PATCH + DELETE /api/profiles/:slug/unavailabilities/:unavailability_id/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def _get_owned(self, request: Request, slug: str, unavailability_id: int):
+        if not request.user.is_authenticated:
+            return None, Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return None, Response({"error": "Accès refusé."}, status=403)
+        obj = get_object_or_404(Unavailability, pk=unavailability_id, profile=profile)
+        return obj, None
+
+    def patch(self, request: Request, slug: str, unavailability_id: int) -> Response:
+        obj, err = self._get_owned(request, slug, unavailability_id)
+        if err:
+            return err
+        serializer = UnavailabilitySerializer(obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(UnavailabilitySerializer(obj).data)
+
+    def delete(self, request: Request, slug: str, unavailability_id: int) -> Response:
+        obj, err = self._get_owned(request, slug, unavailability_id)
+        if err:
+            return err
+        # Suppression d'une occurrence unique via query param ?exception=YYYY-MM-DD
+        exception_date = request.query_params.get("exception")
+        if exception_date:
+            if exception_date not in obj.exceptions:
+                obj.exceptions = [*obj.exceptions, exception_date]
+                obj.save(update_fields=["exceptions"])
+            return Response(UnavailabilitySerializer(obj).data)
+        obj.delete()
+        return Response(status=204)
+
+
+# ---------------------------------------------------------------------------
+# Vues — Missions
+# ---------------------------------------------------------------------------
+
+class MissionsView(APIView):
+    """
+    GET  /api/profiles/:slug/missions/  — liste des missions (owner uniquement)
+    POST /api/profiles/:slug/missions/  — créer une mission
+    """
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+
+        status_filter = request.query_params.get("status")
+        qs = profile.missions.all()
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        return Response(MissionSerializer(qs, many=True).data)
+
+    def post(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+        serializer = MissionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        mission = serializer.save(profile=profile)
+        return Response(MissionSerializer(mission).data, status=201)
+
+
+class MissionDetailView(APIView):
+    """
+    GET    /api/profiles/:slug/missions/:mission_id/
+    PATCH  /api/profiles/:slug/missions/:mission_id/
+    DELETE /api/profiles/:slug/missions/:mission_id/
+    """
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def _get_owned_mission(self, request: Request, slug: str, mission_id: int):
+        if not request.user.is_authenticated:
+            return None, Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return None, Response({"error": "Accès refusé."}, status=403)
+        mission = get_object_or_404(Mission, pk=mission_id, profile=profile)
+        return mission, None
+
+    def get(self, request: Request, slug: str, mission_id: int) -> Response:
+        mission, err = self._get_owned_mission(request, slug, mission_id)
+        if err:
+            return err
+        return Response(MissionSerializer(mission).data)
+
+    def patch(self, request: Request, slug: str, mission_id: int) -> Response:
+        mission, err = self._get_owned_mission(request, slug, mission_id)
+        if err:
+            return err
+        serializer = MissionSerializer(mission, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(MissionSerializer(mission).data)
+
+    def delete(self, request: Request, slug: str, mission_id: int) -> Response:
+        mission, err = self._get_owned_mission(request, slug, mission_id)
+        if err:
+            return err
+        mission.delete()
+        return Response(status=204)
+
+
+# ---------------------------------------------------------------------------
+# Vues — Factures
+# ---------------------------------------------------------------------------
+
+class FacturesView(APIView):
+    """
+    GET  /api/profiles/:slug/factures/  — liste des factures (owner uniquement)
+    POST /api/profiles/:slug/factures/  — créer une facture manuelle
+    """
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+
+        qs = profile.factures.select_related("mission").all()
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        return Response(FactureSerializer(qs, many=True).data)
+
+    def post(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+
+        serializer = FactureSerializer(data=request.data, context={"profile": profile})
+        serializer.is_valid(raise_exception=True)
+        facture = serializer.save(profile=profile)
+        return Response(FactureSerializer(facture).data, status=201)
+
+
+class FactureDetailView(APIView):
+    """
+    GET    /api/profiles/:slug/factures/:facture_id/
+    PATCH  /api/profiles/:slug/factures/:facture_id/
+    DELETE /api/profiles/:slug/factures/:facture_id/
+    """
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def _get_owned_facture(self, request: Request, slug: str, facture_id: int):
+        if not request.user.is_authenticated:
+            return None, Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return None, Response({"error": "Accès refusé."}, status=403)
+        facture = get_object_or_404(
+            Facture.objects.select_related("mission"), pk=facture_id, profile=profile
+        )
+        return facture, None
+
+    def get(self, request: Request, slug: str, facture_id: int) -> Response:
+        facture, err = self._get_owned_facture(request, slug, facture_id)
+        if err:
+            return err
+        return Response(FactureSerializer(facture).data)
+
+    def patch(self, request: Request, slug: str, facture_id: int) -> Response:
+        facture, err = self._get_owned_facture(request, slug, facture_id)
+        if err:
+            return err
+        serializer = FactureSerializer(
+            facture,
+            data=request.data,
+            partial=True,
+            context={"profile": facture.profile},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        facture.refresh_from_db()
+        return Response(FactureSerializer(facture).data)
+
+    def delete(self, request: Request, slug: str, facture_id: int) -> Response:
+        facture, err = self._get_owned_facture(request, slug, facture_id)
+        if err:
+            return err
+        facture.delete()
+        return Response(status=204)
+
+
+# ---------------------------------------------------------------------------
+# Vues — Admin
+# ---------------------------------------------------------------------------
+
+class AdminOverviewView(APIView):
+    """
+    GET /api/admin/overview/
+
+    Retourne un résumé global de la base et la liste des comptes avec filtres
+    simples (recherche texte + role).
+    """
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request) -> Response:
+        _, err = require_admin_profile(request)
+        if err:
+            return err
+
+        query = str(request.query_params.get("q", "")).strip()
+        role = str(request.query_params.get("role", "")).strip()
+
+        accounts = AccountProfile.objects.select_related("user").annotate(
+            skill_count=Count("skills", distinct=True),
+            slot_count=Count("slots", distinct=True),
+            mission_count=Count("missions", distinct=True),
+            unavailability_count=Count("unavailabilities", distinct=True),
+        )
+
+        if query:
+            accounts = accounts.filter(
+                Q(display_name__icontains=query)
+                | Q(user__email__icontains=query)
+                | Q(slug__icontains=query)
+                | Q(job_title__icontains=query)
+                | Q(location__icontains=query)
+            )
+
+        if role in {
+            AccountProfile.ROLE_FREELANCE,
+            AccountProfile.ROLE_CLIENT,
+            AccountProfile.ROLE_ADMIN,
+        }:
+            accounts = accounts.filter(role=role)
+
+        summary = {
+            "total_accounts": AccountProfile.objects.count(),
+            "freelance_accounts": AccountProfile.objects.filter(
+                role=AccountProfile.ROLE_FREELANCE
+            ).count(),
+            "client_accounts": AccountProfile.objects.filter(
+                role=AccountProfile.ROLE_CLIENT
+            ).count(),
+            "admin_accounts": AccountProfile.objects.filter(
+                role=AccountProfile.ROLE_ADMIN
+            ).count(),
+            "total_skills": Skill.objects.count(),
+            "total_slots": Slot.objects.count(),
+            "total_unavailabilities": Unavailability.objects.count(),
+            "total_missions": Mission.objects.count(),
+        }
+
+        return Response(
+            {
+                "summary": summary,
+                "accounts": AdminAccountSummarySerializer(
+                    accounts, many=True, context={"request": request}
+                ).data,
+                "filters": {
+                    "q": query,
+                    "role": role or None,
+                },
+            }
+        )
+
+
+class AdminAccountDetailView(APIView):
+    """
+    GET /api/admin/accounts/:account_id/
+
+    Retourne la fiche complète d'un compte avec les objets métier associés.
+    """
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request, account_id: int) -> Response:
+        _, err = require_admin_profile(request)
+        if err:
+            return err
+
+        account = get_object_or_404(
+            AccountProfile.objects.select_related("user").prefetch_related(
+                "skills",
+                "missions",
+                "unavailabilities",
+                "slots__mission",
+            ),
+            pk=account_id,
+        )
+
+        return Response(
+            {
+                "account": AdminAccountDetailSerializer(
+                    account, context={"request": request}
+                ).data,
+                "stats": {
+                    "skill_count": account.skills.count(),
+                    "slot_count": account.slots.count(),
+                    "mission_count": account.missions.count(),
+                    "unavailability_count": account.unavailabilities.count(),
+                },
+                "skills": SkillSerializer(account.skills.all(), many=True).data,
+                "slots": SlotSerializer(account.slots.all(), many=True).data,
+                "missions": MissionSerializer(account.missions.all(), many=True).data,
+                "unavailabilities": UnavailabilitySerializer(
+                    account.unavailabilities.all(), many=True
+                ).data,
+            }
+        )
