@@ -33,7 +33,7 @@ interface Props {
   slots: AgendaDisplaySlot[];
   isOwner: boolean;
   onCreateSlot: (range: PendingRange) => void;
-  onDeleteSlot: (id: number) => void;
+  onDeleteSlot: (slot: AgendaDisplaySlot) => void;
   onSlotClick: (slot: AgendaDisplaySlot) => void;
 }
 

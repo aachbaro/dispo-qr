@@ -9,8 +9,8 @@
  * Used by: FreelancerProfilePage
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createSlot, deleteSlot, fetchSlots, updateSlot } from "../../api";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { createSlot, deleteSlot, deleteUnavailability, fetchSlots, updateSlot } from "../../api";
 import { useUserContext } from "../../context/UserContext";
 import type { Mission, Slot, Unavailability } from "../../types";
 import AgendaDayColumn from "./AgendaDayColumn";
@@ -35,7 +35,8 @@ interface PendingRange {
 interface Props {
   slug: string;
   isOwner: boolean;
-  initialUnavailabilities: Unavailability[];
+  unavailabilities: Unavailability[];
+  onUnavailabilitiesChange?: Dispatch<SetStateAction<Unavailability[]>>;
   missions: Mission[];
 }
 
@@ -91,13 +92,18 @@ const TOTAL_HOURS = 17; // 07h → 24h
 // Composant
 // ---------------------------------------------------------------------------
 
-export default function Agenda({ slug, isOwner, initialUnavailabilities, missions }: Props) {
+export default function Agenda({
+  slug,
+  isOwner,
+  unavailabilities,
+  onUnavailabilitiesChange,
+  missions,
+}: Props) {
   const { user } = useUserContext();
 
   const todayMonday = useRef(getMonday()).current;
   const [activeWeek, setActiveWeek]   = useState<Date>(todayMonday);
   const [slots, setSlots]             = useState<Slot[]>([]);
-  const [unavailabilities]            = useState<Unavailability[]>(initialUnavailabilities);
   const [loading, setLoading]         = useState(false);
   const [pendingRange, setPendingRange] = useState<PendingRange | null>(null);
   const [editingSlot, setEditingSlot] = useState<Slot | null>(null);
@@ -191,6 +197,23 @@ export default function Agenda({ slug, isOwner, initialUnavailabilities, mission
     setEditingSlot(null);
   }
 
+  async function handleDeleteAgendaItem(slot: AgendaDisplaySlot) {
+    if (!isOwner || !user?.token) return;
+
+    if (slot.type === "slot") {
+      await handleDeleteSlot(slot.id);
+      return;
+    }
+
+    const message = slot.recurrence_type === "weekly"
+      ? "Supprimer cette indisponibilité récurrente de l'agenda ?"
+      : "Supprimer cette indisponibilité de l'agenda ?";
+    if (!window.confirm(message)) return;
+
+    await deleteUnavailability(slug, slot.id, user.token);
+    onUnavailabilitiesChange?.((current) => current.filter((item) => item.id !== slot.id));
+  }
+
   // --- Click slot existant ---
   function handleSlotClick(slot: AgendaDisplaySlot) {
     if (!isOwner || slot.type !== "slot") return;
@@ -261,7 +284,7 @@ export default function Agenda({ slug, isOwner, initialUnavailabilities, mission
             slots={getDaySlots(day.fullDate)}
             isOwner={isOwner}
             onCreateSlot={setPendingRange}
-            onDeleteSlot={handleDeleteSlot}
+            onDeleteSlot={handleDeleteAgendaItem}
             onSlotClick={handleSlotClick}
           />
         ))}

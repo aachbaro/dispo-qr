@@ -17,7 +17,7 @@ interface Props {
   slot: AgendaDisplaySlot;
   isOwner: boolean;
   style: CSSProperties;
-  onDelete?: (id: number) => void;
+  onDelete?: (slot: AgendaDisplaySlot) => void;
   onClick?: (slot: AgendaDisplaySlot) => void;
 }
 
@@ -55,7 +55,7 @@ export default function AgendaSlot({ slot, isOwner, style, onDelete, onClick }: 
       {isOwner && isUnavailability && onDelete && (
         <button
           className="absolute right-0.5 top-0.5 hidden group-hover:flex h-4 w-4 items-center justify-center rounded text-white/70 hover:text-white"
-          onClick={(e) => { e.stopPropagation(); onDelete(slot.id); }}
+          onClick={(e) => { e.stopPropagation(); onDelete(slot); }}
           aria-label="Supprimer"
         >×</button>
       )}

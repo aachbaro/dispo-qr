@@ -8,7 +8,7 @@
  * Deps   : api.createUnavailability, api.updateUnavailability, api.deleteUnavailability
  */
 
-import { useState } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import {
   createUnavailability,
   deleteUnavailability,
@@ -40,40 +40,37 @@ function unavailLabel(u: Unavailability): string {
 interface Props {
   slug: string;
   token: string;
-  initialUnavailabilities: Unavailability[];
-  onUnavailabilitiesChange: (next: Unavailability[]) => void;
+  unavailabilities: Unavailability[];
+  onUnavailabilitiesChange: Dispatch<SetStateAction<Unavailability[]>>;
 }
 
 export default function UnavailabilitySection({
   slug,
   token,
-  initialUnavailabilities,
+  unavailabilities,
   onUnavailabilitiesChange,
 }: Props) {
-  const [list, setList] = useState<Unavailability[]>(initialUnavailabilities);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Unavailability | null>(null);
-
-  function update(next: Unavailability[]) {
-    setList(next);
-    onUnavailabilitiesChange(next);
-  }
+  const list = unavailabilities;
 
   async function handleCreate(data: Partial<Omit<Unavailability, "id" | "exceptions">>) {
     const created = await createUnavailability(slug, data, token);
-    update([...list, created]);
+    onUnavailabilitiesChange((current) => [...current, created]);
   }
 
   async function handleEdit(data: Partial<Omit<Unavailability, "id" | "exceptions">>) {
     if (!editing) return;
     const updated = await updateUnavailability(slug, editing.id, data, token);
-    update(list.map((u) => (u.id === editing.id ? updated : u)));
+    onUnavailabilitiesChange((current) =>
+      current.map((u) => (u.id === editing.id ? updated : u))
+    );
   }
 
   async function handleDelete() {
     if (!editing) return;
     await deleteUnavailability(slug, editing.id, token);
-    update(list.filter((u) => u.id !== editing.id));
+    onUnavailabilitiesChange((current) => current.filter((u) => u.id !== editing.id));
   }
 
   // Séparer récurrentes et ponctuelles

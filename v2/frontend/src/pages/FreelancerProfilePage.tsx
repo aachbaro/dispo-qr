@@ -136,7 +136,8 @@ export default function FreelancerProfilePage() {
           <Agenda
             slug={slug}
             isOwner={isOwner}
-            initialUnavailabilities={unavailabilities}
+            unavailabilities={unavailabilities}
+            onUnavailabilitiesChange={setUnavailabilities}
             missions={missions}
           />
         </section>
@@ -153,7 +154,7 @@ export default function FreelancerProfilePage() {
             <UnavailabilitySection
               slug={slug}
               token={user.token}
-              initialUnavailabilities={unavailabilities}
+              unavailabilities={unavailabilities}
               onUnavailabilitiesChange={setUnavailabilities}
             />
 
