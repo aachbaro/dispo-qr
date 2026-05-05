@@ -3,7 +3,7 @@ api/serializers.py
 Layer  : Backend — sérialisation
 Role   : Sérialise/désérialise les données pour les endpoints profil, slots, indispos,
          missions et factures.
-Depends: api.models (AccountProfile, Skill, Slot, Unavailability, Mission, Facture)
+Depends: api.models (AccountProfile, Skill, Experience, Slot, Unavailability, Mission, Facture)
 """
 
 import re
@@ -19,13 +19,59 @@ from .avatar_storage import (
     parse_avatar_upload_data,
     save_profile_avatar,
 )
-from .models import AccountProfile, Facture, Mission, Skill, Slot, Unavailability
+from .models import (
+    AccountProfile,
+    Experience,
+    Facture,
+    Mission,
+    Skill,
+    Slot,
+    Unavailability,
+)
 
 
 class SkillSerializer(serializers.ModelSerializer):
     class Meta:
         model = Skill
         fields = ["id", "name"]
+
+
+class ExperienceSerializer(serializers.ModelSerializer):
+    start_date = serializers.DateField(format="%Y-%m-%d", required=False, allow_null=True)
+    end_date = serializers.DateField(format="%Y-%m-%d", required=False, allow_null=True)
+
+    class Meta:
+        model = Experience
+        fields = [
+            "id",
+            "title",
+            "company",
+            "start_date",
+            "end_date",
+            "description",
+            "is_current",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        is_current = attrs.get("is_current", getattr(self.instance, "is_current", False))
+
+        if is_current:
+            attrs["end_date"] = None
+            end_date = None
+
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError(
+                "La date de fin doit être postérieure à la date de début."
+            )
+
+        return attrs
 
 
 class SlotSerializer(serializers.ModelSerializer):
@@ -64,11 +110,25 @@ class UnavailabilitySerializer(serializers.ModelSerializer):
 
 
 class ProfilePublicSerializer(serializers.ModelSerializer):
-    """Sérialise un profil public (lecture seule, inclut skills)."""
+    """Sérialise un profil public (lecture seule, inclut skills + experiences)."""
+
+    PRIVATE_OWNER_FIELDS = {
+        "siret",
+        "legal_status",
+        "vat_number",
+        "vat_notice",
+        "iban",
+        "bic",
+        "hourly_rate",
+        "currency",
+        "payment_terms",
+        "late_penalties",
+    }
 
     email = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
     skills = SkillSerializer(many=True, read_only=True)
+    experiences = ExperienceSerializer(many=True, read_only=True)
 
     class Meta:
         model = AccountProfile
@@ -82,8 +142,24 @@ class ProfilePublicSerializer(serializers.ModelSerializer):
             "location",
             "bio",
             "phone",
+            "address_line1",
+            "address_line2",
+            "postal_code",
+            "city",
+            "country",
+            "siret",
+            "legal_status",
+            "vat_number",
+            "vat_notice",
+            "iban",
+            "bic",
+            "hourly_rate",
+            "currency",
+            "payment_terms",
+            "late_penalties",
             "email",
             "skills",
+            "experiences",
         ]
 
     def get_email(self, obj: AccountProfile) -> str:
@@ -91,6 +167,15 @@ class ProfilePublicSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj: AccountProfile) -> str | None:
         return build_profile_avatar_url(obj, self.context.get("request"))
+
+    def to_representation(self, instance: AccountProfile) -> dict:
+        data = super().to_representation(instance)
+        if self.context.get("include_private"):
+            return data
+
+        for field_name in self.PRIVATE_OWNER_FIELDS:
+            data[field_name] = None if field_name == "hourly_rate" else ""
+        return data
 
 
 class ProfileUpdateSerializer(serializers.ModelSerializer):
@@ -101,11 +186,25 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         required=False, allow_blank=False, write_only=True
     )
     avatar_remove = serializers.BooleanField(required=False, default=False, write_only=True)
+    hourly_rate = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True
+    )
 
     def validate_role(self, value: str) -> str:
         if value == AccountProfile.ROLE_ADMIN and (not self.instance or self.instance.role != AccountProfile.ROLE_ADMIN):
             raise serializers.ValidationError("Le role admin ne peut pas etre attribue depuis l'application.")
         return value
+
+    def validate_siret(self, value: str) -> str:
+        normalized = re.sub(r"\s+", "", value or "")
+        if not normalized:
+            return ""
+        if not re.fullmatch(r"\d{14}", normalized):
+            raise serializers.ValidationError("Le SIRET doit contenir 14 chiffres.")
+        return normalized
+
+    def validate_currency(self, value: str) -> str:
+        return value.strip().upper()
 
     def validate_avatar_url(self, value: str) -> str:
         normalized = value.strip()
@@ -181,6 +280,21 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             "location",
             "bio",
             "phone",
+            "address_line1",
+            "address_line2",
+            "postal_code",
+            "city",
+            "country",
+            "siret",
+            "legal_status",
+            "vat_number",
+            "vat_notice",
+            "iban",
+            "bic",
+            "hourly_rate",
+            "currency",
+            "payment_terms",
+            "late_penalties",
         ]
 
 
@@ -365,6 +479,21 @@ class AdminAccountDetailSerializer(serializers.ModelSerializer):
             "location",
             "bio",
             "phone",
+            "address_line1",
+            "address_line2",
+            "postal_code",
+            "city",
+            "country",
+            "siret",
+            "legal_status",
+            "vat_number",
+            "vat_notice",
+            "iban",
+            "bic",
+            "hourly_rate",
+            "currency",
+            "payment_terms",
+            "late_penalties",
             "email",
             "created_at",
             "updated_at",

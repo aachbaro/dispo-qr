@@ -1,0 +1,171 @@
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  addExperience,
+  deleteExperience,
+  updateExperience,
+  type ExperiencePayload,
+} from "../../api";
+import type { Experience } from "../../types";
+import ExperienceForm from "./ExperienceForm";
+
+interface Props {
+  slug: string;
+  isOwner: boolean;
+  token?: string | null;
+  initialExperiences: Experience[];
+}
+
+function formatMonth(date: string | null): string | null {
+  if (!date) return null;
+  const value = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(value.getTime())) return date;
+  return value.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+}
+
+function formatPeriod(experience: Experience): string {
+  const start = formatMonth(experience.start_date);
+  const end = experience.is_current ? "Aujourd'hui" : formatMonth(experience.end_date);
+  if (start && end) return `${start} – ${end}`;
+  return start || end || "Période non renseignée";
+}
+
+export default function ExperiencesSection({
+  slug,
+  isOwner,
+  token,
+  initialExperiences,
+}: Props) {
+  const [experiences, setExperiences] = useState<Experience[]>(initialExperiences);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Experience | null>(null);
+
+  useEffect(() => {
+    setExperiences(initialExperiences);
+  }, [initialExperiences]);
+
+  const sortedExperiences = useMemo(() => {
+    return [...experiences].sort((a, b) => {
+      if (a.is_current !== b.is_current) return a.is_current ? -1 : 1;
+      const aDate = a.start_date ?? "";
+      const bDate = b.start_date ?? "";
+      const periodOrder = bDate.localeCompare(aDate);
+      if (periodOrder !== 0) return periodOrder;
+      return b.id - a.id;
+    });
+  }, [experiences]);
+
+  async function handleCreate(data: ExperiencePayload) {
+    if (!token) return;
+    const created = await addExperience(slug, data, token);
+    setExperiences((current) => [created, ...current]);
+  }
+
+  async function handleEdit(data: ExperiencePayload) {
+    if (!token || !editing) return;
+    const updated = await updateExperience(slug, editing.id, data, token);
+    setExperiences((current) =>
+      current.map((experience) =>
+        experience.id === editing.id ? updated : experience
+      )
+    );
+  }
+
+  async function handleDelete() {
+    if (!token || !editing) return;
+    await deleteExperience(slug, editing.id, token);
+    setExperiences((current) =>
+      current.filter((experience) => experience.id !== editing.id)
+    );
+  }
+
+  return (
+    <section className="rounded-eb-card border border-eb-layout bg-white p-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-eb-muted">
+            Expériences
+          </p>
+          <p className="mt-1 text-[13px] text-eb-secondary">
+            Parcours, postes et établissements de restauration.
+          </p>
+        </div>
+
+        {isOwner && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(null);
+              setShowForm(true);
+            }}
+            className="eb-btn-primary shrink-0 text-[12px] px-3 py-1.5"
+          >
+            + Ajouter
+          </button>
+        )}
+      </div>
+
+      {sortedExperiences.length > 0 ? (
+        <div className="space-y-3">
+          {sortedExperiences.map((experience) => (
+            <article
+              key={experience.id}
+              className="rounded-eb border border-eb-layout bg-[#FBFDFF] p-4"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 className="text-[16px] font-semibold text-eb-text">
+                    {experience.title}
+                  </h3>
+                  {experience.company && (
+                    <p className="mt-0.5 text-[14px] text-eb-secondary">
+                      {experience.company}
+                    </p>
+                  )}
+                  <p className="mt-1 text-[11px] uppercase tracking-[0.08em] text-eb-muted">
+                    {formatPeriod(experience)}
+                  </p>
+                </div>
+
+                {isOwner && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(experience);
+                      setShowForm(true);
+                    }}
+                    className="text-[13px] text-eb-secondary hover:text-eb-text"
+                  >
+                    Modifier
+                  </button>
+                )}
+              </div>
+
+              {experience.description && (
+                <p className="mt-3 whitespace-pre-line text-[14px] leading-6 text-eb-text">
+                  {experience.description}
+                </p>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="py-4 text-center text-[13px] text-eb-muted">
+          Aucune expérience renseignée.
+        </p>
+      )}
+
+      {showForm && (
+        <ExperienceForm
+          initial={editing ?? undefined}
+          onSave={editing ? handleEdit : handleCreate}
+          onDelete={editing ? handleDelete : undefined}
+          onClose={() => {
+            setShowForm(false);
+            setEditing(null);
+          }}
+        />
+      )}
+    </section>
+  );
+}

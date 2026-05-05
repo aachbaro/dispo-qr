@@ -3,7 +3,7 @@
  * Layer  : Frontend — racine de l'application
  * Role   : Configure le router React et les providers globaux.
  * Routes :
- *   /              → redirect /login
+ *   /              → HomePage
  *   /login         → LoginPage
  *   /register      → RegisterPage
  *   /auth/callback → AuthCallbackPage (post-OIDC)
@@ -21,6 +21,7 @@ import AuthCallbackPage from "./pages/AuthCallbackPage";
 import ClientDashboardPage from "./pages/ClientDashboardPage";
 import FreelancerProfilePage from "./pages/FreelancerProfilePage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import ProfilePage from "./pages/ProfilePage";
 import RegisterPage from "./pages/RegisterPage";
@@ -31,7 +32,7 @@ export default function App() {
       <UserProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/auth/callback" element={<AuthCallbackPage />} />

@@ -13,6 +13,7 @@ from rest_framework.test import APITestCase
 
 from .models import (
     AccountProfile,
+    Experience,
     Facture,
     Mission,
     Skill,
@@ -295,6 +296,63 @@ class ProfileApiTests(APITestCase):
         )
         self.token = UserApiToken.get_or_create_for_profile(self.profile)
 
+    def test_profile_patch_updates_business_fields_for_owner(self):
+        response = self.client.patch(
+            reverse("profile-overview", args=[self.profile.slug]),
+            {
+                "phone": "0601020304",
+                "address_line1": "12 rue des Halles",
+                "postal_code": "59000",
+                "city": "Lille",
+                "country": "France",
+                "siret": "123 456 789 00012",
+                "legal_status": "micro-entreprise",
+                "vat_number": "FR00123456789",
+                "vat_notice": "TVA non applicable, art. 293 B du CGI",
+                "iban": "FR7612345987650123456789014",
+                "bic": "AGRIFRPP",
+                "hourly_rate": "25.50",
+                "currency": "eur",
+                "payment_terms": "Paiement comptant a reception",
+                "late_penalties": "Taux BCE + 10 pts",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["city"], "Lille")
+        self.assertEqual(response.data["siret"], "12345678900012")
+        self.assertEqual(response.data["currency"], "EUR")
+        self.assertEqual(response.data["hourly_rate"], "25.50")
+
+    def test_profile_public_view_hides_private_business_fields(self):
+        self.profile.siret = "12345678900012"
+        self.profile.iban = "FR7612345987650123456789014"
+        self.profile.vat_number = "FR00123456789"
+        self.profile.address_line1 = "12 rue des Halles"
+        self.profile.city = "Lille"
+        self.profile.save(
+            update_fields=[
+                "siret",
+                "iban",
+                "vat_number",
+                "address_line1",
+                "city",
+                "updated_at",
+            ]
+        )
+
+        response = self.client.get(reverse("profile-overview", args=[self.profile.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["profile"]["address_line1"], "12 rue des Halles")
+        self.assertEqual(response.data["profile"]["city"], "Lille")
+        self.assertEqual(response.data["profile"]["siret"], "")
+        self.assertEqual(response.data["profile"]["iban"], "")
+        self.assertEqual(response.data["profile"]["vat_number"], "")
+        self.assertIsNone(response.data["profile"]["hourly_rate"])
+
     def test_profile_patch_accepts_uploaded_avatar_and_serves_short_url(self):
         upload_data = "data:image/jpeg;base64,QUJDREVGR0g="
 
@@ -337,6 +395,124 @@ class ProfileApiTests(APITestCase):
             response.data["avatar_upload_data"][0],
             "Format d'image invalide. Utiliser JPEG, PNG ou WebP.",
         )
+
+    def test_profile_overview_includes_experiences(self):
+        Experience.objects.create(
+            profile=self.profile,
+            title="Chef de rang",
+            company="Brasserie du Centre",
+            start_date="2024-04-01",
+            end_date="2025-01-01",
+            description="Service en salle et coordination du rang.",
+        )
+
+        response = self.client.get(reverse("profile-overview", args=[self.profile.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["profile"]["experiences"]), 1)
+        self.assertEqual(
+            response.data["profile"]["experiences"][0]["title"], "Chef de rang"
+        )
+
+
+class ExperiencesApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="experiences@extrabeam.fr",
+            email="experiences@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.profile = AccountProfile.objects.create(
+            user=self.user,
+            display_name="Experiences Owner",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="experiences-owner",
+        )
+        self.token = UserApiToken.get_or_create_for_profile(self.profile)
+
+        self.other_user = User.objects.create_user(
+            username="other-experiences@extrabeam.fr",
+            email="other-experiences@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.other_profile = AccountProfile.objects.create(
+            user=self.other_user,
+            display_name="Other Experiences",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="other-experiences",
+        )
+        self.other_token = UserApiToken.get_or_create_for_profile(self.other_profile)
+
+    def test_owner_can_create_update_and_delete_experience(self):
+        create_response = self.client.post(
+            reverse("experiences", args=[self.profile.slug]),
+            {
+                "title": "Serveur evenementiel",
+                "company": "Maison Martin",
+                "start_date": "2024-06-01",
+                "end_date": "2025-02-01",
+                "description": "Cocktails, banquets et mise en place.",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        self.assertEqual(create_response.data["company"], "Maison Martin")
+        experience_id = create_response.data["id"]
+
+        patch_response = self.client.patch(
+            reverse("experience-detail", args=[self.profile.slug, experience_id]),
+            {
+                "is_current": True,
+                "description": "Service en salle, banquets et renfort bar.",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(patch_response.status_code, 200)
+        self.assertTrue(patch_response.data["is_current"])
+        self.assertIsNone(patch_response.data["end_date"])
+
+        delete_response = self.client.delete(
+            reverse("experience-detail", args=[self.profile.slug, experience_id]),
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(delete_response.status_code, 204)
+        self.assertFalse(Experience.objects.filter(pk=experience_id).exists())
+
+    def test_experience_rejects_invalid_period(self):
+        response = self.client.post(
+            reverse("experiences", args=[self.profile.slug]),
+            {
+                "title": "Chef de partie",
+                "start_date": "2025-05-01",
+                "end_date": "2025-04-01",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["non_field_errors"][0],
+            "La date de fin doit être postérieure à la date de début.",
+        )
+
+    def test_experience_write_requires_owner(self):
+        response = self.client.post(
+            reverse("experiences", args=[self.profile.slug]),
+            {"title": "Runner"},
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.other_token.token}",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"], "Accès refusé.")
 
 
 class SlotsApiTests(APITestCase):

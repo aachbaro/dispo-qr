@@ -3,7 +3,7 @@ api/models.py
 Layer  : Backend — modèles de données
 Role   : Définit tous les modèles Django de l'application ExtraBeam v2.
          AccountProfile centralise le profil utilisateur (auth + CV).
-         Skill, Slot, Unavailability, UserApiToken complètent le domaine métier.
+         Skill, Experience, Slot, Unavailability, UserApiToken complètent le domaine métier.
 Depends: settings.AUTH_USER_MODEL (Django User standard)
 """
 
@@ -73,6 +73,34 @@ class AccountProfile(models.Model):
     location = models.CharField(max_length=120, blank=True)
     bio = models.TextField(blank=True)
     phone = models.CharField(max_length=30, blank=True)
+    address_line1 = models.CharField(max_length=255, blank=True)
+    address_line2 = models.CharField(max_length=255, blank=True)
+    postal_code = models.CharField(max_length=20, blank=True)
+    city = models.CharField(max_length=120, blank=True)
+    country = models.CharField(max_length=120, blank=True, default="France")
+    siret = models.CharField(max_length=20, blank=True)
+    legal_status = models.CharField(
+        max_length=120, blank=True, default="micro-entreprise"
+    )
+    vat_number = models.CharField(max_length=40, blank=True)
+    vat_notice = models.CharField(
+        max_length=255,
+        blank=True,
+        default="TVA non applicable, art. 293 B du CGI",
+    )
+    iban = models.CharField(max_length=64, blank=True)
+    bic = models.CharField(max_length=20, blank=True)
+    hourly_rate = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    currency = models.CharField(max_length=8, blank=True, default="EUR")
+    payment_terms = models.TextField(
+        blank=True, default="Paiement comptant a reception"
+    )
+    late_penalties = models.TextField(
+        blank=True,
+        default="Taux BCE + 10 pts, indemnite forfaitaire 40 EUR",
+    )
 
     # --- Auth ---
     auth_provider = models.CharField(
@@ -126,6 +154,32 @@ class Skill(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+
+# ---------------------------------------------------------------------------
+# CV — Expériences
+# ---------------------------------------------------------------------------
+
+class Experience(models.Model):
+    profile = models.ForeignKey(
+        AccountProfile, on_delete=models.CASCADE, related_name="experiences"
+    )
+    title = models.CharField(max_length=160)
+    company = models.CharField(max_length=160, blank=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    description = models.TextField(blank=True)
+    is_current = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-is_current", "-start_date", "-created_at"]
+
+    def __str__(self) -> str:
+        if self.company:
+            return f"{self.title} — {self.company}"
+        return self.title
 
 
 # ---------------------------------------------------------------------------

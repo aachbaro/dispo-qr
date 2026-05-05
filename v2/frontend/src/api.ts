@@ -13,6 +13,7 @@ import type {
   AccountRole,
   AuthResponse,
   AuthUser,
+  Experience,
   Facture,
   FactureStatus,
   FreelancerProfile,
@@ -179,7 +180,30 @@ export async function fetchProfileOverview(slug: string, token?: string | null):
 export async function updateProfile(
   slug: string,
   data: Partial<
-    Pick<FreelancerProfile, "display_name" | "avatar_url" | "job_title" | "location" | "bio" | "phone">
+    Pick<
+      FreelancerProfile,
+      | "display_name"
+      | "avatar_url"
+      | "job_title"
+      | "location"
+      | "bio"
+      | "phone"
+      | "address_line1"
+      | "address_line2"
+      | "postal_code"
+      | "city"
+      | "country"
+      | "siret"
+      | "legal_status"
+      | "vat_number"
+      | "vat_notice"
+      | "iban"
+      | "bic"
+      | "hourly_rate"
+      | "currency"
+      | "payment_terms"
+      | "late_penalties"
+    >
   > & {
     avatar_upload_data?: string;
     avatar_remove?: boolean;
@@ -199,6 +223,44 @@ export async function addSkill(slug: string, name: string, token: string): Promi
 
 export async function deleteSkill(slug: string, skillId: number, token: string): Promise<void> {
   return deleteReq(`/profiles/${slug}/skills/${skillId}/`, token);
+}
+
+// ---------------------------------------------------------------------------
+// Experiences
+// ---------------------------------------------------------------------------
+
+export interface ExperiencePayload {
+  title: string;
+  company?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  description?: string | null;
+  is_current?: boolean;
+}
+
+export async function addExperience(
+  slug: string,
+  data: ExperiencePayload,
+  token: string
+): Promise<Experience> {
+  return postJson<Experience>(`/profiles/${slug}/experiences/`, data, token);
+}
+
+export async function updateExperience(
+  slug: string,
+  experienceId: number,
+  data: Partial<ExperiencePayload>,
+  token: string
+): Promise<Experience> {
+  return patchJson<Experience>(`/profiles/${slug}/experiences/${experienceId}/`, data, token);
+}
+
+export async function deleteExperience(
+  slug: string,
+  experienceId: number,
+  token: string
+): Promise<void> {
+  return deleteReq(`/profiles/${slug}/experiences/${experienceId}/`, token);
 }
 
 // ---------------------------------------------------------------------------

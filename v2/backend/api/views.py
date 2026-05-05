@@ -28,6 +28,7 @@ from .accounts import (
 from .avatar_storage import get_avatar_file_path, guess_avatar_content_type
 from .models import (
     AccountProfile,
+    Experience,
     Facture,
     Mission,
     Skill,
@@ -38,6 +39,7 @@ from .models import (
 from .serializers import (
     AdminAccountDetailSerializer,
     AdminAccountSummarySerializer,
+    ExperienceSerializer,
     FactureSerializer,
     MissionSerializer,
     ProfilePublicSerializer,
@@ -374,7 +376,9 @@ class ProfileOverviewView(APIView):
 
     def get(self, request: Request, slug: str) -> Response:
         profile = get_object_or_404(
-            AccountProfile.objects.select_related("user").prefetch_related("skills"),
+            AccountProfile.objects.select_related("user").prefetch_related(
+                "skills", "experiences"
+            ),
             slug=slug,
         )
         is_owner = (
@@ -386,7 +390,8 @@ class ProfileOverviewView(APIView):
             return Response({"error": "Ce profil n'est pas public."}, status=404)
         return Response({
             "profile": ProfilePublicSerializer(
-                profile, context={"request": request}
+                profile,
+                context={"request": request, "include_private": is_owner},
             ).data,
             "unavailabilities": UnavailabilitySerializer(
                 profile.unavailabilities.all(), many=True
@@ -407,7 +412,10 @@ class ProfileOverviewView(APIView):
         serializer.save()
         profile.refresh_from_db()
         return Response(
-            ProfilePublicSerializer(profile, context={"request": request}).data
+            ProfilePublicSerializer(
+                profile,
+                context={"request": request, "include_private": True},
+            ).data
         )
 
 
@@ -424,6 +432,62 @@ class AvatarFileView(APIView):
             file_path.open("rb"),
             content_type=guess_avatar_content_type(profile.avatar_storage_key),
         )
+
+
+# ---------------------------------------------------------------------------
+# Vues — Expériences
+# ---------------------------------------------------------------------------
+
+class ExperiencesView(APIView):
+    """GET + POST /api/profiles/:slug/experiences/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request, slug: str) -> Response:
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        return Response(ExperienceSerializer(profile.experiences.all(), many=True).data)
+
+    def post(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+
+        serializer = ExperienceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        experience = serializer.save(profile=profile)
+        return Response(ExperienceSerializer(experience).data, status=201)
+
+
+class ExperienceDetailView(APIView):
+    """PATCH + DELETE /api/profiles/:slug/experiences/:experience_id/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def patch(self, request: Request, slug: str, experience_id: int) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+
+        experience = get_object_or_404(Experience, pk=experience_id, profile=profile)
+        serializer = ExperienceSerializer(experience, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(ExperienceSerializer(experience).data)
+
+    def delete(self, request: Request, slug: str, experience_id: int) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+        profile = get_object_or_404(AccountProfile, slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+
+        experience = get_object_or_404(Experience, pk=experience_id, profile=profile)
+        experience.delete()
+        return Response(status=204)
 
 
 # ---------------------------------------------------------------------------
@@ -796,6 +860,10 @@ class AdminOverviewView(APIView):
                 | Q(slug__icontains=query)
                 | Q(job_title__icontains=query)
                 | Q(location__icontains=query)
+                | Q(phone__icontains=query)
+                | Q(city__icontains=query)
+                | Q(country__icontains=query)
+                | Q(siret__icontains=query)
             )
 
         if role in {

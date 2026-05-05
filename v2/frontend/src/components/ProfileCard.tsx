@@ -1,8 +1,8 @@
 /**
  * src/components/ProfileCard.tsx
  * Layer  : Frontend — composants
- * Role   : Carte de profil d'un freelance avec édition inline.
- *          Gère aussi l'upload d'avatar, son recadrage circulaire et
+ * Role   : Carte de profil d'un freelance avec edition inline.
+ *          Gere aussi l'upload d'avatar, son recadrage circulaire et
  *          la compression avant envoi au backend.
  * Used by: FreelancerProfilePage
  */
@@ -30,6 +30,22 @@ interface ProfileFormState {
   job_title: string;
   location: string;
   bio: string;
+  phone: string;
+  address_line1: string;
+  address_line2: string;
+  postal_code: string;
+  city: string;
+  country: string;
+  siret: string;
+  legal_status: string;
+  vat_number: string;
+  vat_notice: string;
+  iban: string;
+  bic: string;
+  hourly_rate: string;
+  currency: string;
+  payment_terms: string;
+  late_penalties: string;
   avatar_url: string;
 }
 
@@ -41,6 +57,22 @@ function buildInitialForm(profile: FreelancerProfile): ProfileFormState {
     job_title: profile.job_title,
     location: profile.location,
     bio: profile.bio,
+    phone: profile.phone,
+    address_line1: profile.address_line1,
+    address_line2: profile.address_line2,
+    postal_code: profile.postal_code,
+    city: profile.city,
+    country: profile.country,
+    siret: profile.siret,
+    legal_status: profile.legal_status,
+    vat_number: profile.vat_number,
+    vat_notice: profile.vat_notice,
+    iban: profile.iban,
+    bic: profile.bic,
+    hourly_rate: profile.hourly_rate ?? "",
+    currency: profile.currency,
+    payment_terms: profile.payment_terms,
+    late_penalties: profile.late_penalties,
     avatar_url: profile.avatar_url ?? "",
   };
 }
@@ -48,6 +80,56 @@ function buildInitialForm(profile: FreelancerProfile): ProfileFormState {
 function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+function buildAddressLines(profile: Pick<FreelancerProfile, "address_line1" | "address_line2" | "postal_code" | "city" | "country">): string[] {
+  const lines: string[] = [];
+  if (profile.address_line1) lines.push(profile.address_line1);
+  if (profile.address_line2) lines.push(profile.address_line2);
+  const locality = [profile.postal_code, profile.city].filter(Boolean).join(" ").trim();
+  if (locality) lines.push(locality);
+  if (profile.country && (lines.length > 0 || profile.country.trim().toLowerCase() !== "france")) {
+    lines.push(profile.country);
+  }
+  return lines;
+}
+
+function formatHourlyRate(value: string | null, currency: string): string | null {
+  if (!value) return null;
+  const amount = Number.parseFloat(value);
+  if (!Number.isFinite(amount)) return `${value} ${currency}/h`;
+  return `${amount.toFixed(2)} ${currency}/h`;
+}
+
+function DetailBlock({
+  label,
+  value,
+  multiline = false,
+}: {
+  label: string;
+  value: string | null | undefined;
+  multiline?: boolean;
+}) {
+  if (!value) return null;
+
+  return (
+    <div className="rounded-eb border border-eb-layout bg-eb-page px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.08em] text-eb-muted">{label}</p>
+      <p className={`mt-2 text-[14px] text-eb-text ${multiline ? "whitespace-pre-line leading-6" : ""}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: string }) {
+  return (
+    <div>
+      <p className="text-[12px] font-medium uppercase tracking-[0.1em] text-eb-muted">
+        {children}
+      </p>
+    </div>
+  );
 }
 
 export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Props) {
@@ -106,7 +188,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
       setAvatarOffsetY(0);
       setForm((current) => ({ ...current, avatar_url: "" }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossible de préparer cette image.");
+      setError(err instanceof Error ? err.message : "Impossible de preparer cette image.");
     } finally {
       event.target.value = "";
     }
@@ -124,6 +206,22 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
         job_title: form.job_title.trim(),
         location: form.location.trim(),
         bio: form.bio,
+        phone: form.phone.trim(),
+        address_line1: form.address_line1.trim(),
+        address_line2: form.address_line2.trim(),
+        postal_code: form.postal_code.trim(),
+        city: form.city.trim(),
+        country: form.country.trim(),
+        siret: form.siret.trim(),
+        legal_status: form.legal_status.trim(),
+        vat_number: form.vat_number.trim(),
+        vat_notice: form.vat_notice.trim(),
+        iban: form.iban.trim(),
+        bic: form.bic.trim(),
+        hourly_rate: form.hourly_rate.trim() ? form.hourly_rate.trim() : null,
+        currency: form.currency.trim(),
+        payment_terms: form.payment_terms.trim(),
+        late_penalties: form.late_penalties.trim(),
       };
 
       if (avatarDraft) {
@@ -163,7 +261,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
       setSkills((prev) => [...prev, skill]);
       setNewSkill("");
     } catch (err) {
-      console.error("Erreur ajout compétence :", err);
+      console.error("Erreur ajout competence :", err);
     }
   }
 
@@ -173,7 +271,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
       await deleteSkill(profile.slug, id, user.token);
       setSkills((prev) => prev.filter((skill) => skill.id !== id));
     } catch (err) {
-      console.error("Erreur suppression compétence :", err);
+      console.error("Erreur suppression competence :", err);
     }
   }
 
@@ -186,6 +284,20 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
         offsetY: avatarOffsetY,
       })
     : null;
+
+  const publicAddressLines = buildAddressLines(profile);
+  const ownerBusinessRate = formatHourlyRate(profile.hourly_rate, profile.currency || "EUR");
+  const hasOwnerBusinessDetails = isOwner && Boolean(
+    profile.siret
+      || profile.legal_status
+      || profile.vat_number
+      || profile.vat_notice
+      || profile.iban
+      || profile.bic
+      || ownerBusinessRate
+      || profile.payment_terms
+      || profile.late_penalties
+  );
 
   return (
     <div className="rounded-eb-card border border-eb-layout bg-white p-6">
@@ -204,7 +316,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
 
         <div className="min-w-0 flex-1">
           {editing ? (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div className="grid gap-4 md:grid-cols-[150px,1fr]">
                 <div className="space-y-3">
                   <div className="flex flex-col items-center gap-3 rounded-eb-card border border-eb-layout bg-[#F8FAFF] p-4">
@@ -212,7 +324,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
                       {avatarDraft && avatarPreviewMetrics ? (
                         <img
                           src={avatarDraft.dataUrl}
-                          alt="Aperçu avatar"
+                          alt="Apercu avatar"
                           className="absolute left-1/2 top-1/2 max-w-none"
                           style={{
                             width: `${avatarPreviewMetrics.renderedWidth}px`,
@@ -263,7 +375,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
                     </div>
 
                     <p className="text-center text-[12px] leading-5 text-eb-secondary">
-                      JPG, PNG ou WebP. L'image sera recadrée en carré puis compressée automatiquement.
+                      JPG, PNG ou WebP. L'image sera recadree en carre puis compressee automatiquement.
                     </p>
 
                     {avatarDraft && (
@@ -317,49 +429,202 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
                   )}
                 </div>
 
-                <div className="space-y-2.5">
-                  <input
-                    className="eb-input w-full"
-                    value={form.display_name}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, display_name: event.target.value }))
-                    }
-                    placeholder="Nom affiché"
-                  />
-                  <input
-                    className="eb-input w-full"
-                    value={form.job_title}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, job_title: event.target.value }))
-                    }
-                    placeholder="Titre (ex : Développeur freelance)"
-                  />
-                  <input
-                    className="eb-input w-full"
-                    value={form.location}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, location: event.target.value }))
-                    }
-                    placeholder="Localisation"
-                  />
-                  <input
-                    className="eb-input w-full"
-                    value={form.avatar_url}
-                    onChange={(event) => {
-                      resetAvatarEditor();
-                      setForm((current) => ({ ...current, avatar_url: event.target.value }));
-                    }}
-                    placeholder="URL externe de l'avatar (optionnel)"
-                  />
-                  <textarea
-                    className="eb-input w-full resize-none"
-                    rows={4}
-                    value={form.bio}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, bio: event.target.value }))
-                    }
-                    placeholder="Bio…"
-                  />
+                <div className="space-y-5">
+                  <SectionTitle>Identite Publique</SectionTitle>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input
+                      className="eb-input md:col-span-2"
+                      value={form.display_name}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, display_name: event.target.value }))
+                      }
+                      placeholder="Nom affiche"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.job_title}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, job_title: event.target.value }))
+                      }
+                      placeholder="Ex : Chef de rang freelance"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.location}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, location: event.target.value }))
+                      }
+                      placeholder="Zone / localisation visible"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.phone}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, phone: event.target.value }))
+                      }
+                      placeholder="Telephone public"
+                    />
+                    <input
+                      className="eb-input"
+                      value={profile.email}
+                      disabled
+                      placeholder="Email du compte"
+                    />
+                    <input
+                      className="eb-input md:col-span-2"
+                      value={form.avatar_url}
+                      onChange={(event) => {
+                        resetAvatarEditor();
+                        setForm((current) => ({ ...current, avatar_url: event.target.value }));
+                      }}
+                      placeholder="URL externe de l'avatar (optionnel)"
+                    />
+                    <textarea
+                      className="eb-input md:col-span-2 min-h-[120px] resize-y"
+                      value={form.bio}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, bio: event.target.value }))
+                      }
+                      placeholder="Bio..."
+                    />
+                  </div>
+
+                  <SectionTitle>Coordonnees</SectionTitle>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input
+                      className="eb-input md:col-span-2"
+                      value={form.address_line1}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, address_line1: event.target.value }))
+                      }
+                      placeholder="Adresse (ligne 1)"
+                    />
+                    <input
+                      className="eb-input md:col-span-2"
+                      value={form.address_line2}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, address_line2: event.target.value }))
+                      }
+                      placeholder="Adresse (ligne 2)"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.postal_code}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, postal_code: event.target.value }))
+                      }
+                      placeholder="Code postal"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.city}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, city: event.target.value }))
+                      }
+                      placeholder="Ville"
+                    />
+                    <input
+                      className="eb-input md:col-span-2"
+                      value={form.country}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, country: event.target.value }))
+                      }
+                      placeholder="Pays"
+                    />
+                  </div>
+
+                  <SectionTitle>Informations Legales</SectionTitle>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input
+                      className="eb-input"
+                      value={form.siret}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, siret: event.target.value }))
+                      }
+                      placeholder="SIRET"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.legal_status}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, legal_status: event.target.value }))
+                      }
+                      placeholder="Statut juridique"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.vat_number}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, vat_number: event.target.value }))
+                      }
+                      placeholder="TVA intracom"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.currency}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, currency: event.target.value }))
+                      }
+                      placeholder="Devise"
+                    />
+                    <textarea
+                      className="eb-input md:col-span-2 min-h-[88px] resize-y"
+                      value={form.vat_notice}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, vat_notice: event.target.value }))
+                      }
+                      placeholder="Mention TVA"
+                    />
+                  </div>
+
+                  <SectionTitle>Banque Et Conditions</SectionTitle>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <input
+                      className="eb-input"
+                      value={form.iban}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, iban: event.target.value }))
+                      }
+                      placeholder="IBAN"
+                    />
+                    <input
+                      className="eb-input"
+                      value={form.bic}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, bic: event.target.value }))
+                      }
+                      placeholder="BIC"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="eb-input"
+                      value={form.hourly_rate}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, hourly_rate: event.target.value }))
+                      }
+                      placeholder="Taux horaire"
+                    />
+                    <div className="rounded-eb border border-eb-layout bg-[#F8FAFF] px-4 py-3 text-[13px] leading-6 text-eb-secondary">
+                      Ces informations restent privees et servent de base pour ton profil entreprise.
+                    </div>
+                    <textarea
+                      className="eb-input md:col-span-2 min-h-[88px] resize-y"
+                      value={form.payment_terms}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, payment_terms: event.target.value }))
+                      }
+                      placeholder="Conditions de paiement"
+                    />
+                    <textarea
+                      className="eb-input md:col-span-2 min-h-[88px] resize-y"
+                      value={form.late_penalties}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, late_penalties: event.target.value }))
+                      }
+                      placeholder="Penalites de retard"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -367,7 +632,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
 
               <div className="flex gap-2 pt-1">
                 <button type="button" className="eb-btn-primary" onClick={handleSave} disabled={saving}>
-                  {saving ? "Enregistrement…" : "Enregistrer"}
+                  {saving ? "Enregistrement..." : "Enregistrer"}
                 </button>
                 <button type="button" className="eb-btn-ghost" onClick={stopEditing} disabled={saving}>
                   Annuler
@@ -375,25 +640,56 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
               </div>
             </div>
           ) : (
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <h1 className="truncate text-[22px] font-semibold leading-tight text-eb-text">
-                  {profile.display_name || "—"}
-                </h1>
-                {isOwner && (
-                  <button type="button" className="eb-btn-ghost shrink-0" onClick={startEditing}>
-                    Modifier
-                  </button>
+            <div className="space-y-5">
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <h1 className="truncate text-[22px] font-semibold leading-tight text-eb-text">
+                    {profile.display_name || "-"}
+                  </h1>
+                  {isOwner && (
+                    <button type="button" className="eb-btn-ghost shrink-0" onClick={startEditing}>
+                      Modifier
+                    </button>
+                  )}
+                </div>
+                {profile.job_title && (
+                  <p className="mt-0.5 text-[14px] text-eb-secondary">{profile.job_title}</p>
+                )}
+                {profile.location && <p className="text-[13px] text-eb-muted">{profile.location}</p>}
+                {profile.bio && (
+                  <p className="mt-3 whitespace-pre-line text-[14px] leading-6 text-eb-text">
+                    {profile.bio}
+                  </p>
                 )}
               </div>
-              {profile.job_title && (
-                <p className="mt-0.5 text-[14px] text-eb-secondary">{profile.job_title}</p>
+
+              {(profile.email || profile.phone || publicAddressLines.length > 0) && (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  <DetailBlock label="Email" value={profile.email} />
+                  <DetailBlock label="Telephone" value={profile.phone} />
+                  <DetailBlock
+                    label="Adresse"
+                    value={publicAddressLines.length > 0 ? publicAddressLines.join("\n") : null}
+                    multiline
+                  />
+                </div>
               )}
-              {profile.location && <p className="text-[13px] text-eb-muted">{profile.location}</p>}
-              {profile.bio && (
-                <p className="mt-3 whitespace-pre-line text-[14px] leading-6 text-eb-text">
-                  {profile.bio}
-                </p>
+
+              {hasOwnerBusinessDetails && (
+                <div className="space-y-3">
+                  <SectionTitle>Informations Entreprise</SectionTitle>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <DetailBlock label="SIRET" value={profile.siret} />
+                    <DetailBlock label="Statut juridique" value={profile.legal_status} />
+                    <DetailBlock label="TVA intracom" value={profile.vat_number} />
+                    <DetailBlock label="Mention TVA" value={profile.vat_notice} multiline />
+                    <DetailBlock label="IBAN" value={profile.iban} />
+                    <DetailBlock label="BIC" value={profile.bic} />
+                    <DetailBlock label="Taux horaire" value={ownerBusinessRate} />
+                    <DetailBlock label="Conditions de paiement" value={profile.payment_terms} multiline />
+                    <DetailBlock label="Penalites de retard" value={profile.late_penalties} multiline />
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -428,7 +724,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
                 className="eb-input flex-1"
                 value={newSkill}
                 onChange={(event) => setNewSkill(event.target.value)}
-                placeholder="Ajouter une compétence…"
+                placeholder="Ajouter une competence..."
               />
               <button
                 type="submit"

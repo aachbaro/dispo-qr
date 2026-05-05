@@ -15,6 +15,7 @@ import { Link, Navigate, useParams } from "react-router-dom";
 
 import { fetchProfileOverview, getOidcLoginUrl } from "../api";
 import Agenda from "../components/agenda/Agenda";
+import ExperiencesSection from "../components/experiences/ExperiencesSection";
 import FacturesSection from "../components/factures/FacturesSection";
 import MissionsSection from "../components/missions/MissionsSection";
 import ProfileCard from "../components/ProfileCard";
@@ -33,6 +34,7 @@ export default function FreelancerProfilePage() {
   const [unavailabilities, setUnavailabilities] = useState<Unavailability[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [isOwner, setIsOwner] = useState(false);
+  const [previewPublic, setPreviewPublic] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,11 +42,15 @@ export default function FreelancerProfilePage() {
   const alreadyTriedRefresh = useRef(sessionStorage.getItem(REFRESH_KEY) === slug);
 
   useEffect(() => {
+    setPreviewPublic(false);
+  }, [slug]);
+
+  useEffect(() => {
     if (!slug) return;
     setLoading(true);
     setError(null);
 
-    fetchProfileOverview(slug, user?.token)
+    fetchProfileOverview(slug, previewPublic ? undefined : user?.token)
       .then((overview: ProfileOverview) => {
         sessionStorage.removeItem(REFRESH_KEY);
         setProfile(overview.profile);
@@ -53,7 +59,7 @@ export default function FreelancerProfilePage() {
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [slug, user?.token]);
+  }, [slug, user?.token, previewPublic]);
 
   // --- Chargement ---
   if (loading) {
@@ -67,6 +73,10 @@ export default function FreelancerProfilePage() {
   if (profile?.role === "client" && isOwner) {
     return <Navigate to="/client" replace />;
   }
+
+  const canPreviewAsClient = Boolean(user?.token && user?.slug === slug && profile?.role !== "client");
+  const displayAsOwner = isOwner && !previewPublic;
+  const agendaMissions = displayAsOwner ? missions : [];
 
   // --- Profil introuvable ---
   if (error || !profile || !slug) {
@@ -123,27 +133,79 @@ export default function FreelancerProfilePage() {
 
         <Topbar currentSlug={slug} />
 
+        {canPreviewAsClient && (
+          <section className="rounded-eb-card border border-eb-layout bg-white p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-eb-muted">
+                  Aperçu du profil
+                </p>
+                <p className="mt-1 text-[13px] text-eb-secondary">
+                  Bascule entre ta vue détenteur et la vue publique telle qu&apos;un client la verrait.
+                </p>
+              </div>
+
+              <div className="inline-flex rounded-eb border border-eb-layout bg-eb-page p-1">
+                <button
+                  type="button"
+                  onClick={() => setPreviewPublic(false)}
+                  className={`rounded-eb px-3 py-2 text-[13px] font-medium transition-colors ${
+                    !previewPublic
+                      ? "bg-eb-primary text-white"
+                      : "text-eb-secondary hover:text-eb-text"
+                  }`}
+                >
+                  Vue détenteur
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewPublic(true)}
+                  className={`rounded-eb px-3 py-2 text-[13px] font-medium transition-colors ${
+                    previewPublic
+                      ? "bg-eb-primary text-white"
+                      : "text-eb-secondary hover:text-eb-text"
+                  }`}
+                >
+                  Vue client
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
         <ProfileCard
+          key={displayAsOwner ? "owner" : "public"}
           profile={profile}
-          isOwner={isOwner}
+          isOwner={displayAsOwner}
           onProfileUpdated={(updated) =>
             setProfile((prev) => (prev ? { ...prev, ...updated } : prev))
           }
         />
 
+        {(profile.experiences.length > 0 || displayAsOwner) && (
+          <ExperiencesSection
+            key={displayAsOwner ? "owner" : "public"}
+            slug={slug}
+            isOwner={displayAsOwner}
+            token={user?.token}
+            initialExperiences={profile.experiences}
+          />
+        )}
+
         {/* Agenda : hauteur fixe, passe les missions pour colorier les slots */}
         <section className="rounded-eb-card border border-eb-layout bg-white p-4" style={{ height: "70vh" }}>
           <Agenda
+            key={displayAsOwner ? "owner" : "public"}
             slug={slug}
-            isOwner={isOwner}
+            isOwner={displayAsOwner}
             unavailabilities={unavailabilities}
             onUnavailabilitiesChange={setUnavailabilities}
-            missions={missions}
+            missions={agendaMissions}
           />
         </section>
 
         {/* Sections owner uniquement */}
-        {isOwner && user?.token && (
+        {displayAsOwner && user?.token && (
           <>
             <MissionsSection
               slug={slug}

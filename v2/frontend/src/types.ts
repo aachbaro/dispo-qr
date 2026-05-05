@@ -37,6 +37,18 @@ export interface Skill {
   name: string;
 }
 
+export interface Experience {
+  id: number;
+  title: string;
+  company: string;
+  start_date: string | null;
+  end_date: string | null;
+  description: string;
+  is_current: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface FreelancerProfile {
   id: string;
   slug: string;
@@ -47,8 +59,24 @@ export interface FreelancerProfile {
   location: string;
   bio: string;
   phone: string;
+  address_line1: string;
+  address_line2: string;
+  postal_code: string;
+  city: string;
+  country: string;
+  siret: string;
+  legal_status: string;
+  vat_number: string;
+  vat_notice: string;
+  iban: string;
+  bic: string;
+  hourly_rate: string | null;
+  currency: string;
+  payment_terms: string;
+  late_penalties: string;
   email: string;
   skills: Skill[];
+  experiences: Experience[];
 }
 
 export interface ProfileOverview {
@@ -187,6 +215,21 @@ export interface AdminAccountDetail {
   location: string;
   bio: string;
   phone: string;
+  address_line1: string;
+  address_line2: string;
+  postal_code: string;
+  city: string;
+  country: string;
+  siret: string;
+  legal_status: string;
+  vat_number: string;
+  vat_notice: string;
+  iban: string;
+  bic: string;
+  hourly_rate: string | null;
+  currency: string;
+  payment_terms: string;
+  late_penalties: string;
   email: string;
   created_at: string;
   updated_at: string;

@@ -11,6 +11,8 @@ from .views import (
     AdminAccountDetailView,
     AdminOverviewView,
     AvatarFileView,
+    ExperienceDetailView,
+    ExperiencesView,
     FactureDetailView,
     FacturesView,
     GoogleLoginView,
@@ -46,6 +48,10 @@ urlpatterns = [
 
     # --- Profil public ---
     path("profiles/<slug:slug>/", ProfileOverviewView.as_view(), name="profile-overview"),
+
+    # --- Experiences ---
+    path("profiles/<slug:slug>/experiences/", ExperiencesView.as_view(), name="experiences"),
+    path("profiles/<slug:slug>/experiences/<int:experience_id>/", ExperienceDetailView.as_view(), name="experience-detail"),
 
     # --- Skills ---
     path("profiles/<slug:slug>/skills/", SkillsView.as_view(), name="skills"),
