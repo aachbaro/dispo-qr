@@ -26,11 +26,14 @@ from .accounts import (
     serialize_profile,
 )
 from .avatar_storage import get_avatar_file_path, guess_avatar_content_type
+from .avatar_storage import delete_profile_avatar_file
 from .models import (
     AccountProfile,
+    ClientContact,
     Experience,
     Facture,
     Mission,
+    MissionTemplate,
     Skill,
     Slot,
     Unavailability,
@@ -39,9 +42,11 @@ from .models import (
 from .serializers import (
     AdminAccountDetailSerializer,
     AdminAccountSummarySerializer,
+    ClientContactSerializer,
     ExperienceSerializer,
     FactureSerializer,
     MissionSerializer,
+    MissionTemplateSerializer,
     ProfilePublicSerializer,
     ProfileUpdateSerializer,
     SkillSerializer,
@@ -88,6 +93,17 @@ def require_admin_profile(request: Request) -> tuple[AccountProfile | None, Resp
     profile = get_request_profile(request)
     if not profile or profile.role != AccountProfile.ROLE_ADMIN:
         return None, Response({"error": "Acces admin requis."}, status=403)
+
+    return profile, None
+
+
+def require_client_profile(request: Request) -> tuple[AccountProfile | None, Response | None]:
+    if not request.user.is_authenticated:
+        return None, Response({"error": "Authentification requise."}, status=401)
+
+    profile = get_request_profile(request)
+    if not profile or profile.role != AccountProfile.ROLE_CLIENT:
+        return None, Response({"error": "Acces client requis."}, status=403)
 
     return profile, None
 
@@ -362,6 +378,146 @@ class GoogleLoginView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# Vues — Espace client
+# ---------------------------------------------------------------------------
+
+class ClientDashboardView(APIView):
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request) -> Response:
+        profile, err = require_client_profile(request)
+        if err:
+            return err
+
+        contacts = profile.client_contacts.select_related("contact_profile__user").all()
+        missions = Mission.objects.select_related("profile__user", "client_profile__user").prefetch_related(
+            "slots"
+        ).filter(
+            Q(client_profile=profile) | Q(client_email__iexact=profile.user.email)
+        ).distinct()
+        factures = Facture.objects.select_related("profile__user", "mission").filter(
+            contact_email__iexact=profile.user.email
+        )
+
+        return Response(
+            {
+                "profile": ProfilePublicSerializer(
+                    profile,
+                    context={"request": request, "include_private": True},
+                ).data,
+                "contacts": ClientContactSerializer(
+                    contacts, many=True, context={"request": request}
+                ).data,
+                "templates": MissionTemplateSerializer(
+                    profile.mission_templates.all(), many=True
+                ).data,
+                "missions": MissionSerializer(missions, many=True).data,
+                "factures": FactureSerializer(factures, many=True).data,
+            }
+        )
+
+
+class ClientTemplatesView(APIView):
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request) -> Response:
+        profile, err = require_client_profile(request)
+        if err:
+            return err
+        return Response(MissionTemplateSerializer(profile.mission_templates.all(), many=True).data)
+
+    def post(self, request: Request) -> Response:
+        profile, err = require_client_profile(request)
+        if err:
+            return err
+
+        serializer = MissionTemplateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        template = serializer.save(profile=profile)
+        return Response(MissionTemplateSerializer(template).data, status=201)
+
+
+class ClientTemplateDetailView(APIView):
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def _get_owned_template(self, request: Request, template_id: int):
+        profile, err = require_client_profile(request)
+        if err:
+            return None, err
+        template = get_object_or_404(MissionTemplate, pk=template_id, profile=profile)
+        return template, None
+
+    def patch(self, request: Request, template_id: int) -> Response:
+        template, err = self._get_owned_template(request, template_id)
+        if err:
+            return err
+
+        serializer = MissionTemplateSerializer(template, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(MissionTemplateSerializer(template).data)
+
+    def delete(self, request: Request, template_id: int) -> Response:
+        template, err = self._get_owned_template(request, template_id)
+        if err:
+            return err
+        template.delete()
+        return Response(status=204)
+
+
+class ClientContactsView(APIView):
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def get(self, request: Request) -> Response:
+        profile, err = require_client_profile(request)
+        if err:
+            return err
+
+        contacts = profile.client_contacts.select_related("contact_profile__user").all()
+        return Response(
+            ClientContactSerializer(contacts, many=True, context={"request": request}).data
+        )
+
+    def post(self, request: Request) -> Response:
+        profile, err = require_client_profile(request)
+        if err:
+            return err
+
+        serializer = ClientContactSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        target_profile = get_object_or_404(
+            AccountProfile.objects.select_related("user"),
+            slug=serializer.validated_data["profile_slug"],
+            role=AccountProfile.ROLE_FREELANCE,
+        )
+        if target_profile.pk == profile.pk:
+            return Response({"error": "Impossible de s'ajouter soi-meme en contact."}, status=400)
+
+        contact, created = ClientContact.objects.get_or_create(
+            client_profile=profile,
+            contact_profile=target_profile,
+        )
+        status_code = 201 if created else 200
+        return Response(
+            ClientContactSerializer(contact, context={"request": request}).data,
+            status=status_code,
+        )
+
+
+class ClientContactDetailView(APIView):
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def delete(self, request: Request, contact_id: int) -> Response:
+        profile, err = require_client_profile(request)
+        if err:
+            return err
+
+        contact = get_object_or_404(ClientContact, pk=contact_id, client_profile=profile)
+        contact.delete()
+        return Response(status=204)
+
+
+# ---------------------------------------------------------------------------
 # Vues — Profil public
 # ---------------------------------------------------------------------------
 
@@ -417,6 +573,31 @@ class ProfileOverviewView(APIView):
                 context={"request": request, "include_private": True},
             ).data
         )
+
+
+class ProfileAccountDeleteView(APIView):
+    """POST /api/profiles/:slug/account/delete/"""
+
+    authentication_classes = [ProfileTokenAuthentication]
+
+    def post(self, request: Request, slug: str) -> Response:
+        if not request.user.is_authenticated:
+            return Response({"error": "Authentification requise."}, status=401)
+
+        profile = get_object_or_404(AccountProfile.objects.select_related("user"), slug=slug)
+        if profile.user != request.user:
+            return Response({"error": "Accès refusé."}, status=403)
+
+        confirmation = str(request.data.get("confirmation", "")).strip().upper()
+        if confirmation != "SUPPRIMER":
+            return Response(
+                {"error": "Confirmation invalide. Taper SUPPRIMER pour continuer."},
+                status=400,
+            )
+
+        delete_profile_avatar_file(profile)
+        profile.user.delete()
+        return Response({"success": True})
 
 
 class AvatarFileView(APIView):
@@ -669,29 +850,67 @@ class MissionsView(APIView):
 
     authentication_classes = [ProfileTokenAuthentication]
 
+    def _get_target_profile(self, slug: str) -> AccountProfile:
+        return get_object_or_404(AccountProfile.objects.select_related("user"), slug=slug)
+
     def get(self, request: Request, slug: str) -> Response:
         if not request.user.is_authenticated:
             return Response({"error": "Authentification requise."}, status=401)
-        profile = get_object_or_404(AccountProfile, slug=slug)
+        profile = self._get_target_profile(slug)
         if profile.user != request.user:
             return Response({"error": "Accès refusé."}, status=403)
+        if profile.role != AccountProfile.ROLE_FREELANCE:
+            return Response({"error": "Ce profil ne gere pas de missions owner."}, status=400)
 
         status_filter = request.query_params.get("status")
-        qs = profile.missions.all()
+        qs = profile.missions.select_related("profile__user", "client_profile__user").prefetch_related("slots").all()
         if status_filter:
             qs = qs.filter(status=status_filter)
 
         return Response(MissionSerializer(qs, many=True).data)
 
     def post(self, request: Request, slug: str) -> Response:
-        if not request.user.is_authenticated:
-            return Response({"error": "Authentification requise."}, status=401)
-        profile = get_object_or_404(AccountProfile, slug=slug)
-        if profile.user != request.user:
+        profile = self._get_target_profile(slug)
+        requesting_profile = get_request_profile(request)
+        is_owner = request.user.is_authenticated and profile.user == request.user
+        is_client_proposal = (
+            request.user.is_authenticated
+            and requesting_profile is not None
+            and requesting_profile.role == AccountProfile.ROLE_CLIENT
+            and profile.role == AccountProfile.ROLE_FREELANCE
+            and profile.user != request.user
+        )
+        is_public_proposal = not request.user.is_authenticated and profile.role == AccountProfile.ROLE_FREELANCE
+
+        if is_owner and profile.role != AccountProfile.ROLE_FREELANCE:
+            return Response({"error": "Ce profil ne gere pas de missions owner."}, status=400)
+        if not (is_owner or is_client_proposal or is_public_proposal):
+            if not request.user.is_authenticated:
+                return Response({"error": "Ce profil ne peut pas recevoir de mission publique."}, status=403)
             return Response({"error": "Accès refusé."}, status=403)
-        serializer = MissionSerializer(data=request.data)
+
+        serializer = MissionSerializer(
+            data=request.data,
+            context={
+                "request": request,
+                "profile": profile,
+                "proposal_mode": not is_owner,
+            },
+        )
         serializer.is_valid(raise_exception=True)
-        mission = serializer.save(profile=profile)
+        save_kwargs = {"profile": profile}
+
+        if is_client_proposal and requesting_profile is not None:
+            save_kwargs["client_profile"] = requesting_profile
+            save_kwargs["status"] = Mission.STATUS_PROPOSED
+            if not serializer.validated_data.get("client_name"):
+                save_kwargs["client_name"] = requesting_profile.display_name or requesting_profile.user.email
+            if not serializer.validated_data.get("client_email"):
+                save_kwargs["client_email"] = requesting_profile.user.email
+        elif is_public_proposal:
+            save_kwargs["status"] = Mission.STATUS_PROPOSED
+
+        mission = serializer.save(**save_kwargs)
         return Response(MissionSerializer(mission).data, status=201)
 
 
@@ -707,10 +926,14 @@ class MissionDetailView(APIView):
     def _get_owned_mission(self, request: Request, slug: str, mission_id: int):
         if not request.user.is_authenticated:
             return None, Response({"error": "Authentification requise."}, status=401)
-        profile = get_object_or_404(AccountProfile, slug=slug)
+        profile = get_object_or_404(AccountProfile.objects.select_related("user"), slug=slug)
         if profile.user != request.user:
             return None, Response({"error": "Accès refusé."}, status=403)
-        mission = get_object_or_404(Mission, pk=mission_id, profile=profile)
+        mission = get_object_or_404(
+            Mission.objects.select_related("profile__user", "client_profile__user").prefetch_related("slots"),
+            pk=mission_id,
+            profile=profile,
+        )
         return mission, None
 
     def get(self, request: Request, slug: str, mission_id: int) -> Response:
@@ -723,7 +946,12 @@ class MissionDetailView(APIView):
         mission, err = self._get_owned_mission(request, slug, mission_id)
         if err:
             return err
-        serializer = MissionSerializer(mission, data=request.data, partial=True)
+        serializer = MissionSerializer(
+            mission,
+            data=request.data,
+            partial=True,
+            context={"request": request, "profile": mission.profile},
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(MissionSerializer(mission).data)

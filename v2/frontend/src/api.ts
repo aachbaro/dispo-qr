@@ -13,11 +13,16 @@ import type {
   AccountRole,
   AuthResponse,
   AuthUser,
+  ClientContact,
+  ClientDashboardResponse,
   Experience,
   Facture,
   FactureStatus,
   FreelancerProfile,
   Mission,
+  MissionMode,
+  MissionTemplate,
+  MissionTemplateMode,
   MissionStatus,
   ProfileOverview,
   Skill,
@@ -45,12 +50,27 @@ export function getDefaultAppPath(user: Pick<AuthUser, "role" | "slug">): string
 // OIDC helpers
 // ---------------------------------------------------------------------------
 
-export function getOidcLoginUrl(): string {
-  return `${API_URL}/auth/social/login/pascuans_oidc/`;
+function appendRoleToUrl(url: string, role?: AccountRole | null): string {
+  const nextUrl = new URL(url, window.location.origin);
+  if (role !== "client" && role !== "freelance") {
+    return nextUrl.toString();
+  }
+
+  nextUrl.searchParams.set("role", role);
+  return nextUrl.toString();
 }
 
-export function getOidcRegisterUrl(): string {
-  return `${AUTH_SERVER_URL}/register/?next=${encodeURIComponent(getOidcLoginUrl())}`;
+export function getOidcLoginUrl(role?: AccountRole | null): string {
+  return appendRoleToUrl(`${API_URL}/auth/social/login/pascuans_oidc/`, role);
+}
+
+export function getOidcRegisterUrl(role?: AccountRole | null): string {
+  const registerUrl = new URL(`${AUTH_SERVER_URL}/register/`);
+  registerUrl.searchParams.set("next", getOidcLoginUrl(role));
+  if (role === "client" || role === "freelance") {
+    registerUrl.searchParams.set("role", role);
+  }
+  return registerUrl.toString();
 }
 
 export function getOidcForgotPasswordUrl(nextUrl?: string): string {
@@ -170,6 +190,64 @@ export async function googleLogin(code: string): Promise<AuthResponse> {
 }
 
 // ---------------------------------------------------------------------------
+// Espace client
+// ---------------------------------------------------------------------------
+
+export interface MissionTemplatePayload {
+  name: string;
+  establishment: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  instructions?: string;
+  establishment_address_line1?: string;
+  establishment_address_line2?: string;
+  establishment_postal_code?: string;
+  establishment_city?: string;
+  establishment_country?: string;
+  mode?: MissionTemplateMode;
+}
+
+export async function fetchClientDashboard(token: string): Promise<ClientDashboardResponse> {
+  return getJson<ClientDashboardResponse>("/client/dashboard/", token);
+}
+
+export async function fetchClientTemplates(token: string): Promise<MissionTemplate[]> {
+  return getJson<MissionTemplate[]>("/client/templates/", token);
+}
+
+export async function createClientTemplate(
+  data: MissionTemplatePayload,
+  token: string
+): Promise<MissionTemplate> {
+  return postJson<MissionTemplate>("/client/templates/", data, token);
+}
+
+export async function updateClientTemplate(
+  templateId: number,
+  data: Partial<MissionTemplatePayload>,
+  token: string
+): Promise<MissionTemplate> {
+  return patchJson<MissionTemplate>(`/client/templates/${templateId}/`, data, token);
+}
+
+export async function deleteClientTemplate(templateId: number, token: string): Promise<void> {
+  return deleteReq(`/client/templates/${templateId}/`, token);
+}
+
+export async function fetchClientContacts(token: string): Promise<ClientContact[]> {
+  return getJson<ClientContact[]>("/client/contacts/", token);
+}
+
+export async function createClientContact(profileSlug: string, token: string): Promise<ClientContact> {
+  return postJson<ClientContact>("/client/contacts/", { profile_slug: profileSlug }, token);
+}
+
+export async function deleteClientContact(contactId: number, token: string): Promise<void> {
+  return deleteReq(`/client/contacts/${contactId}/`, token);
+}
+
+// ---------------------------------------------------------------------------
 // Profil
 // ---------------------------------------------------------------------------
 
@@ -184,6 +262,7 @@ export async function updateProfile(
       FreelancerProfile,
       | "display_name"
       | "avatar_url"
+      | "role"
       | "job_title"
       | "location"
       | "bio"
@@ -211,6 +290,18 @@ export async function updateProfile(
   token: string
 ): Promise<FreelancerProfile> {
   return patchJson<FreelancerProfile>(`/profiles/${slug}/`, data, token);
+}
+
+export async function deleteAccount(
+  slug: string,
+  confirmation: string,
+  token: string
+): Promise<void> {
+  await postJson<{ success: boolean }>(
+    `/profiles/${slug}/account/delete/`,
+    { confirmation },
+    token
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -338,6 +429,39 @@ export async function deleteUnavailability(
 // Missions
 // ---------------------------------------------------------------------------
 
+export interface MissionSlotPayload {
+  title?: string;
+  start: string;
+  end: string;
+}
+
+export interface MissionPayload {
+  title?: string;
+  description?: string;
+  status?: MissionStatus;
+  notes?: string;
+  establishment?: string;
+  establishment_address_line1?: string;
+  establishment_address_line2?: string;
+  establishment_postal_code?: string;
+  establishment_city?: string;
+  establishment_country?: string;
+  contact_name?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  instructions?: string;
+  mode?: MissionMode;
+  client_name?: string;
+  client_email?: string;
+  client_phone?: string;
+  client_company?: string;
+  daily_rate?: string | null;
+  total_amount?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  slots?: MissionSlotPayload[];
+}
+
 export async function fetchMissions(slug: string, token: string, status?: MissionStatus): Promise<Mission[]> {
   const qs = status ? `?status=${encodeURIComponent(status)}` : "";
   return getJson<Mission[]>(`/profiles/${slug}/missions/${qs}`, token);
@@ -345,8 +469,8 @@ export async function fetchMissions(slug: string, token: string, status?: Missio
 
 export async function createMission(
   slug: string,
-  data: Partial<Omit<Mission, "id" | "created_at" | "updated_at">>,
-  token: string
+  data: MissionPayload,
+  token?: string | null
 ): Promise<Mission> {
   return postJson<Mission>(`/profiles/${slug}/missions/`, data, token);
 }
@@ -354,7 +478,7 @@ export async function createMission(
 export async function updateMission(
   slug: string,
   missionId: number,
-  data: Partial<Omit<Mission, "id" | "created_at" | "updated_at">>,
+  data: Partial<MissionPayload>,
   token: string
 ): Promise<Mission> {
   return patchJson<Mission>(`/profiles/${slug}/missions/${missionId}/`, data, token);

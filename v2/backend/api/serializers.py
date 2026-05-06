@@ -21,9 +21,11 @@ from .avatar_storage import (
 )
 from .models import (
     AccountProfile,
+    ClientContact,
     Experience,
     Facture,
     Mission,
+    MissionTemplate,
     Skill,
     Slot,
     Unavailability,
@@ -72,6 +74,77 @@ class ExperienceSerializer(serializers.ModelSerializer):
             )
 
         return attrs
+
+
+class MissionTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MissionTemplate
+        fields = [
+            "id",
+            "name",
+            "establishment",
+            "contact_name",
+            "contact_email",
+            "contact_phone",
+            "instructions",
+            "establishment_address_line1",
+            "establishment_address_line2",
+            "establishment_postal_code",
+            "establishment_city",
+            "establishment_country",
+            "mode",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class ClientContactProfileSerializer(serializers.ModelSerializer):
+    email = serializers.SerializerMethodField()
+    avatar_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AccountProfile
+        fields = [
+            "id",
+            "slug",
+            "display_name",
+            "avatar_url",
+            "job_title",
+            "location",
+            "bio",
+            "phone",
+            "address_line1",
+            "address_line2",
+            "postal_code",
+            "city",
+            "country",
+            "email",
+        ]
+
+    def get_email(self, obj: AccountProfile) -> str:
+        return obj.user.email or ""
+
+    def get_avatar_url(self, obj: AccountProfile) -> str | None:
+        return build_profile_avatar_url(obj, self.context.get("request"))
+
+
+class ClientContactSerializer(serializers.ModelSerializer):
+    profile = ClientContactProfileSerializer(source="contact_profile", read_only=True)
+    profile_slug = serializers.SlugField(write_only=True)
+
+    class Meta:
+        model = ClientContact
+        fields = ["id", "profile", "profile_slug", "created_at"]
+        read_only_fields = ["id", "profile", "created_at"]
+
+    def validate_profile_slug(self, value: str) -> str:
+        profile = AccountProfile.objects.filter(slug=value).first()
+        if not profile:
+            raise serializers.ValidationError("Profil introuvable.")
+        if profile.role != AccountProfile.ROLE_FREELANCE:
+            raise serializers.ValidationError("Seuls les profils freelance peuvent etre ajoutes aux contacts.")
+        return value
 
 
 class SlotSerializer(serializers.ModelSerializer):
@@ -123,6 +196,8 @@ class ProfilePublicSerializer(serializers.ModelSerializer):
         "currency",
         "payment_terms",
         "late_penalties",
+        "subscription_status",
+        "subscription_plan",
     }
 
     email = serializers.SerializerMethodField()
@@ -157,6 +232,10 @@ class ProfilePublicSerializer(serializers.ModelSerializer):
             "currency",
             "payment_terms",
             "late_penalties",
+            "subscription_status",
+            "subscription_plan",
+            "subscription_period_end",
+            "subscription_cancel_at_period_end",
             "email",
             "skills",
             "experiences",
@@ -175,6 +254,8 @@ class ProfilePublicSerializer(serializers.ModelSerializer):
 
         for field_name in self.PRIVATE_OWNER_FIELDS:
             data[field_name] = None if field_name == "hourly_rate" else ""
+        data["subscription_period_end"] = None
+        data["subscription_cancel_at_period_end"] = False
         return data
 
 
@@ -298,9 +379,36 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         ]
 
 
+class MissionSlotSerializer(serializers.ModelSerializer):
+    start = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%S")
+    end = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%S")
+
+    class Meta:
+        model = Slot
+        fields = ["id", "title", "start", "end"]
+        read_only_fields = ["id"]
+
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+        start = attrs.get("start", getattr(self.instance, "start", None))
+        end = attrs.get("end", getattr(self.instance, "end", None))
+        if start and end and end <= start:
+            raise serializers.ValidationError(
+                "L'heure de fin d'un créneau doit être postérieure à l'heure de début."
+            )
+        return attrs
+
+
 class MissionSerializer(serializers.ModelSerializer):
     """Sérialise une mission complète (lecture + écriture pour l'owner)."""
+
+    title = serializers.CharField(required=False, allow_blank=True)
     slot_count = serializers.SerializerMethodField()
+    slots = MissionSlotSerializer(many=True, required=False)
+    profile_slug = serializers.SerializerMethodField()
+    profile_display_name = serializers.SerializerMethodField()
+    client_profile_slug = serializers.SerializerMethodField()
+    client_profile_display_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Mission
@@ -310,6 +418,17 @@ class MissionSerializer(serializers.ModelSerializer):
             "description",
             "status",
             "notes",
+            "establishment",
+            "establishment_address_line1",
+            "establishment_address_line2",
+            "establishment_postal_code",
+            "establishment_city",
+            "establishment_country",
+            "contact_name",
+            "contact_email",
+            "contact_phone",
+            "instructions",
+            "mode",
             "client_name",
             "client_email",
             "client_phone",
@@ -318,14 +437,143 @@ class MissionSerializer(serializers.ModelSerializer):
             "total_amount",
             "start_date",
             "end_date",
+            "slots",
+            "profile_slug",
+            "profile_display_name",
+            "client_profile_slug",
+            "client_profile_display_name",
             "slot_count",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "slot_count", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "profile_slug",
+            "profile_display_name",
+            "client_profile_slug",
+            "client_profile_display_name",
+            "slot_count",
+            "created_at",
+            "updated_at",
+        ]
 
     def get_slot_count(self, obj: Mission) -> int:
         return obj.slots.count()
+
+    def get_profile_slug(self, obj: Mission) -> str | None:
+        return obj.profile.slug
+
+    def get_profile_display_name(self, obj: Mission) -> str:
+        return obj.profile.display_name or obj.profile.user.email or obj.profile.user.username
+
+    def get_client_profile_slug(self, obj: Mission) -> str | None:
+        if not obj.client_profile_id:
+            return None
+        return obj.client_profile.slug
+
+    def get_client_profile_display_name(self, obj: Mission) -> str | None:
+        if not obj.client_profile_id:
+            return None
+        return (
+            obj.client_profile.display_name
+            or obj.client_profile.user.email
+            or obj.client_profile.user.username
+        )
+
+    def _derive_title(self, validated_data: dict) -> str:
+        title = str(validated_data.get("title", "")).strip()
+        if title:
+            return title
+
+        establishment = str(validated_data.get("establishment", "")).strip()
+        client_company = str(validated_data.get("client_company", "")).strip()
+        client_name = str(validated_data.get("client_name", "")).strip()
+        return establishment or client_company or client_name or "Mission proposée"
+
+    def _apply_slot_dates(self, validated_data: dict, slots_data: list[dict] | None) -> None:
+        if not slots_data:
+            return
+        ordered_slots = sorted(slots_data, key=lambda slot: slot["start"])
+        if not validated_data.get("start_date"):
+            validated_data["start_date"] = ordered_slots[0]["start"].date()
+        if not validated_data.get("end_date"):
+            validated_data["end_date"] = ordered_slots[-1]["end"].date()
+
+    def _sync_slots(self, mission: Mission, slots_data: list[dict] | None) -> None:
+        if slots_data is None:
+            return
+
+        mission.slots.all().delete()
+
+        created_slots: list[Slot] = []
+        for slot_data in slots_data:
+            created_slots.append(
+                Slot.objects.create(
+                    profile=mission.profile,
+                    mission=mission,
+                    title=slot_data.get("title", "").strip() or mission.title,
+                    start=slot_data["start"],
+                    end=slot_data["end"],
+                )
+            )
+
+        if created_slots and (not mission.start_date or not mission.end_date):
+            mission.start_date = min(slot.start.date() for slot in created_slots)
+            mission.end_date = max(slot.end.date() for slot in created_slots)
+            mission.save(update_fields=["start_date", "end_date", "updated_at"])
+
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+        slots_data = attrs.get("slots")
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end_date = attrs.get("end_date", getattr(self.instance, "end_date", None))
+
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError(
+                "La date de fin doit être postérieure à la date de début."
+            )
+
+        if self.context.get("proposal_mode"):
+            establishment = str(
+                attrs.get("establishment", getattr(self.instance, "establishment", ""))
+            ).strip()
+            contact_email = str(
+                attrs.get("contact_email", getattr(self.instance, "contact_email", ""))
+            ).strip()
+            if not establishment:
+                raise serializers.ValidationError(
+                    {"establishment": "L'établissement est requis pour proposer une mission."}
+                )
+            if not contact_email:
+                raise serializers.ValidationError(
+                    {"contact_email": "L'email de contact est requis pour proposer une mission."}
+                )
+            if not slots_data:
+                raise serializers.ValidationError(
+                    {"slots": "Au moins un créneau est requis pour proposer une mission."}
+                )
+
+        return attrs
+
+    def create(self, validated_data: dict) -> Mission:
+        slots_data = validated_data.pop("slots", None)
+        validated_data["title"] = self._derive_title(validated_data)
+        self._apply_slot_dates(validated_data, slots_data)
+        mission = Mission.objects.create(**validated_data)
+        self._sync_slots(mission, slots_data)
+        return mission
+
+    def update(self, instance: Mission, validated_data: dict) -> Mission:
+        slots_data = validated_data.pop("slots", None)
+        if "title" in validated_data:
+            validated_data["title"] = self._derive_title(validated_data)
+        self._apply_slot_dates(validated_data, slots_data)
+
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        self._sync_slots(instance, slots_data)
+        return instance
 
 
 class FactureSerializer(serializers.ModelSerializer):
@@ -339,6 +587,8 @@ class FactureSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     mission_title = serializers.SerializerMethodField()
+    profile_slug = serializers.SerializerMethodField()
+    profile_display_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Facture
@@ -367,6 +617,8 @@ class FactureSerializer(serializers.ModelSerializer):
             "mention_tva",
             "conditions_paiement",
             "penalites_retard",
+            "profile_slug",
+            "profile_display_name",
             "created_at",
             "updated_at",
         ]
@@ -374,6 +626,12 @@ class FactureSerializer(serializers.ModelSerializer):
 
     def get_mission_title(self, obj: Facture) -> str | None:
         return obj.mission.title if obj.mission_id else None
+
+    def get_profile_slug(self, obj: Facture) -> str | None:
+        return obj.profile.slug
+
+    def get_profile_display_name(self, obj: Facture) -> str:
+        return obj.profile.display_name or obj.profile.user.email or obj.profile.user.username
 
     def validate_numero(self, value: str) -> str:
         normalized = value.strip()

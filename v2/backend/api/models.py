@@ -101,6 +101,10 @@ class AccountProfile(models.Model):
         blank=True,
         default="Taux BCE + 10 pts, indemnite forfaitaire 40 EUR",
     )
+    subscription_status = models.CharField(max_length=24, blank=True, default="")
+    subscription_plan = models.CharField(max_length=80, blank=True)
+    subscription_period_end = models.DateTimeField(null=True, blank=True)
+    subscription_cancel_at_period_end = models.BooleanField(default=False)
 
     # --- Auth ---
     auth_provider = models.CharField(
@@ -183,6 +187,67 @@ class Experience(models.Model):
 
 
 # ---------------------------------------------------------------------------
+# Client workspace — Templates & contacts
+# ---------------------------------------------------------------------------
+
+class MissionTemplate(models.Model):
+    MODE_FREELANCE = "freelance"
+    MODE_SALARIE = "salarie"
+    MODE_CHOICES = [
+        (MODE_FREELANCE, "Freelance"),
+        (MODE_SALARIE, "Salarie"),
+    ]
+
+    profile = models.ForeignKey(
+        AccountProfile, on_delete=models.CASCADE, related_name="mission_templates"
+    )
+    name = models.CharField(max_length=160)
+    establishment = models.CharField(max_length=160)
+    contact_name = models.CharField(max_length=160, blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=30, blank=True)
+    instructions = models.TextField(blank=True)
+    establishment_address_line1 = models.CharField(max_length=255, blank=True)
+    establishment_address_line2 = models.CharField(max_length=255, blank=True)
+    establishment_postal_code = models.CharField(max_length=20, blank=True)
+    establishment_city = models.CharField(max_length=120, blank=True)
+    establishment_country = models.CharField(max_length=120, blank=True)
+    mode = models.CharField(
+        max_length=20, choices=MODE_CHOICES, default=MODE_FREELANCE
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ClientContact(models.Model):
+    client_profile = models.ForeignKey(
+        AccountProfile, on_delete=models.CASCADE, related_name="client_contacts"
+    )
+    contact_profile = models.ForeignKey(
+        AccountProfile, on_delete=models.CASCADE, related_name="saved_by_clients"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["client_profile", "contact_profile"],
+                name="unique_contact_per_client_profile",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.client_profile} -> {self.contact_profile}"
+
+
+# ---------------------------------------------------------------------------
 # Agenda — Créneaux de disponibilité
 # ---------------------------------------------------------------------------
 
@@ -252,15 +317,28 @@ class Mission(models.Model):
     STATUS_ONGOING   = "en_cours"
     STATUS_COMPLETED = "terminée"
     STATUS_REFUSED   = "refusée"
+    MODE_FREELANCE = "freelance"
+    MODE_SALARIE = "salarie"
     STATUS_CHOICES = [
         (STATUS_PROPOSED,  "Proposée"),
         (STATUS_ONGOING,   "En cours"),
         (STATUS_COMPLETED, "Terminée"),
         (STATUS_REFUSED,   "Refusée"),
     ]
+    MODE_CHOICES = [
+        (MODE_FREELANCE, "Freelance"),
+        (MODE_SALARIE, "Salarie"),
+    ]
 
     profile = models.ForeignKey(
         AccountProfile, on_delete=models.CASCADE, related_name="missions"
+    )
+    client_profile = models.ForeignKey(
+        AccountProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="client_missions",
     )
 
     # --- Infos mission ---
@@ -270,6 +348,21 @@ class Mission(models.Model):
         max_length=20, choices=STATUS_CHOICES, default=STATUS_PROPOSED
     )
     notes       = models.TextField(blank=True)
+    establishment = models.CharField(max_length=200, blank=True)
+    establishment_address_line1 = models.CharField(max_length=255, blank=True)
+    establishment_address_line2 = models.CharField(max_length=255, blank=True)
+    establishment_postal_code = models.CharField(max_length=20, blank=True)
+    establishment_city = models.CharField(max_length=120, blank=True)
+    establishment_country = models.CharField(
+        max_length=120, blank=True, default="France"
+    )
+    contact_name = models.CharField(max_length=200, blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=30, blank=True)
+    instructions = models.TextField(blank=True)
+    mode = models.CharField(
+        max_length=20, choices=MODE_CHOICES, default=MODE_FREELANCE
+    )
 
     # --- Client ---
     client_name    = models.CharField(max_length=200, blank=True)

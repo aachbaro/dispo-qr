@@ -56,9 +56,17 @@ export default function MissionCard({ mission, onClick, onDelete }: Props) {
       </div>
 
       {/* Client */}
-      {(mission.client_name || mission.client_company) && (
+      {(mission.establishment || mission.client_company || mission.client_name) && (
         <p className="mt-1.5 text-[13px] text-eb-secondary">
-          {[mission.client_name, mission.client_company].filter(Boolean).join(" · ")}
+          {[mission.establishment, mission.client_company, mission.client_name]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
+
+      {(mission.contact_name || mission.contact_email) && (
+        <p className="mt-1 text-[12px] text-eb-muted">
+          {[mission.contact_name, mission.contact_email].filter(Boolean).join(" · ")}
         </p>
       )}
 

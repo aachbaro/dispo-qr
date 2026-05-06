@@ -1,10 +1,9 @@
 /**
  * src/components/Topbar.tsx
  * Layer  : Frontend — composant UI partagé
- * Role   : Barre de navigation commune à toutes les pages authentifiées.
- *          Affiche le logo, le nom de l'utilisateur connecté, un lien
- *          "Mon profil" si on n'est pas sur sa propre page, et le bouton
- *          de déconnexion.
+ * Role   : Barre de navigation commune aux pages publiques et authentifiées.
+ *          Affiche le logo, puis soit les actions de session publique,
+ *          soit les raccourcis du compte connecté + la déconnexion.
  * Deps   : UserContext, api (getOidcLogoutUrl)
  */
 
@@ -32,7 +31,7 @@ export default function Topbar({ currentSlug }: Props) {
       </Link>
 
       <div className="flex items-center gap-3">
-        {user && (
+        {user ? (
           <>
             <span className="hidden text-[13px] text-eb-secondary sm:block">
               {user.display_name} · {user.role}
@@ -53,11 +52,20 @@ export default function Topbar({ currentSlug }: Props) {
                 </Link>
               )
             )}
+            <button type="button" onClick={handleLogout} className="eb-btn-ghost text-[13px]">
+              Se déconnecter
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/register" className="eb-btn-ghost text-[13px]">
+              Creer un compte
+            </Link>
+            <Link to="/login" className="eb-btn-ghost text-[13px]">
+              Se connecter
+            </Link>
           </>
         )}
-        <button type="button" onClick={handleLogout} className="eb-btn-ghost text-[13px]">
-          Se déconnecter
-        </button>
       </div>
     </div>
   );

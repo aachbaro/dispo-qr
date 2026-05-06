@@ -97,7 +97,7 @@ export default function RegisterPage() {
           <span className="font-logo text-[24px] leading-none text-eb-text">ExtraBeam</span>
           <h2 className="mt-7 text-[22px] font-semibold leading-tight text-eb-text">Inscription</h2>
           <p className="mt-2 text-[14px] leading-6 text-eb-secondary">
-            Creez votre espace freelance en quelques instants.
+            Choisis ton type de compte puis cree ton acces pascuans en quelques instants.
           </p>
         </div>
 
@@ -107,12 +107,39 @@ export default function RegisterPage() {
             <p className="text-[14px] leading-6 text-eb-text">
               L'inscription principale passe maintenant par le compte pascuans partage avec fragment.
             </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className={`eb-focus-ring min-h-[42px] rounded-eb border px-3 text-[14px] font-medium ${
+                  role === "freelance"
+                    ? "border-eb-primary bg-[#EFF6FF] text-eb-primary"
+                    : "border-eb-input bg-white text-eb-text"
+                }`}
+                onClick={() => setRole("freelance")}
+              >
+                Freelance
+              </button>
+              <button
+                type="button"
+                className={`eb-focus-ring min-h-[42px] rounded-eb border px-3 text-[14px] font-medium ${
+                  role === "client"
+                    ? "border-eb-primary bg-[#EFF6FF] text-eb-primary"
+                    : "border-eb-input bg-white text-eb-text"
+                }`}
+                onClick={() => setRole("client")}
+              >
+                Client
+              </button>
+            </div>
             <a
-              href={getOidcRegisterUrl()}
+              href={getOidcRegisterUrl(role)}
               className="eb-focus-ring inline-flex min-h-[44px] w-full items-center justify-center rounded-eb bg-eb-success px-4 text-[14px] font-medium text-white"
             >
               Creer mon compte pascuans
             </a>
+            <p className="text-[12px] leading-5 text-eb-secondary">
+              Ce choix sera repris automatiquement au retour dans ExtraBeam, et tu pourras encore le changer ensuite.
+            </p>
           </div>
 
           {showLocalDebugAuth ? (

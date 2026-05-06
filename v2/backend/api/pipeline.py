@@ -39,13 +39,25 @@ def sync_pascuans_profile(backend, user=None, uid=None, response=None, details=N
     )
     avatar_url = response.get("picture") or ""
     oidc_sub = str(response.get("sub") or uid or "").strip() or None
+    requested_role = backend.strategy.session_pop("role", None)
+    if requested_role not in {
+        AccountProfile.ROLE_FREELANCE,
+        AccountProfile.ROLE_CLIENT,
+    }:
+        requested_role = None
+
+    profile_defaults = {
+        "display_name": display_name,
+        "avatar_url": avatar_url,
+        "auth_provider": AccountProfile.AUTH_PROVIDER_PASCUANS,
+        "oidc_sub": oidc_sub,
+    }
+    if requested_role:
+        profile_defaults["role"] = requested_role
 
     profile = get_or_create_profile_for_user(
         user,
-        display_name=display_name,
-        avatar_url=avatar_url,
-        auth_provider=AccountProfile.AUTH_PROVIDER_PASCUANS,
-        oidc_sub=oidc_sub,
+        **profile_defaults,
     )
 
     dirty_fields: list[str] = []

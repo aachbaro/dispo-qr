@@ -74,6 +74,10 @@ export interface FreelancerProfile {
   currency: string;
   payment_terms: string;
   late_penalties: string;
+  subscription_status: string;
+  subscription_plan: string;
+  subscription_period_end: string | null;
+  subscription_cancel_at_period_end: boolean;
   email: string;
   skills: Skill[];
   experiences: Experience[];
@@ -114,6 +118,14 @@ export interface Unavailability {
 // ---------------------------------------------------------------------------
 
 export type MissionStatus = "proposée" | "en_cours" | "terminée" | "refusée";
+export type MissionMode = "freelance" | "salarie";
+
+export interface MissionSlot {
+  id: number;
+  title: string;
+  start: string;
+  end: string;
+}
 
 export interface Mission {
   id: number;
@@ -121,6 +133,17 @@ export interface Mission {
   description: string;
   status: MissionStatus;
   notes: string;
+  establishment: string;
+  establishment_address_line1: string;
+  establishment_address_line2: string;
+  establishment_postal_code: string;
+  establishment_city: string;
+  establishment_country: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  instructions: string;
+  mode: MissionMode;
   client_name: string;
   client_email: string;
   client_phone: string;
@@ -129,6 +152,11 @@ export interface Mission {
   total_amount: string | null;
   start_date: string | null;   // "YYYY-MM-DD"
   end_date: string | null;
+  slots: MissionSlot[];
+  profile_slug: string | null;
+  profile_display_name: string;
+  client_profile_slug: string | null;
+  client_profile_display_name: string | null;
   slot_count: number;          // calculé par le backend
   created_at: string;
   updated_at: string;
@@ -165,8 +193,65 @@ export interface Facture {
   mention_tva: string;
   conditions_paiement: string;
   penalites_retard: string;
+  profile_slug: string | null;
+  profile_display_name: string;
   created_at: string;
   updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Espace client
+// ---------------------------------------------------------------------------
+
+export type MissionTemplateMode = "freelance" | "salarie";
+
+export interface MissionTemplate {
+  id: number;
+  name: string;
+  establishment: string;
+  contact_name: string;
+  contact_email: string;
+  contact_phone: string;
+  instructions: string;
+  establishment_address_line1: string;
+  establishment_address_line2: string;
+  establishment_postal_code: string;
+  establishment_city: string;
+  establishment_country: string;
+  mode: MissionTemplateMode;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientContactProfile {
+  id: string;
+  slug: string;
+  display_name: string;
+  avatar_url: string | null;
+  job_title: string;
+  location: string;
+  bio: string;
+  phone: string;
+  address_line1: string;
+  address_line2: string;
+  postal_code: string;
+  city: string;
+  country: string;
+  email: string;
+}
+
+export interface ClientContact {
+  id: number;
+  profile: ClientContactProfile;
+  created_at: string;
+}
+
+export interface ClientDashboardResponse {
+  profile: FreelancerProfile;
+  contacts: ClientContact[];
+  templates: MissionTemplate[];
+  missions: Mission[];
+  factures: Facture[];
 }
 
 // ---------------------------------------------------------------------------

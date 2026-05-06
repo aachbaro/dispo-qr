@@ -11,7 +11,13 @@
  */
 
 import { useEffect, useState } from "react";
-import { createMission, deleteMission, fetchMissions, updateMission } from "../../api";
+import {
+  createMission,
+  deleteMission,
+  fetchMissions,
+  type MissionPayload,
+  updateMission,
+} from "../../api";
 import type { Mission, MissionStatus } from "../../types";
 import MissionCard from "./MissionCard";
 import MissionForm from "./MissionForm";
@@ -60,12 +66,12 @@ export default function MissionsSection({ slug, token, onMissionsChange }: Props
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug, token]);
 
-  async function handleCreate(data: Partial<Omit<Mission, "id" | "created_at" | "updated_at">>) {
+  async function handleCreate(data: MissionPayload) {
     const created = await createMission(slug, data, token);
     updateMissions([created, ...missions]);
   }
 
-  async function handleUpdate(id: number, data: Partial<Omit<Mission, "id" | "created_at" | "updated_at">>) {
+  async function handleUpdate(id: number, data: Partial<MissionPayload>) {
     const updated = await updateMission(slug, id, data, token);
     updateMissions(missions.map((m) => (m.id === id ? updated : m)));
   }

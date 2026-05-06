@@ -2,6 +2,7 @@ import datetime
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
@@ -13,14 +14,17 @@ from rest_framework.test import APITestCase
 
 from .models import (
     AccountProfile,
+    ClientContact,
     Experience,
     Facture,
     Mission,
+    MissionTemplate,
     Skill,
     Slot,
     Unavailability,
     UserApiToken,
 )
+from .pipeline import sync_pascuans_profile
 
 User = get_user_model()
 
@@ -279,6 +283,31 @@ class AuthApiTests(APITestCase):
         self.assertEqual(response.url, "http://127.0.0.1:8001/logout/?next=http%3A%2F%2F127.0.0.1%3A5180%2Flogin")
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    def test_sync_pascuans_profile_uses_role_stored_in_session(self):
+        user = User.objects.create_user(
+            username="role-choice@extrabeam.fr",
+            email="role-choice@extrabeam.fr",
+            password="bonjour123",
+        )
+        backend = SimpleNamespace(
+            strategy=SimpleNamespace(
+                session_pop=lambda name, default=None: AccountProfile.ROLE_CLIENT
+                if name == "role"
+                else default
+            )
+        )
+
+        sync_pascuans_profile(
+            backend,
+            user=user,
+            uid="oidc-role-choice",
+            response={"sub": "oidc-role-choice"},
+            details={"email": user.email},
+        )
+
+        user.refresh_from_db()
+        self.assertEqual(user.account_profile.role, AccountProfile.ROLE_CLIENT)
+
 
 class ProfileApiTests(APITestCase):
     def setUp(self):
@@ -330,6 +359,10 @@ class ProfileApiTests(APITestCase):
         self.profile.siret = "12345678900012"
         self.profile.iban = "FR7612345987650123456789014"
         self.profile.vat_number = "FR00123456789"
+        self.profile.subscription_status = "active"
+        self.profile.subscription_plan = "ExtraBeam Pro"
+        self.profile.subscription_period_end = timezone.now() + datetime.timedelta(days=30)
+        self.profile.subscription_cancel_at_period_end = True
         self.profile.address_line1 = "12 rue des Halles"
         self.profile.city = "Lille"
         self.profile.save(
@@ -337,6 +370,10 @@ class ProfileApiTests(APITestCase):
                 "siret",
                 "iban",
                 "vat_number",
+                "subscription_status",
+                "subscription_plan",
+                "subscription_period_end",
+                "subscription_cancel_at_period_end",
                 "address_line1",
                 "city",
                 "updated_at",
@@ -351,7 +388,42 @@ class ProfileApiTests(APITestCase):
         self.assertEqual(response.data["profile"]["siret"], "")
         self.assertEqual(response.data["profile"]["iban"], "")
         self.assertEqual(response.data["profile"]["vat_number"], "")
+        self.assertEqual(response.data["profile"]["subscription_status"], "")
+        self.assertEqual(response.data["profile"]["subscription_plan"], "")
+        self.assertIsNone(response.data["profile"]["subscription_period_end"])
+        self.assertFalse(response.data["profile"]["subscription_cancel_at_period_end"])
         self.assertIsNone(response.data["profile"]["hourly_rate"])
+
+    def test_profile_owner_view_includes_subscription_fields(self):
+        subscription_end = timezone.now() + datetime.timedelta(days=14)
+        self.profile.subscription_status = "active"
+        self.profile.subscription_plan = "ExtraBeam Pro"
+        self.profile.subscription_period_end = subscription_end
+        self.profile.subscription_cancel_at_period_end = True
+        self.profile.save(
+            update_fields=[
+                "subscription_status",
+                "subscription_plan",
+                "subscription_period_end",
+                "subscription_cancel_at_period_end",
+                "updated_at",
+            ]
+        )
+
+        response = self.client.get(
+            reverse("profile-overview", args=[self.profile.slug]),
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["mode"], "owner")
+        self.assertEqual(response.data["profile"]["subscription_status"], "active")
+        self.assertEqual(response.data["profile"]["subscription_plan"], "ExtraBeam Pro")
+        self.assertEqual(
+            response.data["profile"]["subscription_period_end"],
+            subscription_end.isoformat().replace("+00:00", "Z"),
+        )
+        self.assertTrue(response.data["profile"]["subscription_cancel_at_period_end"])
 
     def test_profile_patch_accepts_uploaded_avatar_and_serves_short_url(self):
         upload_data = "data:image/jpeg;base64,QUJDREVGR0g="
@@ -413,6 +485,36 @@ class ProfileApiTests(APITestCase):
         self.assertEqual(
             response.data["profile"]["experiences"][0]["title"], "Chef de rang"
         )
+
+    def test_profile_account_delete_requires_confirmation_keyword(self):
+        response = self.client.post(
+            reverse("profile-account-delete", args=[self.profile.slug]),
+            {"confirmation": "non"},
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["error"],
+            "Confirmation invalide. Taper SUPPRIMER pour continuer.",
+        )
+        self.assertTrue(User.objects.filter(pk=self.user.pk).exists())
+        self.assertTrue(AccountProfile.objects.filter(pk=self.profile.pk).exists())
+
+    def test_profile_account_delete_removes_user_and_profile(self):
+        response = self.client.post(
+            reverse("profile-account-delete", args=[self.profile.slug]),
+            {"confirmation": "SUPPRIMER"},
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"success": True})
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+        self.assertFalse(AccountProfile.objects.filter(pk=self.profile.pk).exists())
+        self.assertFalse(UserApiToken.objects.filter(token=self.token.token).exists())
 
 
 class ExperiencesApiTests(APITestCase):
@@ -846,3 +948,150 @@ class AdminApiTests(APITestCase):
         self.assertEqual(len(response.data["missions"]), 1)
         self.assertEqual(len(response.data["slots"]), 1)
         self.assertEqual(len(response.data["unavailabilities"]), 1)
+
+
+class ClientWorkspaceApiTests(APITestCase):
+    def setUp(self):
+        self.client_user = User.objects.create_user(
+            username="client-workspace@extrabeam.fr",
+            email="client-workspace@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.client_profile = AccountProfile.objects.create(
+            user=self.client_user,
+            display_name="Client Workspace",
+            role=AccountProfile.ROLE_CLIENT,
+            auth_provider=AccountProfile.AUTH_PROVIDER_PASCUANS,
+            slug="client-workspace",
+        )
+        self.client_token = UserApiToken.get_or_create_for_profile(self.client_profile)
+
+        self.freelance_user = User.objects.create_user(
+            username="freelance-contact@extrabeam.fr",
+            email="freelance-contact@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.freelance_profile = AccountProfile.objects.create(
+            user=self.freelance_user,
+            display_name="Freelance Contact",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="freelance-contact",
+            job_title="Chef de rang",
+            city="Lille",
+            phone="0601020304",
+        )
+
+        self.template = MissionTemplate.objects.create(
+            profile=self.client_profile,
+            name="Service soir",
+            establishment="Bistrot Central",
+            contact_name="Lea",
+            contact_email="lea@bistrot.fr",
+        )
+        self.contact = ClientContact.objects.create(
+            client_profile=self.client_profile,
+            contact_profile=self.freelance_profile,
+        )
+        self.mission = Mission.objects.create(
+            profile=self.freelance_profile,
+            title="Renfort vendredi",
+            status=Mission.STATUS_PROPOSED,
+            client_name="Client Workspace",
+            client_email=self.client_user.email,
+            client_company="Bistrot Central",
+        )
+        self.facture = Facture.objects.create(
+            profile=self.freelance_profile,
+            mission=self.mission,
+            numero="2026-0001",
+            client_name="Bistrot Central",
+            contact_name="Client Workspace",
+            contact_email=self.client_user.email,
+            montant_ht="120.00",
+            tva="0.00",
+            montant_ttc="120.00",
+        )
+
+    def test_client_dashboard_returns_workspace_payload(self):
+        response = self.client.get(
+            reverse("client-dashboard"),
+            HTTP_AUTHORIZATION=f"Token {self.client_token.token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["profile"]["role"], AccountProfile.ROLE_CLIENT)
+        self.assertEqual(len(response.data["templates"]), 1)
+        self.assertEqual(len(response.data["contacts"]), 1)
+        self.assertEqual(response.data["contacts"][0]["profile"]["slug"], "freelance-contact")
+        self.assertEqual(len(response.data["missions"]), 1)
+        self.assertEqual(response.data["missions"][0]["profile_slug"], "freelance-contact")
+        self.assertEqual(len(response.data["factures"]), 1)
+        self.assertEqual(response.data["factures"][0]["profile_slug"], "freelance-contact")
+
+    def test_client_can_crud_templates(self):
+        create_response = self.client.post(
+            reverse("client-templates"),
+            {
+                "name": "Brunch weekend",
+                "establishment": "Cafe du Marche",
+                "contact_name": "Nina",
+                "mode": "freelance",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.client_token.token}",
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        template_id = create_response.data["id"]
+
+        patch_response = self.client.patch(
+            reverse("client-template-detail", args=[template_id]),
+            {"instructions": "Arriver 30 minutes avant le service."},
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.client_token.token}",
+        )
+
+        self.assertEqual(patch_response.status_code, 200)
+        self.assertEqual(
+            patch_response.data["instructions"],
+            "Arriver 30 minutes avant le service.",
+        )
+
+        delete_response = self.client.delete(
+            reverse("client-template-detail", args=[template_id]),
+            HTTP_AUTHORIZATION=f"Token {self.client_token.token}",
+        )
+
+        self.assertEqual(delete_response.status_code, 204)
+
+    def test_client_can_add_and_remove_contact_by_slug(self):
+        other_freelance_user = User.objects.create_user(
+            username="other-freelance@extrabeam.fr",
+            email="other-freelance@extrabeam.fr",
+            password="bonjour123",
+        )
+        other_freelance_profile = AccountProfile.objects.create(
+            user=other_freelance_user,
+            display_name="Other Freelance",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="other-freelance",
+        )
+
+        create_response = self.client.post(
+            reverse("client-contacts"),
+            {"profile_slug": other_freelance_profile.slug},
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.client_token.token}",
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        self.assertEqual(create_response.data["profile"]["slug"], "other-freelance")
+
+        delete_response = self.client.delete(
+            reverse("client-contact-detail", args=[create_response.data["id"]]),
+            HTTP_AUTHORIZATION=f"Token {self.client_token.token}",
+        )
+
+        self.assertEqual(delete_response.status_code, 204)

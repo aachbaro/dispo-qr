@@ -11,14 +11,17 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 
-import { fetchProfileOverview, getOidcLoginUrl } from "../api";
+import { fetchProfileOverview, getDefaultAppPath, getOidcLoginUrl } from "../api";
+import AccountRoleCard from "../components/AccountRoleCard";
 import Agenda from "../components/agenda/Agenda";
 import ExperiencesSection from "../components/experiences/ExperiencesSection";
 import FacturesSection from "../components/factures/FacturesSection";
 import MissionsSection from "../components/missions/MissionsSection";
+import PublicMissionProposalCard from "../components/missions/PublicMissionProposalCard";
 import ProfileCard from "../components/ProfileCard";
+import AccountSettingsSection from "../components/settings/AccountSettingsSection";
 import Topbar from "../components/Topbar";
 import UnavailabilitySection from "../components/unavailabilities/UnavailabilitySection";
 import { useUserContext } from "../context/UserContext";
@@ -28,7 +31,8 @@ const REFRESH_KEY = "eb_profile_refresh_attempted";
 
 export default function FreelancerProfilePage() {
   const { slug } = useParams<{ slug: string }>();
-  const { user, clearUser } = useUserContext();
+  const navigate = useNavigate();
+  const { user, clearUser, setUser } = useUserContext();
 
   const [profile, setProfile] = useState<FreelancerProfile | null>(null);
   const [unavailabilities, setUnavailabilities] = useState<Unavailability[]>([]);
@@ -74,9 +78,26 @@ export default function FreelancerProfilePage() {
     return <Navigate to="/client" replace />;
   }
 
-  const canPreviewAsClient = Boolean(user?.token && user?.slug === slug && profile?.role !== "client");
-  const displayAsOwner = isOwner && !previewPublic;
-  const agendaMissions = displayAsOwner ? missions : [];
+  function handleProfileUpdated(updated: FreelancerProfile) {
+    setProfile((prev) => (prev ? { ...prev, ...updated } : prev));
+
+    if (!user?.token) {
+      return;
+    }
+
+    const nextUser = {
+      ...user,
+      slug: updated.slug,
+      display_name: updated.display_name,
+      avatar_url: updated.avatar_url,
+      role: updated.role,
+    };
+    setUser(nextUser);
+
+    if (updated.role !== user.role) {
+      navigate(getDefaultAppPath(nextUser), { replace: true });
+    }
+  }
 
   // --- Profil introuvable ---
   if (error || !profile || !slug) {
@@ -126,6 +147,17 @@ export default function FreelancerProfilePage() {
     );
   }
 
+  const canPreviewAsClient = Boolean(
+    user?.token && user?.slug === slug && profile.role !== "client"
+  );
+  const displayAsOwner = isOwner && !previewPublic;
+  const agendaMissions = displayAsOwner ? missions : [];
+  const canReceivePublicMission =
+    !displayAsOwner &&
+    profile.role === "freelance" &&
+    user?.slug !== slug &&
+    (!user || user.role === "client");
+
   // --- Page profil ---
   return (
     <main className="min-h-screen bg-eb-page">
@@ -173,14 +205,23 @@ export default function FreelancerProfilePage() {
           </section>
         )}
 
+        {displayAsOwner && user?.token && (
+          <AccountRoleCard
+            slug={profile.slug}
+            role={profile.role}
+            token={user.token}
+            onRoleChanged={handleProfileUpdated}
+          />
+        )}
+
         <ProfileCard
           key={displayAsOwner ? "owner" : "public"}
           profile={profile}
           isOwner={displayAsOwner}
-          onProfileUpdated={(updated) =>
-            setProfile((prev) => (prev ? { ...prev, ...updated } : prev))
-          }
+          onProfileUpdated={handleProfileUpdated}
         />
+
+        {canReceivePublicMission && <PublicMissionProposalCard slug={slug} />}
 
         {(profile.experiences.length > 0 || displayAsOwner) && (
           <ExperiencesSection
@@ -224,6 +265,12 @@ export default function FreelancerProfilePage() {
               slug={slug}
               token={user.token}
               missions={missions}
+            />
+
+            <AccountSettingsSection
+              profile={profile}
+              token={user.token}
+              authProvider={user.auth_provider}
             />
           </>
         )}

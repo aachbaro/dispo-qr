@@ -11,6 +11,11 @@ from .views import (
     AdminAccountDetailView,
     AdminOverviewView,
     AvatarFileView,
+    ClientContactDetailView,
+    ClientContactsView,
+    ClientDashboardView,
+    ClientTemplateDetailView,
+    ClientTemplatesView,
     ExperienceDetailView,
     ExperiencesView,
     FactureDetailView,
@@ -20,6 +25,7 @@ from .views import (
     LoginView,
     MissionDetailView,
     MissionsView,
+    ProfileAccountDeleteView,
     ProfileOverviewView,
     RegisterView,
     SkillDetailView,
@@ -42,12 +48,20 @@ urlpatterns = [
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/google/", GoogleLoginView.as_view(), name="google-login"),
 
+    # --- Espace client ---
+    path("client/dashboard/", ClientDashboardView.as_view(), name="client-dashboard"),
+    path("client/templates/", ClientTemplatesView.as_view(), name="client-templates"),
+    path("client/templates/<int:template_id>/", ClientTemplateDetailView.as_view(), name="client-template-detail"),
+    path("client/contacts/", ClientContactsView.as_view(), name="client-contacts"),
+    path("client/contacts/<int:contact_id>/", ClientContactDetailView.as_view(), name="client-contact-detail"),
+
     # --- Admin ---
     path("admin/overview/", AdminOverviewView.as_view(), name="admin-overview"),
     path("admin/accounts/<int:account_id>/", AdminAccountDetailView.as_view(), name="admin-account-detail"),
 
     # --- Profil public ---
     path("profiles/<slug:slug>/", ProfileOverviewView.as_view(), name="profile-overview"),
+    path("profiles/<slug:slug>/account/delete/", ProfileAccountDeleteView.as_view(), name="profile-account-delete"),
 
     # --- Experiences ---
     path("profiles/<slug:slug>/experiences/", ExperiencesView.as_view(), name="experiences"),
