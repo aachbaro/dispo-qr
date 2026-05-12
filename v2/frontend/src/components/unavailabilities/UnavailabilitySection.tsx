@@ -14,28 +14,14 @@ import {
   deleteUnavailability,
   updateUnavailability,
 } from "../../api";
+import {
+  formatUnavailabilityDateWithWeekday,
+  formatUnavailabilityRuleLabel,
+  formatUnavailabilityTimeRange,
+  listUpcomingUnavailabilityOccurrences,
+} from "../../lib/unavailability";
 import type { Unavailability } from "../../types";
 import UnavailabilityForm from "./UnavailabilityForm";
-
-const WEEKDAY_LABELS: Record<number, string> = {
-  1: "Lundi", 2: "Mardi", 3: "Mercredi", 4: "Jeudi",
-  5: "Vendredi", 6: "Samedi", 7: "Dimanche",
-};
-
-function formatDate(d: string | null): string {
-  if (!d) return "—";
-  const [y, m, day] = d.split("-");
-  return `${day}/${m}/${y}`;
-}
-
-function unavailLabel(u: Unavailability): string {
-  if (u.recurrence_type === "weekly" && u.weekday) {
-    const day = WEEKDAY_LABELS[u.weekday] ?? `Jour ${u.weekday}`;
-    const end = u.recurrence_end ? ` (jusqu'au ${formatDate(u.recurrence_end)})` : "";
-    return `${day}${end}`;
-  }
-  return formatDate(u.start_date);
-}
 
 interface Props {
   slug: string;
@@ -53,6 +39,7 @@ export default function UnavailabilitySection({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Unavailability | null>(null);
   const list = unavailabilities;
+  const upcoming = listUpcomingUnavailabilityOccurrences(list, { limit: 8, maxDays: 60 });
 
   async function handleCreate(data: Partial<Omit<Unavailability, "id" | "exceptions">>) {
     const created = await createUnavailability(slug, data, token);
@@ -80,14 +67,19 @@ export default function UnavailabilitySection({
   return (
     <section className="rounded-eb-card border border-eb-layout bg-white p-4">
       {/* En-tête */}
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-eb-muted">
-          Indisponibilités
-        </p>
+      <div className="mb-4 flex flex-col items-center justify-between gap-3 text-center sm:flex-row sm:text-left">
+        <div>
+          <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-eb-muted">
+            Indisponibilités
+          </p>
+          <p className="mt-1 text-[13px] text-eb-secondary">
+            Gère tes règles récurrentes et tes longues plages d'absence depuis un seul endroit.
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => { setEditing(null); setShowForm(true); }}
-          className="eb-btn-primary text-[12px] px-3 py-1.5"
+          className="eb-btn-primary px-3 py-1.5 text-[12px]"
         >
           + Ajouter
         </button>
@@ -99,6 +91,39 @@ export default function UnavailabilitySection({
         </p>
       ) : (
         <div className="space-y-4">
+          {upcoming.length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-eb-muted">
+                À venir
+              </p>
+              <div className="space-y-2">
+                {upcoming.map((occurrence) => (
+                  <button
+                    key={`${occurrence.sourceId}-${occurrence.date}`}
+                    type="button"
+                    onClick={() => {
+                      setEditing(occurrence.source);
+                      setShowForm(true);
+                    }}
+                    className="group flex w-full flex-col items-center justify-between gap-2 rounded-eb border border-eb-layout bg-[#FBFDFF] px-4 py-3 text-center transition-colors hover:border-[#93c5fd] sm:flex-row sm:text-left"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-eb-text">
+                        {formatUnavailabilityDateWithWeekday(occurrence.date)}
+                      </p>
+                      <p className="mt-1 text-[12px] text-eb-muted">
+                        {formatUnavailabilityTimeRange(occurrence.source)}
+                      </p>
+                    </div>
+                    <span className="text-[12px] text-eb-muted group-hover:text-eb-text">
+                      Modifier la règle
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Récurrentes */}
           {weekly.length > 0 && (
             <div>
@@ -110,7 +135,7 @@ export default function UnavailabilitySection({
                   <UnavailabilityRow
                     key={u.id}
                     unavailability={u}
-                    label={unavailLabel(u)}
+                    label={formatUnavailabilityRuleLabel(u)}
                     onClick={() => { setEditing(u); setShowForm(true); }}
                   />
                 ))}
@@ -129,7 +154,7 @@ export default function UnavailabilitySection({
                   <UnavailabilityRow
                     key={u.id}
                     unavailability={u}
-                    label={unavailLabel(u)}
+                    label={formatUnavailabilityRuleLabel(u)}
                     onClick={() => { setEditing(u); setShowForm(true); }}
                   />
                 ))}
@@ -165,12 +190,12 @@ function UnavailabilityRow({
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center justify-between rounded-eb border border-eb-layout bg-white px-4 py-2.5 text-left hover:border-[#93c5fd] transition-colors"
+      className="group flex w-full flex-col items-center justify-between gap-2 rounded-eb border border-eb-layout bg-white px-4 py-3 text-center transition-colors hover:border-[#93c5fd] sm:flex-row sm:text-left"
     >
-      <div>
+      <div className="min-w-0">
         <p className="text-[13px] font-medium text-eb-text">{label}</p>
         <p className="text-[12px] text-eb-muted">
-          {`${u.start_time.slice(0, 5)} → ${u.end_time.slice(0, 5)}`}
+          {formatUnavailabilityTimeRange(u)}
         </p>
       </div>
       <span className="text-[12px] text-eb-muted group-hover:text-eb-text transition-colors">

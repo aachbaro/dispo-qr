@@ -109,7 +109,7 @@ export interface Unavailability {
   start_date: string | null;
   start_time: string;      // "HH:MM:SS"
   end_time: string;
-  recurrence_end: string | null;
+  recurrence_end: string | null; // fin de recurrence weekly ou fin de plage pour une indispo ponctuelle
   exceptions: string[];
 }
 

@@ -31,7 +31,7 @@ export default function AgendaSlot({ slot, isOwner, style, onDelete, onClick }: 
 
   return (
     <div
-      className={`slot absolute left-0.5 right-0.5 overflow-hidden rounded px-1.5 py-0.5 text-white text-[10px] leading-tight select-none group ${isClickable ? "cursor-pointer" : ""}`}
+      className={`slot group absolute left-0.5 right-0.5 overflow-hidden rounded px-1.5 py-1 text-center text-[10px] leading-tight text-white select-none sm:text-left ${isClickable ? "cursor-pointer" : ""}`}
       style={{
         ...style,
         backgroundColor: slot.color,
@@ -42,6 +42,12 @@ export default function AgendaSlot({ slot, isOwner, style, onDelete, onClick }: 
       <div className="truncate font-medium">
         {formatTime(slot.start)} – {formatTime(slot.end)}
       </div>
+
+      {isUnavailability && (
+        <div className="truncate text-[9px] font-medium uppercase tracking-[0.04em] text-white/90">
+          Indispo
+        </div>
+      )}
 
       {slot.type === "slot" && slot.title && (
         <div className="truncate opacity-90 text-[9px]">{slot.title}</div>

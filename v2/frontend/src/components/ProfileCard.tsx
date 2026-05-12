@@ -101,6 +101,10 @@ function formatHourlyRate(value: string | null, currency: string): string | null
   return `${amount.toFixed(2)} ${currency}/h`;
 }
 
+function normalizePhoneHref(phone: string): string {
+  return phone.replace(/[^\d+]/g, "");
+}
+
 function DetailBlock({
   label,
   value,
@@ -129,6 +133,23 @@ function SectionTitle({ children }: { children: string }) {
         {children}
       </p>
     </div>
+  );
+}
+
+function ContactAction({
+  href,
+  label,
+}: {
+  href: string;
+  label: string;
+}) {
+  return (
+    <a
+      href={href}
+      className="inline-flex min-h-[40px] items-center justify-center rounded-eb border border-eb-layout px-4 text-[14px] font-medium text-eb-text transition-colors hover:bg-eb-page"
+    >
+      {label}
+    </a>
   );
 }
 
@@ -664,14 +685,33 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
               </div>
 
               {(profile.email || profile.phone || publicAddressLines.length > 0) && (
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <DetailBlock label="Email" value={profile.email} />
-                  <DetailBlock label="Telephone" value={profile.phone} />
-                  <DetailBlock
-                    label="Adresse"
-                    value={publicAddressLines.length > 0 ? publicAddressLines.join("\n") : null}
-                    multiline
-                  />
+                <div className="space-y-3">
+                  {(profile.phone || profile.email) && (
+                    <div className="flex flex-wrap gap-3">
+                      {profile.phone && (
+                        <ContactAction
+                          href={`tel:${normalizePhoneHref(profile.phone)}`}
+                          label="Appeler"
+                        />
+                      )}
+                      {profile.email && (
+                        <ContactAction
+                          href={`mailto:${profile.email}`}
+                          label="Envoyer un mail"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <DetailBlock label="Email" value={profile.email} />
+                    <DetailBlock label="Telephone" value={profile.phone} />
+                    <DetailBlock
+                      label="Adresse"
+                      value={publicAddressLines.length > 0 ? publicAddressLines.join("\n") : null}
+                      multiline
+                    />
+                  </div>
                 </div>
               )}
 

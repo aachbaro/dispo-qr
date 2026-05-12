@@ -37,6 +37,7 @@ export default function ExperiencesSection({
   initialExperiences,
 }: Props) {
   const [experiences, setExperiences] = useState<Experience[]>(initialExperiences);
+  const [collapsed, setCollapsed] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Experience | null>(null);
 
@@ -55,10 +56,13 @@ export default function ExperiencesSection({
     });
   }, [experiences]);
 
+  const canToggle = sortedExperiences.length > 0;
+
   async function handleCreate(data: ExperiencePayload) {
     if (!token) return;
     const created = await addExperience(slug, data, token);
     setExperiences((current) => [created, ...current]);
+    setCollapsed(false);
   }
 
   async function handleEdit(data: ExperiencePayload) {
@@ -91,21 +95,37 @@ export default function ExperiencesSection({
           </p>
         </div>
 
-        {isOwner && (
-          <button
-            type="button"
-            onClick={() => {
-              setEditing(null);
-              setShowForm(true);
-            }}
-            className="eb-btn-primary shrink-0 text-[12px] px-3 py-1.5"
-          >
-            + Ajouter
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {canToggle && (
+            <button
+              type="button"
+              onClick={() => setCollapsed((current) => !current)}
+              className="inline-flex min-h-[34px] items-center justify-center rounded-eb border border-eb-layout px-3 text-[12px] font-medium text-eb-secondary transition-colors hover:bg-eb-page hover:text-eb-text"
+            >
+              {collapsed ? `Afficher (${sortedExperiences.length})` : "Réduire"}
+            </button>
+          )}
+
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(null);
+                setShowForm(true);
+              }}
+              className="eb-btn-primary shrink-0 px-3 py-1.5 text-[12px]"
+            >
+              + Ajouter
+            </button>
+          )}
+        </div>
       </div>
 
-      {sortedExperiences.length > 0 ? (
+      {collapsed ? (
+        <p className="py-2 text-[13px] text-eb-muted">
+          Section réduite. Rouvre-la pour revoir le parcours complet.
+        </p>
+      ) : sortedExperiences.length > 0 ? (
         <div className="space-y-3">
           {sortedExperiences.map((experience) => (
             <article

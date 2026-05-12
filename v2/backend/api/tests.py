@@ -858,6 +858,61 @@ class FacturesApiTests(APITestCase):
         self.assertFalse(Facture.objects.filter(pk=facture.pk).exists())
 
 
+class UnavailabilityApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="indispo@extrabeam.fr",
+            email="indispo@extrabeam.fr",
+            password="bonjour123",
+        )
+        self.profile = AccountProfile.objects.create(
+            user=self.user,
+            display_name="Indispo Owner",
+            role=AccountProfile.ROLE_FREELANCE,
+            auth_provider=AccountProfile.AUTH_PROVIDER_LOCAL,
+            slug="indispo-owner",
+        )
+        self.token = UserApiToken.get_or_create_for_profile(self.profile)
+
+    def test_create_once_unavailability_date_range(self):
+        response = self.client.post(
+            reverse("unavailabilities", args=[self.profile.slug]),
+            {
+                "recurrence_type": "once",
+                "start_date": "2026-05-20",
+                "recurrence_end": "2026-05-24",
+                "start_time": "07:00:00",
+                "end_time": "23:59:00",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["start_date"], "2026-05-20")
+        self.assertEqual(response.data["recurrence_end"], "2026-05-24")
+
+    def test_create_once_unavailability_rejects_reverse_date_range(self):
+        response = self.client.post(
+            reverse("unavailabilities", args=[self.profile.slug]),
+            {
+                "recurrence_type": "once",
+                "start_date": "2026-05-24",
+                "recurrence_end": "2026-05-20",
+                "start_time": "07:00:00",
+                "end_time": "23:59:00",
+            },
+            format="json",
+            HTTP_AUTHORIZATION=f"Token {self.token.token}",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["recurrence_end"][0],
+            "La date de fin doit être après la date de début.",
+        )
+
+
 class AdminApiTests(APITestCase):
     def setUp(self):
         self.admin_user = User.objects.create_user(

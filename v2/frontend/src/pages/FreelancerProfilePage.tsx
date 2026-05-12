@@ -223,16 +223,6 @@ export default function FreelancerProfilePage() {
 
         {canReceivePublicMission && <PublicMissionProposalCard slug={slug} />}
 
-        {(profile.experiences.length > 0 || displayAsOwner) && (
-          <ExperiencesSection
-            key={displayAsOwner ? "owner" : "public"}
-            slug={slug}
-            isOwner={displayAsOwner}
-            token={user?.token}
-            initialExperiences={profile.experiences}
-          />
-        )}
-
         {/* Agenda : hauteur fixe, passe les missions pour colorier les slots */}
         <section className="rounded-eb-card border border-eb-layout bg-white p-4" style={{ height: "70vh" }}>
           <Agenda
@@ -244,6 +234,16 @@ export default function FreelancerProfilePage() {
             missions={agendaMissions}
           />
         </section>
+
+        {(profile.experiences.length > 0 || displayAsOwner) && (
+          <ExperiencesSection
+            key={displayAsOwner ? "owner" : "public"}
+            slug={slug}
+            isOwner={displayAsOwner}
+            token={user?.token}
+            initialExperiences={profile.experiences}
+          />
+        )}
 
         {/* Sections owner uniquement */}
         {displayAsOwner && user?.token && (

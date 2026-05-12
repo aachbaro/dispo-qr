@@ -157,11 +157,11 @@ export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onD
   const hourLines = Array.from({ length: TOTAL_HOURS }, (_, i) => i);
 
   return (
-    <div className="flex-1 flex flex-col min-w-[70px] border-r border-eb-layout last:border-r-0">
+    <div className="flex min-w-[84px] flex-1 flex-col border-r border-eb-layout last:border-r-0 sm:min-w-[104px]">
       {/* En-tête */}
-      <div className="h-12 shrink-0 flex flex-col items-center justify-center border-b border-eb-layout bg-eb-page">
-        <span className="text-[13px] font-medium text-eb-text">{day.name}</span>
-        <span className="text-[11px] text-eb-muted">{day.date}</span>
+      <div className="flex h-12 shrink-0 flex-col items-center justify-center border-b border-eb-layout bg-eb-page px-1 text-center">
+        <span className="text-[12px] font-medium text-eb-text sm:text-[13px]">{day.name}</span>
+        <span className="text-[10px] text-eb-muted sm:text-[11px]">{day.date}</span>
       </div>
 
       {/* Grille */}

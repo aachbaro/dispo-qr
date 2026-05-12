@@ -12,21 +12,26 @@ import { useState } from "react";
 import type { Unavailability } from "../../types";
 
 const WEEKDAY_LABELS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+const ALL_DAY_START = "07:00";
+const ALL_DAY_END = "23:59";
 
 interface FormState {
   recurrence_type: "once" | "weekly";
   weekday: string;       // 1–7, string pour l'input
   start_date: string;    // YYYY-MM-DD
+  end_date: string;
   start_time: string;    // HH:MM
   end_time: string;
   recurrence_end: string;
 }
 
 function unavailToForm(u?: Unavailability): FormState {
+  const endDate = u?.recurrence_type === "once" ? (u?.recurrence_end ?? u?.start_date ?? "") : "";
   return {
     recurrence_type: u?.recurrence_type ?? "weekly",
     weekday:         u?.weekday != null ? String(u.weekday) : "1",
     start_date:      u?.start_date ?? "",
+    end_date:        endDate,
     start_time:      u?.start_time?.slice(0, 5) ?? "09:00",
     end_time:        u?.end_time?.slice(0, 5)   ?? "18:00",
     recurrence_end:  u?.recurrence_end          ?? "",
@@ -51,6 +56,19 @@ export default function UnavailabilityForm({ initial, onSave, onDelete, onClose 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (form.recurrence_type === "once" && !form.start_date) {
+      setError("Choisis une date de début.");
+      return;
+    }
+    if (form.recurrence_type === "once" && form.end_date && form.end_date < form.start_date) {
+      setError("La date de fin doit être après la date de début.");
+      return;
+    }
+    if (form.end_time <= form.start_time) {
+      setError("L'heure de fin doit être après l'heure de début.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -58,7 +76,10 @@ export default function UnavailabilityForm({ initial, onSave, onDelete, onClose 
         recurrence_type: form.recurrence_type,
         start_time:      form.start_time,
         end_time:        form.end_time,
-        recurrence_end:  form.recurrence_end || null,
+        recurrence_end:
+          form.recurrence_type === "weekly"
+            ? form.recurrence_end || null
+            : form.end_date || form.start_date || null,
       };
       if (form.recurrence_type === "weekly") {
         payload.weekday = parseInt(form.weekday, 10);
@@ -142,19 +163,33 @@ export default function UnavailabilityForm({ initial, onSave, onDelete, onClose 
               </select>
             </div>
           ) : (
-            <div>
-              <label className="mb-1 block text-[12px] font-medium text-eb-secondary">Date</label>
-              <input
-                type="date"
-                className="eb-input"
-                value={form.start_date}
-                onChange={(e) => set("start_date", e.target.value)}
-              />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">Date de début</label>
+                <input
+                  type="date"
+                  className="eb-input"
+                  value={form.start_date}
+                  onChange={(e) => set("start_date", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  Date de fin{" "}
+                  <span className="font-normal text-eb-muted">(vide = 1 jour)</span>
+                </label>
+                <input
+                  type="date"
+                  className="eb-input"
+                  value={form.end_date}
+                  onChange={(e) => set("end_date", e.target.value)}
+                />
+              </div>
             </div>
           )}
 
           {/* Horaires */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-[12px] font-medium text-eb-secondary">Début</label>
               <input
@@ -176,6 +211,21 @@ export default function UnavailabilityForm({ initial, onSave, onDelete, onClose 
               />
             </div>
           </div>
+
+          {form.recurrence_type === "once" && (
+            <div className="flex justify-center sm:justify-start">
+              <button
+                type="button"
+                onClick={() => {
+                  set("start_time", ALL_DAY_START);
+                  set("end_time", ALL_DAY_END);
+                }}
+                className="rounded-full border border-eb-layout px-3 py-1 text-[12px] text-eb-secondary transition-colors hover:bg-eb-page hover:text-eb-text"
+              >
+                Toute la journée
+              </button>
+            </div>
+          )}
 
           {/* Fin de récurrence (uniquement pour weekly) */}
           {form.recurrence_type === "weekly" && (

@@ -168,6 +168,49 @@ class SlotSerializer(serializers.ModelSerializer):
 
 
 class UnavailabilitySerializer(serializers.ModelSerializer):
+    def validate(self, attrs: dict) -> dict:
+        attrs = super().validate(attrs)
+
+        recurrence_type = attrs.get(
+            "recurrence_type",
+            getattr(self.instance, "recurrence_type", Unavailability.RECURRENCE_ONCE),
+        )
+        weekday = attrs.get("weekday", getattr(self.instance, "weekday", None))
+        start_date = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        start_time = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end_time = attrs.get("end_time", getattr(self.instance, "end_time", None))
+        recurrence_end = attrs.get(
+            "recurrence_end", getattr(self.instance, "recurrence_end", None)
+        )
+
+        if start_time and end_time and end_time <= start_time:
+            raise serializers.ValidationError(
+                {"end_time": "L'heure de fin doit être après l'heure de début."}
+            )
+
+        if recurrence_type == Unavailability.RECURRENCE_WEEKLY:
+            if weekday is None:
+                raise serializers.ValidationError(
+                    {"weekday": "Le jour de la semaine est requis."}
+                )
+            return attrs
+
+        if start_date is None:
+            raise serializers.ValidationError(
+                {"start_date": "La date de début est requise."}
+            )
+
+        if recurrence_end is None:
+            attrs["recurrence_end"] = start_date
+            recurrence_end = start_date
+
+        if recurrence_end and recurrence_end < start_date:
+            raise serializers.ValidationError(
+                {"recurrence_end": "La date de fin doit être après la date de début."}
+            )
+
+        return attrs
+
     class Meta:
         model = Unavailability
         fields = [
