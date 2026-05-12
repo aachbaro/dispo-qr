@@ -99,7 +99,7 @@ class AccountProfile(models.Model):
     )
     late_penalties = models.TextField(
         blank=True,
-        default="Taux BCE + 10 pts, indemnite forfaitaire 40 EUR",
+        default="Taux BCE + 10 points",
     )
     subscription_status = models.CharField(max_length=24, blank=True, default="")
     subscription_plan = models.CharField(max_length=80, blank=True)

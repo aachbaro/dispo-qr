@@ -17,8 +17,10 @@ const STATUS_LABELS: Record<FactureStatus, string> = {
 
 const STATUS_LIST: FactureStatus[] = ["pending_payment", "paid", "canceled"];
 const DEFAULT_ESCOMPTE = "Escompte pour paiement anticipe : neant";
+const DEFAULT_LATE_PENALTIES = "Taux BCE + 10 points";
 const DEFAULT_RECOVERY_FEE =
   "Indemnite forfaitaire pour frais de recouvrement en cas de retard de paiement : 40 EUR";
+const LEGACY_COMBINED_LATE_PENALTIES = "Taux BCE + 10 pts, indemnite forfaitaire 40 EUR";
 
 interface FormState {
   mission_id: string;
@@ -95,6 +97,15 @@ function buildMissionDescription(mission: Mission): string {
   return [mission.title, period].filter(Boolean).join(", ");
 }
 
+function getLatePenaltiesDefault(value: string | null | undefined): string {
+  const normalized = (value ?? "").trim();
+  if (!normalized) return DEFAULT_LATE_PENALTIES;
+  if (normalized === LEGACY_COMBINED_LATE_PENALTIES) {
+    return DEFAULT_LATE_PENALTIES;
+  }
+  return normalized;
+}
+
 function buildInitialForm(
   facture: Facture | undefined,
   profile: FreelancerProfile,
@@ -129,7 +140,8 @@ function buildInitialForm(
     mention_tva: facture?.mention_tva ?? profile.vat_notice ?? "",
     conditions_paiement: facture?.conditions_paiement ?? profile.payment_terms ?? "",
     escompte: facture?.escompte ?? DEFAULT_ESCOMPTE,
-    penalites_retard: facture?.penalites_retard ?? profile.late_penalties ?? "",
+    penalites_retard:
+      facture?.penalites_retard ?? getLatePenaltiesDefault(profile.late_penalties),
     indemnite_recouvrement:
       facture?.indemnite_recouvrement ?? DEFAULT_RECOVERY_FEE,
   };
@@ -322,7 +334,8 @@ export default function FactureForm({
       ...previous,
       mention_tva: previous.mention_tva || profile.vat_notice || "",
       conditions_paiement: previous.conditions_paiement || profile.payment_terms || "",
-      penalites_retard: previous.penalites_retard || profile.late_penalties || "",
+      penalites_retard:
+        previous.penalites_retard || getLatePenaltiesDefault(profile.late_penalties),
       escompte: previous.escompte || DEFAULT_ESCOMPTE,
       indemnite_recouvrement:
         previous.indemnite_recouvrement || DEFAULT_RECOVERY_FEE,
