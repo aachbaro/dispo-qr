@@ -7,7 +7,7 @@
 import { useState } from "react";
 
 import type { FacturePayload } from "../../api";
-import type { Facture, FactureStatus, Mission } from "../../types";
+import type { Facture, FactureStatus, FreelancerProfile, Mission } from "../../types";
 
 const STATUS_LABELS: Record<FactureStatus, string> = {
   pending_payment: "En attente",
@@ -16,11 +16,15 @@ const STATUS_LABELS: Record<FactureStatus, string> = {
 };
 
 const STATUS_LIST: FactureStatus[] = ["pending_payment", "paid", "canceled"];
+const DEFAULT_ESCOMPTE = "Escompte pour paiement anticipe : neant";
+const DEFAULT_RECOVERY_FEE =
+  "Indemnite forfaitaire pour frais de recouvrement en cas de retard de paiement : 40 EUR";
 
 interface FormState {
   mission_id: string;
   numero: string;
   date_emission: string;
+  date_echeance: string;
   status: FactureStatus;
   client_name: string;
   client_address_ligne1: string;
@@ -28,6 +32,9 @@ interface FormState {
   client_code_postal: string;
   client_ville: string;
   client_pays: string;
+  client_siren: string;
+  client_siret: string;
+  client_vat_number: string;
   contact_name: string;
   contact_phone: string;
   contact_email: string;
@@ -39,7 +46,9 @@ interface FormState {
   montant_ttc: string;
   mention_tva: string;
   conditions_paiement: string;
+  escompte: string;
   penalites_retard: string;
+  indemnite_recouvrement: string;
 }
 
 function todayString(): string {
@@ -63,21 +72,51 @@ function parseNumber(value: string): number | null {
 function computeTtc(ht: string, tva: string): string {
   const htValue = parseNumber(ht) ?? 0;
   const tvaValue = parseNumber(tva) ?? 0;
-  return toFixedAmount(htValue * (1 + (tvaValue / 100)));
+  return toFixedAmount(htValue * (1 + tvaValue / 100));
 }
 
-function factureToForm(facture?: Facture): FormState {
+function formatDateLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+}
+
+function buildMissionDescription(mission: Mission): string {
+  const period =
+    mission.start_date && mission.end_date
+      ? mission.start_date === mission.end_date
+        ? `le ${formatDateLabel(mission.start_date)}`
+        : `du ${formatDateLabel(mission.start_date)} au ${formatDateLabel(mission.end_date)}`
+      : mission.start_date
+        ? `le ${formatDateLabel(mission.start_date)}`
+        : "";
+
+  return [mission.title, period].filter(Boolean).join(", ");
+}
+
+function buildInitialForm(
+  facture: Facture | undefined,
+  profile: FreelancerProfile,
+  suggestedNumero?: string
+): FormState {
+  const dateEmission = facture?.date_emission ?? todayString();
+
   return {
     mission_id: facture?.mission_id ? String(facture.mission_id) : "",
-    numero: facture?.numero ?? "",
-    date_emission: facture?.date_emission ?? todayString(),
+    numero: facture?.numero ?? suggestedNumero ?? "",
+    date_emission: dateEmission,
+    date_echeance: facture?.date_echeance ?? dateEmission,
     status: facture?.status ?? "pending_payment",
     client_name: facture?.client_name ?? "",
     client_address_ligne1: facture?.client_address_ligne1 ?? "",
     client_address_ligne2: facture?.client_address_ligne2 ?? "",
     client_code_postal: facture?.client_code_postal ?? "",
     client_ville: facture?.client_ville ?? "",
-    client_pays: facture?.client_pays ?? "",
+    client_pays: facture?.client_pays ?? "France",
+    client_siren: facture?.client_siren ?? "",
+    client_siret: facture?.client_siret ?? "",
+    client_vat_number: facture?.client_vat_number ?? "",
     contact_name: facture?.contact_name ?? "",
     contact_phone: facture?.contact_phone ?? "",
     contact_email: facture?.contact_email ?? "",
@@ -87,9 +126,12 @@ function factureToForm(facture?: Facture): FormState {
     montant_ht: facture?.montant_ht ?? "",
     tva: facture?.tva ?? "0.00",
     montant_ttc: facture?.montant_ttc ?? "",
-    mention_tva: facture?.mention_tva ?? "",
-    conditions_paiement: facture?.conditions_paiement ?? "",
-    penalites_retard: facture?.penalites_retard ?? "",
+    mention_tva: facture?.mention_tva ?? profile.vat_notice ?? "",
+    conditions_paiement: facture?.conditions_paiement ?? profile.payment_terms ?? "",
+    escompte: facture?.escompte ?? DEFAULT_ESCOMPTE,
+    penalites_retard: facture?.penalites_retard ?? profile.late_penalties ?? "",
+    indemnite_recouvrement:
+      facture?.indemnite_recouvrement ?? DEFAULT_RECOVERY_FEE,
   };
 }
 
@@ -103,7 +145,7 @@ function applyMissionDefaults(previous: FormState, mission: Mission | undefined)
   next.contact_name = mission.client_name || next.contact_name;
   next.contact_email = mission.client_email || next.contact_email;
   next.contact_phone = mission.client_phone || next.contact_phone;
-  next.description = next.description || mission.title;
+  next.description = next.description || buildMissionDescription(mission);
 
   if (!next.rate && mission.daily_rate) {
     next.rate = mission.daily_rate;
@@ -123,20 +165,105 @@ function applyMissionDefaults(previous: FormState, mission: Mission | undefined)
   return next;
 }
 
+function buildComplianceWarnings(form: FormState, profile: FreelancerProfile): string[] {
+  const warnings: string[] = [];
+
+  if (!profile.display_name.trim()) {
+    warnings.push("Ajoute ton nom ou ta raison sociale dans le profil.");
+  }
+  if (!profile.address_line1.trim() || !profile.postal_code.trim() || !profile.city.trim()) {
+    warnings.push("Complete ton adresse emetteur dans le profil pour le PDF.");
+  }
+  if (!profile.siret.trim()) {
+    warnings.push("Ajoute ton SIRET dans le profil pour une facture complete.");
+  }
+  if (!form.client_name.trim()) {
+    warnings.push("Renseigne le nom ou la raison sociale du client.");
+  }
+  if (
+    !form.client_address_ligne1.trim() ||
+    !form.client_code_postal.trim() ||
+    !form.client_ville.trim()
+  ) {
+    warnings.push("Complete l'adresse du client (ligne 1, code postal, ville).");
+  }
+  if (!form.date_echeance.trim()) {
+    warnings.push("Ajoute une date d'echeance de paiement.");
+  }
+  if (!form.conditions_paiement.trim()) {
+    warnings.push("Ajoute les conditions de paiement.");
+  }
+  if (!form.escompte.trim()) {
+    warnings.push("Ajoute la mention d'escompte.");
+  }
+  if (!form.penalites_retard.trim()) {
+    warnings.push("Ajoute les penalites de retard.");
+  }
+  if (!form.indemnite_recouvrement.trim()) {
+    warnings.push("Ajoute l'indemnite forfaitaire de recouvrement.");
+  }
+  if ((parseNumber(form.tva) ?? 0) === 0 && !form.mention_tva.trim()) {
+    warnings.push("Ajoute une mention TVA si tu factures avec TVA a 0 %.");
+  }
+
+  return warnings;
+}
+
+function buildOptionalHints(form: FormState): string[] {
+  const hints: string[] = [];
+
+  if (!form.client_siren.trim() && !form.client_siret.trim()) {
+    hints.push("Tu peux garder le SIREN ou SIRET client pour tes prochaines factures.");
+  }
+  if (!form.client_vat_number.trim()) {
+    hints.push("Ajoute la TVA intracom client si tu l'as sous la main.");
+  }
+  if (!form.contact_email.trim() && !form.contact_phone.trim()) {
+    hints.push("Un email ou telephone de contact aide si le client a un service compta.");
+  }
+
+  return hints;
+}
+
 interface Props {
   initial?: Facture;
   missions: Mission[];
+  profile: FreelancerProfile;
+  suggestedNumero?: string;
   onSave: (data: FacturePayload) => Promise<void>;
   onClose: () => void;
 }
 
-export default function FactureForm({ initial, missions, onSave, onClose }: Props) {
-  const [form, setForm] = useState<FormState>(() => factureToForm(initial));
+export default function FactureForm({
+  initial,
+  missions,
+  profile,
+  suggestedNumero,
+  onSave,
+  onClose,
+}: Props) {
+  const [form, setForm] = useState<FormState>(() =>
+    buildInitialForm(initial, profile, suggestedNumero)
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const complianceWarnings = buildComplianceWarnings(form, profile);
+  const optionalHints = buildOptionalHints(form);
+
   function setField(field: keyof FormState, value: string) {
     setForm((previous) => ({ ...previous, [field]: value }));
+  }
+
+  function setDateEmission(value: string) {
+    setForm((previous) => ({
+      ...previous,
+      date_emission: value,
+      date_echeance:
+        !previous.date_echeance || previous.date_echeance === previous.date_emission
+          ? value
+          : previous.date_echeance,
+    }));
   }
 
   function setHours(value: string) {
@@ -178,12 +305,28 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
       ...previous,
       tva: value,
       montant_ttc: computeTtc(previous.montant_ht, value),
+      mention_tva:
+        (parseNumber(value) ?? 0) > 0 && previous.mention_tva === profile.vat_notice
+          ? ""
+          : previous.mention_tva,
     }));
   }
 
   function handleMissionChange(value: string) {
     const mission = missions.find((item) => item.id === Number(value));
     setForm((previous) => applyMissionDefaults(previous, mission));
+  }
+
+  function applyProfileDefaults() {
+    setForm((previous) => ({
+      ...previous,
+      mention_tva: previous.mention_tva || profile.vat_notice || "",
+      conditions_paiement: previous.conditions_paiement || profile.payment_terms || "",
+      penalites_retard: previous.penalites_retard || profile.late_penalties || "",
+      escompte: previous.escompte || DEFAULT_ESCOMPTE,
+      indemnite_recouvrement:
+        previous.indemnite_recouvrement || DEFAULT_RECOVERY_FEE,
+    }));
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -201,7 +344,7 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
 
     const montantHt = parseNumber(form.montant_ht);
     if (montantHt === null || montantHt < 0) {
-      setError("Le montant HT doit être renseigné.");
+      setError("Le montant HT doit etre renseigne.");
       return;
     }
 
@@ -213,6 +356,7 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
         mission_id: form.mission_id ? Number(form.mission_id) : null,
         numero: form.numero.trim(),
         date_emission: form.date_emission,
+        date_echeance: form.date_echeance.trim() || null,
         status: form.status,
         client_name: form.client_name.trim(),
         client_address_ligne1: form.client_address_ligne1.trim(),
@@ -220,6 +364,9 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
         client_code_postal: form.client_code_postal.trim(),
         client_ville: form.client_ville.trim(),
         client_pays: form.client_pays.trim(),
+        client_siren: form.client_siren.trim(),
+        client_siret: form.client_siret.trim(),
+        client_vat_number: form.client_vat_number.trim(),
         contact_name: form.contact_name.trim(),
         contact_phone: form.contact_phone.trim(),
         contact_email: form.contact_email.trim(),
@@ -231,7 +378,9 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
         montant_ttc: computeTtc(toFixedAmount(montantHt), form.tva),
         mention_tva: form.mention_tva.trim(),
         conditions_paiement: form.conditions_paiement.trim(),
+        escompte: form.escompte.trim(),
         penalites_retard: form.penalites_retard.trim(),
+        indemnite_recouvrement: form.indemnite_recouvrement.trim(),
       });
       onClose();
     } catch (err) {
@@ -250,12 +399,18 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
     >
       <form
         onSubmit={handleSubmit}
-        className="relative w-full max-w-3xl rounded-eb-card border border-eb-layout bg-white p-6 shadow-lg"
+        className="relative w-full max-w-4xl rounded-eb-card border border-eb-layout bg-white p-6 shadow-lg"
       >
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-[17px] font-semibold text-eb-text">
-            {initial ? "Modifier la facture" : "Nouvelle facture manuelle"}
-          </h2>
+        <div className="mb-5 flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-[17px] font-semibold text-eb-text">
+              {initial ? "Modifier la facture" : "Nouvelle facture manuelle"}
+            </h2>
+            <p className="mt-1 text-[12px] text-eb-muted">
+              ExtraBeam reprend tes mentions depuis le profil, puis tu ajustes ce qui est
+              propre a cette facture.
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -267,6 +422,29 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
         </div>
 
         <div className="max-h-[75vh] space-y-5 overflow-y-auto pr-1">
+          <div className="rounded-eb border border-[#dbe7f3] bg-[#f8fbff] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[12px] font-semibold uppercase tracking-[0.1em] text-eb-muted">
+                  Raccourci
+                </p>
+                <p className="mt-1 text-[13px] text-eb-secondary">
+                  Numero suggere :{" "}
+                  <span className="font-semibold text-eb-text">
+                    {suggestedNumero ?? form.numero ?? "-"}
+                  </span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={applyProfileDefaults}
+                className="inline-flex min-h-[34px] items-center justify-center rounded-eb border border-eb-layout px-3 text-[12px] font-medium text-eb-text transition-colors hover:bg-white"
+              >
+                Reprendre mes mentions du profil
+              </button>
+            </div>
+          </div>
+
           <div className="grid gap-3 md:grid-cols-4">
             <div className="md:col-span-2">
               <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
@@ -276,22 +454,50 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
                 className="eb-input"
                 value={form.numero}
                 onChange={(event) => setField("numero", event.target.value)}
-                placeholder="2026-0001"
+                placeholder={suggestedNumero ?? "2026-0001"}
                 autoFocus
               />
             </div>
             <div>
               <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
-                Date d'émission
+                Date d'emission
               </label>
               <input
                 type="date"
                 className="eb-input"
                 value={form.date_emission}
-                onChange={(event) => setField("date_emission", event.target.value)}
+                onChange={(event) => setDateEmission(event.target.value)}
               />
             </div>
             <div>
+              <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                Date d'echeance
+              </label>
+              <input
+                type="date"
+                className="eb-input"
+                value={form.date_echeance}
+                onChange={(event) => setField("date_echeance", event.target.value)}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                Mission liee
+              </label>
+              <select
+                className="eb-input"
+                value={form.mission_id}
+                onChange={(event) => handleMissionChange(event.target.value)}
+              >
+                <option value="">Aucune mission</option>
+                {missions.map((mission) => (
+                  <option key={mission.id} value={mission.id}>
+                    {mission.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
               <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
                 Statut
               </label>
@@ -309,22 +515,28 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
-              Mission liée
-            </label>
-            <select
-              className="eb-input"
-              value={form.mission_id}
-              onChange={(event) => handleMissionChange(event.target.value)}
-            >
-              <option value="">Aucune mission</option>
-              {missions.map((mission) => (
-                <option key={mission.id} value={mission.id}>
-                  {mission.title}
-                </option>
-              ))}
-            </select>
+          <div className="rounded-eb border border-[#f3e5c7] bg-[#fffaf0] p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-eb-muted">
+              Controle rapide
+            </p>
+            {complianceWarnings.length > 0 ? (
+              <ul className="mt-3 space-y-1 text-[13px] text-eb-secondary">
+                {complianceWarnings.map((warning) => (
+                  <li key={warning}>• {warning}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-[13px] text-eb-secondary">
+                Rien d'essentiel ne semble manquer pour une facture simple.
+              </p>
+            )}
+            {optionalHints.length > 0 ? (
+              <div className="mt-3 border-t border-[#f0e1bd] pt-3 text-[12px] text-eb-muted">
+                {optionalHints.map((hint) => (
+                  <p key={hint}>{hint}</p>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div>
@@ -334,13 +546,13 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
-                  Nom / entreprise *
+                  Nom / raison sociale *
                 </label>
                 <input
                   className="eb-input"
                   value={form.client_name}
                   onChange={(event) => setField("client_name", event.target.value)}
-                  placeholder="Acme Corp"
+                  placeholder="La raison sociale du client"
                 />
               </div>
               <div className="md:col-span-2">
@@ -398,6 +610,47 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
 
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-eb-muted">
+              Infos legales client
+            </p>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  SIREN
+                </label>
+                <input
+                  className="eb-input"
+                  value={form.client_siren}
+                  onChange={(event) => setField("client_siren", event.target.value)}
+                  placeholder="942467069"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  SIRET
+                </label>
+                <input
+                  className="eb-input"
+                  value={form.client_siret}
+                  onChange={(event) => setField("client_siret", event.target.value)}
+                  placeholder="94246706900012"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  TVA intracom
+                </label>
+                <input
+                  className="eb-input"
+                  value={form.client_vat_number}
+                  onChange={(event) => setField("client_vat_number", event.target.value)}
+                  placeholder="FR17942467069"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-eb-muted">
               Contact
             </p>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -424,7 +677,7 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
               </div>
               <div>
                 <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
-                  Téléphone
+                  Telephone
                 </label>
                 <input
                   type="tel"
@@ -445,7 +698,7 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
               rows={3}
               value={form.description}
               onChange={(event) => setField("description", event.target.value)}
-              placeholder="Prestation, période facturée, détails utiles..."
+              placeholder="Prestation, periode facturee, details utiles..."
             />
           </div>
 
@@ -453,10 +706,13 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-eb-muted">
               Montants
             </p>
+            <p className="mt-1 text-[12px] text-eb-muted">
+              Tu peux renseigner heures + taux ou saisir directement le montant HT.
+            </p>
             <div className="mt-3 grid gap-3 md:grid-cols-5">
               <div>
                 <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
-                  Heures
+                  Quantite / heures
                 </label>
                 <input
                   type="number"
@@ -469,7 +725,7 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
               </div>
               <div>
                 <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
-                  Taux (€)
+                  Taux HT (€)
                 </label>
                 <input
                   type="number"
@@ -510,40 +766,75 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
                 <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
                   TTC (€)
                 </label>
-                <input
-                  className="eb-input bg-eb-page"
-                  value={form.montant_ttc}
-                  readOnly
-                />
+                <input className="eb-input bg-eb-page" value={form.montant_ttc} readOnly />
               </div>
             </div>
           </div>
 
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-eb-muted">
-              Mentions
+              Reglement et mentions
             </p>
             <div className="mt-3 space-y-3">
-              <input
-                className="eb-input"
-                value={form.mention_tva}
-                onChange={(event) => setField("mention_tva", event.target.value)}
-                placeholder="TVA non applicable, art. 293 B du CGI"
-              />
-              <textarea
-                className="eb-input resize-none"
-                rows={2}
-                value={form.conditions_paiement}
-                onChange={(event) => setField("conditions_paiement", event.target.value)}
-                placeholder="Conditions de paiement"
-              />
-              <textarea
-                className="eb-input resize-none"
-                rows={2}
-                value={form.penalites_retard}
-                onChange={(event) => setField("penalites_retard", event.target.value)}
-                placeholder="Pénalités de retard"
-              />
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  Mention TVA
+                </label>
+                <input
+                  className="eb-input"
+                  value={form.mention_tva}
+                  onChange={(event) => setField("mention_tva", event.target.value)}
+                  placeholder="TVA non applicable, art. 293 B du CGI"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  Conditions de paiement
+                </label>
+                <textarea
+                  className="eb-input resize-none"
+                  rows={2}
+                  value={form.conditions_paiement}
+                  onChange={(event) => setField("conditions_paiement", event.target.value)}
+                  placeholder="Paiement comptant a reception"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  Escompte
+                </label>
+                <textarea
+                  className="eb-input resize-none"
+                  rows={2}
+                  value={form.escompte}
+                  onChange={(event) => setField("escompte", event.target.value)}
+                  placeholder={DEFAULT_ESCOMPTE}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  Penalites de retard
+                </label>
+                <textarea
+                  className="eb-input resize-none"
+                  rows={2}
+                  value={form.penalites_retard}
+                  onChange={(event) => setField("penalites_retard", event.target.value)}
+                  placeholder="Taux BCE + 10 points"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] font-medium text-eb-secondary">
+                  Indemnite de recouvrement
+                </label>
+                <textarea
+                  className="eb-input resize-none"
+                  rows={2}
+                  value={form.indemnite_recouvrement}
+                  onChange={(event) => setField("indemnite_recouvrement", event.target.value)}
+                  placeholder={DEFAULT_RECOVERY_FEE}
+                />
+              </div>
             </div>
           </div>
 
@@ -555,7 +846,7 @@ export default function FactureForm({ initial, missions, onSave, onClose }: Prop
             Annuler
           </button>
           <button type="submit" disabled={saving} className="eb-btn-primary">
-            {saving ? "Enregistrement..." : initial ? "Enregistrer" : "Créer la facture"}
+            {saving ? "Enregistrement..." : initial ? "Enregistrer" : "Creer la facture"}
           </button>
         </div>
       </form>

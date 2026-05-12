@@ -27,9 +27,10 @@ interface Props {
   facture: Facture;
   onClick: () => void;
   onDelete: () => void;
+  onDownload: () => void;
 }
 
-export default function FactureCard({ facture, onClick, onDelete }: Props) {
+export default function FactureCard({ facture, onClick, onDelete, onDownload }: Props) {
   const style = STATUS_STYLE[facture.status];
 
   return (
@@ -56,6 +57,7 @@ export default function FactureCard({ facture, onClick, onDelete }: Props) {
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-eb-muted">
         <span>{formatDate(facture.date_emission)}</span>
+        {facture.date_echeance ? <span>Échéance : {formatDate(facture.date_echeance)}</span> : null}
         <span className="font-medium text-eb-text">{formatAmount(facture.montant_ttc)}</span>
         {facture.mission_title ? <span>Mission : {facture.mission_title}</span> : <span>Facture manuelle</span>}
       </div>
@@ -65,6 +67,19 @@ export default function FactureCard({ facture, onClick, onDelete }: Props) {
           {facture.description}
         </p>
       ) : null}
+
+      <div className="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDownload();
+          }}
+          className="inline-flex min-h-[32px] items-center justify-center rounded-eb border border-eb-layout px-3 text-[12px] font-medium text-eb-text transition-colors hover:bg-eb-page"
+        >
+          Télécharger le PDF
+        </button>
+      </div>
 
       <button
         type="button"

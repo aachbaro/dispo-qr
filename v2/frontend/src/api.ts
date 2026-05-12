@@ -503,6 +503,9 @@ export interface FacturePayload {
   client_code_postal?: string;
   client_ville?: string;
   client_pays?: string;
+  client_siren?: string;
+  client_siret?: string;
+  client_vat_number?: string;
   contact_name?: string;
   contact_phone?: string;
   contact_email?: string;
@@ -513,8 +516,11 @@ export interface FacturePayload {
   tva?: string;
   montant_ttc: string;
   mention_tva?: string;
+  date_echeance?: string | null;
   conditions_paiement?: string;
+  escompte?: string;
   penalites_retard?: string;
+  indemnite_recouvrement?: string;
 }
 
 export async function fetchFactures(

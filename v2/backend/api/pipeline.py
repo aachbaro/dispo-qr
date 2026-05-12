@@ -39,7 +39,7 @@ def sync_pascuans_profile(backend, user=None, uid=None, response=None, details=N
     )
     avatar_url = response.get("picture") or ""
     oidc_sub = str(response.get("sub") or uid or "").strip() or None
-    requested_role = backend.strategy.session_pop("role", None)
+    requested_role = backend.strategy.session_pop("role")
     if requested_role not in {
         AccountProfile.ROLE_FREELANCE,
         AccountProfile.ROLE_CLIENT,

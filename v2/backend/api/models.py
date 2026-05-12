@@ -429,6 +429,9 @@ class Facture(models.Model):
     client_code_postal = models.CharField(max_length=20, blank=True)
     client_ville = models.CharField(max_length=120, blank=True)
     client_pays = models.CharField(max_length=120, blank=True)
+    client_siren = models.CharField(max_length=20, blank=True)
+    client_siret = models.CharField(max_length=20, blank=True)
+    client_vat_number = models.CharField(max_length=32, blank=True)
     contact_name = models.CharField(max_length=200, blank=True)
     contact_phone = models.CharField(max_length=30, blank=True)
     contact_email = models.EmailField(blank=True)
@@ -441,8 +444,11 @@ class Facture(models.Model):
     montant_ttc = models.DecimalField(max_digits=12, decimal_places=2)
 
     mention_tva = models.CharField(max_length=255, blank=True)
+    date_echeance = models.DateField(null=True, blank=True)
     conditions_paiement = models.TextField(blank=True)
+    escompte = models.TextField(blank=True)
     penalites_retard = models.TextField(blank=True)
+    indemnite_recouvrement = models.TextField(blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

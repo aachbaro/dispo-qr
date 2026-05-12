@@ -291,9 +291,9 @@ class AuthApiTests(APITestCase):
         )
         backend = SimpleNamespace(
             strategy=SimpleNamespace(
-                session_pop=lambda name, default=None: AccountProfile.ROLE_CLIENT
+                session_pop=lambda name: AccountProfile.ROLE_CLIENT
                 if name == "role"
-                else default
+                else None
             )
         )
 
@@ -307,6 +307,29 @@ class AuthApiTests(APITestCase):
 
         user.refresh_from_db()
         self.assertEqual(user.account_profile.role, AccountProfile.ROLE_CLIENT)
+
+    def test_sync_pascuans_profile_handles_missing_role_in_session(self):
+        user = User.objects.create_user(
+            username="role-missing@extrabeam.fr",
+            email="role-missing@extrabeam.fr",
+            password="bonjour123",
+        )
+        backend = SimpleNamespace(
+            strategy=SimpleNamespace(
+                session_pop=lambda name: None
+            )
+        )
+
+        sync_pascuans_profile(
+            backend,
+            user=user,
+            uid="oidc-role-missing",
+            response={"sub": "oidc-role-missing"},
+            details={"email": user.email},
+        )
+
+        user.refresh_from_db()
+        self.assertEqual(user.account_profile.role, AccountProfile.ROLE_FREELANCE)
 
 
 class ProfileApiTests(APITestCase):
@@ -719,6 +742,8 @@ class FacturesApiTests(APITestCase):
                 "numero": "2026-0001",
                 "date_emission": "2026-05-05",
                 "client_name": "Acme Corp",
+                "client_siret": "94246706900012",
+                "client_vat_number": "FR17942467069",
                 "contact_name": "Eva Client",
                 "contact_email": "eva@acme.fr",
                 "description": "Sprint produit du mois de mai",
@@ -728,6 +753,11 @@ class FacturesApiTests(APITestCase):
                 "tva": "20.00",
                 "montant_ttc": "720.00",
                 "mention_tva": "TVA 20%",
+                "date_echeance": "2026-06-05",
+                "conditions_paiement": "Paiement comptant a reception",
+                "escompte": "Escompte pour paiement anticipe : neant",
+                "penalites_retard": "Taux BCE + 10 points",
+                "indemnite_recouvrement": "Indemnite forfaitaire pour frais de recouvrement : 40 EUR",
             },
             format="json",
             HTTP_AUTHORIZATION=f"Token {self.token.token}",
@@ -738,6 +768,12 @@ class FacturesApiTests(APITestCase):
         self.assertEqual(response.data["mission_id"], self.mission.pk)
         self.assertEqual(response.data["mission_title"], self.mission.title)
         self.assertEqual(response.data["montant_ttc"], "720.00")
+        self.assertEqual(response.data["client_siret"], "94246706900012")
+        self.assertEqual(response.data["date_echeance"], "2026-06-05")
+        self.assertEqual(
+            response.data["indemnite_recouvrement"],
+            "Indemnite forfaitaire pour frais de recouvrement : 40 EUR",
+        )
         self.assertTrue(
             Facture.objects.filter(profile=self.profile, numero="2026-0001").exists()
         )
@@ -803,6 +839,7 @@ class FacturesApiTests(APITestCase):
             {
                 "status": Facture.STATUS_PAID,
                 "contact_name": "Eva Client",
+                "date_echeance": "2026-06-10",
             },
             format="json",
             HTTP_AUTHORIZATION=f"Token {self.token.token}",
@@ -811,6 +848,7 @@ class FacturesApiTests(APITestCase):
         self.assertEqual(patch_response.status_code, 200)
         self.assertEqual(patch_response.data["status"], Facture.STATUS_PAID)
         self.assertEqual(patch_response.data["contact_name"], "Eva Client")
+        self.assertEqual(patch_response.data["date_echeance"], "2026-06-10")
 
         delete_response = self.client.delete(
             reverse("facture-detail", args=[self.profile.slug, facture.pk]),

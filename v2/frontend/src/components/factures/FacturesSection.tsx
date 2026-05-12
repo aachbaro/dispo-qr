@@ -13,7 +13,8 @@ import {
   updateFacture,
   type FacturePayload,
 } from "../../api";
-import type { Facture, FactureStatus, Mission } from "../../types";
+import { downloadFacturePdf } from "../../lib/facturePdf";
+import type { Facture, FactureStatus, FreelancerProfile, Mission } from "../../types";
 import FactureCard from "./FactureCard";
 import FactureForm from "./FactureForm";
 
@@ -30,13 +31,31 @@ const STATUS_COUNT_COLORS: Record<FactureStatus, string> = {
   canceled: "bg-red-50 text-red-500",
 };
 
+function buildSuggestedNumero(factures: Facture[]): string {
+  const currentYear = new Date().getFullYear();
+  let highest = 0;
+
+  for (const facture of factures) {
+    const match = facture.numero.match(/^(\d{4})-(\d+)$/);
+    if (!match) continue;
+    const year = Number(match[1]);
+    const sequence = Number(match[2]);
+    if (year === currentYear && Number.isFinite(sequence)) {
+      highest = Math.max(highest, sequence);
+    }
+  }
+
+  return `${currentYear}-${String(highest + 1).padStart(4, "0")}`;
+}
+
 interface Props {
   slug: string;
   token: string;
   missions: Mission[];
+  profile: FreelancerProfile;
 }
 
-export default function FacturesSection({ slug, token, missions }: Props) {
+export default function FacturesSection({ slug, token, missions, profile }: Props) {
   const [factures, setFactures] = useState<Facture[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +98,7 @@ export default function FacturesSection({ slug, token, missions }: Props) {
   const shown = statusFilter
     ? factures.filter((facture) => facture.status === statusFilter)
     : factures;
+  const suggestedNumero = buildSuggestedNumero(factures);
 
   return (
     <section className="rounded-eb-card border border-eb-layout bg-white p-4">
@@ -147,6 +167,7 @@ export default function FacturesSection({ slug, token, missions }: Props) {
                 setShowForm(true);
               }}
               onDelete={() => handleDelete(facture.id)}
+              onDownload={() => downloadFacturePdf(facture, profile)}
             />
           ))}
         </div>
@@ -156,6 +177,8 @@ export default function FacturesSection({ slug, token, missions }: Props) {
         <FactureForm
           initial={editing ?? undefined}
           missions={missions}
+          profile={profile}
+          suggestedNumero={editing ? undefined : suggestedNumero}
           onSave={(data) => (editing ? handleUpdate(editing.id, data) : handleCreate(data))}
           onClose={() => {
             setShowForm(false);

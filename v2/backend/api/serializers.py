@@ -580,6 +580,9 @@ class FactureSerializer(serializers.ModelSerializer):
     """Sérialise une facture owner-only avec mission liée optionnelle."""
 
     date_emission = serializers.DateField(format="%Y-%m-%d", required=False)
+    date_echeance = serializers.DateField(
+        format="%Y-%m-%d", required=False, allow_null=True
+    )
     mission_id = serializers.PrimaryKeyRelatedField(
         source="mission",
         queryset=Mission.objects.all(),
@@ -605,6 +608,9 @@ class FactureSerializer(serializers.ModelSerializer):
             "client_code_postal",
             "client_ville",
             "client_pays",
+            "client_siren",
+            "client_siret",
+            "client_vat_number",
             "contact_name",
             "contact_phone",
             "contact_email",
@@ -615,8 +621,11 @@ class FactureSerializer(serializers.ModelSerializer):
             "tva",
             "montant_ttc",
             "mention_tva",
+            "date_echeance",
             "conditions_paiement",
+            "escompte",
             "penalites_retard",
+            "indemnite_recouvrement",
             "profile_slug",
             "profile_display_name",
             "created_at",

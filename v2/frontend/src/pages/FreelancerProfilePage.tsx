@@ -265,6 +265,7 @@ export default function FreelancerProfilePage() {
               slug={slug}
               token={user.token}
               missions={missions}
+              profile={profile}
             />
 
             <AccountSettingsSection
