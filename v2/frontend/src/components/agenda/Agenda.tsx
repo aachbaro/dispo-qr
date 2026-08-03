@@ -38,6 +38,7 @@ interface Props {
   isOwner: boolean;
   unavailabilities: Unavailability[];
   onUnavailabilitiesChange?: Dispatch<SetStateAction<Unavailability[]>>;
+  onSlotsChange?: Dispatch<SetStateAction<Slot[]>>;
   missions: Mission[];
 }
 
@@ -98,11 +99,10 @@ export default function Agenda({
   isOwner,
   unavailabilities,
   onUnavailabilitiesChange,
+  onSlotsChange,
   missions,
 }: Props) {
   const { user } = useUserContext();
-  const agendaRef = useRef<HTMLDivElement | null>(null);
-
   const todayMonday = useRef(getMonday()).current;
   const [activeWeek, setActiveWeek]   = useState<Date>(todayMonday);
   const [slots, setSlots]             = useState<Slot[]>([]);
@@ -110,7 +110,6 @@ export default function Agenda({
   const [pendingRange, setPendingRange] = useState<PendingRange | null>(null);
   const [editingSlot, setEditingSlot] = useState<Slot | null>(null);
   const [creating, setCreating]       = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(activeWeek, i);
@@ -128,23 +127,15 @@ export default function Agenda({
       const to = toLocalDate(addDays(activeWeek, 7));
       const data = await fetchSlots(slug, from, to, user?.token);
       setSlots(data);
+      onSlotsChange?.(data);
     } catch (err) {
       console.error("Erreur chargement créneaux :", err);
     } finally {
       setLoading(false);
     }
-  }, [slug, activeWeek, user?.token]);
+  }, [slug, activeWeek, user?.token, onSlotsChange]);
 
   useEffect(() => { void loadSlots(); }, [loadSlots]);
-
-  useEffect(() => {
-    function handleFullscreenChange() {
-      setIsFullscreen(document.fullscreenElement === agendaRef.current);
-    }
-
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
 
   // --- Slots à afficher par jour ---
   function getDaySlots(fullDate: string): AgendaDisplaySlot[] {
@@ -177,7 +168,9 @@ export default function Agenda({
     setCreating(true);
     try {
       const slot = await createSlot(slug, { title, start: startIso, end: endIso, mission_id: missionId }, user.token);
-      setSlots((prev) => [...prev, slot].sort((a, b) => a.start.localeCompare(b.start)));
+      const updater = (prev: Slot[]) => [...prev, slot].sort((a, b) => a.start.localeCompare(b.start));
+      setSlots(updater);
+      onSlotsChange?.(updater);
       setPendingRange(null);
     } catch (err) {
       console.error("Erreur création créneau :", err);
@@ -193,7 +186,9 @@ export default function Agenda({
   ) {
     if (!user?.token) return;
     const updated = await updateSlot(slug, id, data, user.token);
-    setSlots((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    const updater = (prev: Slot[]) => prev.map((s) => (s.id === id ? updated : s));
+    setSlots(updater);
+    onSlotsChange?.(updater);
     setEditingSlot(null);
   }
 
@@ -201,7 +196,9 @@ export default function Agenda({
   async function handleDeleteSlot(id: number) {
     if (!user?.token) return;
     await deleteSlot(slug, id, user.token);
-    setSlots((prev) => prev.filter((s) => s.id !== id));
+    const updater = (prev: Slot[]) => prev.filter((s) => s.id !== id);
+    setSlots(updater);
+    onSlotsChange?.(updater);
     setEditingSlot(null);
   }
 
@@ -238,32 +235,11 @@ export default function Agenda({
   }
   function nextWeek() { setActiveWeek(addDays(activeWeek, 7)); }
 
-  async function toggleFullscreen() {
-    if (!agendaRef.current) return;
-    try {
-      if (document.fullscreenElement === agendaRef.current) {
-        await document.exitFullscreen();
-        return;
-      }
-      if (typeof agendaRef.current.requestFullscreen !== "function") return;
-      await agendaRef.current.requestFullscreen();
-    } catch (err) {
-      console.error("Impossible de basculer en plein écran :", err);
-    }
-  }
-
   // Colonne heures
   const hourLabels = Array.from({ length: TOTAL_HOURS }, (_, i) => `${String(i + 7).padStart(2, "0")}h`);
 
   return (
-    <div
-      ref={agendaRef}
-      className={`relative flex h-full flex-col bg-white ${
-        isFullscreen
-          ? "h-screen w-screen bg-white px-3 py-3 pb-12 sm:px-4 sm:py-4"
-          : "pb-12"
-      }`}
-    >
+    <div className="relative flex h-full flex-col bg-white">
       <AgendaHeader
         weekLabel={weekLabel}
         isCurrentWeek={isCurrentWeek}
@@ -318,14 +294,6 @@ export default function Agenda({
           />
         ))}
       </div>
-
-      <button
-        type="button"
-        onClick={() => void toggleFullscreen()}
-        className="absolute bottom-3 left-3 z-10 inline-flex min-h-[32px] items-center justify-center rounded-full border border-eb-layout bg-white/90 px-3 text-[11px] font-medium text-eb-muted shadow-sm backdrop-blur transition-colors hover:text-eb-text"
-      >
-        {isFullscreen ? "Quitter le plein écran" : "Plein écran"}
-      </button>
 
       {/* Modal création */}
       {pendingRange && (

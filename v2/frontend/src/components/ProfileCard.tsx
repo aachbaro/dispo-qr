@@ -82,27 +82,11 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-function buildAddressLines(profile: Pick<FreelancerProfile, "address_line1" | "address_line2" | "postal_code" | "city" | "country">): string[] {
-  const lines: string[] = [];
-  if (profile.address_line1) lines.push(profile.address_line1);
-  if (profile.address_line2) lines.push(profile.address_line2);
-  const locality = [profile.postal_code, profile.city].filter(Boolean).join(" ").trim();
-  if (locality) lines.push(locality);
-  if (profile.country && (lines.length > 0 || profile.country.trim().toLowerCase() !== "france")) {
-    lines.push(profile.country);
-  }
-  return lines;
-}
-
 function formatHourlyRate(value: string | null, currency: string): string | null {
   if (!value) return null;
   const amount = Number.parseFloat(value);
   if (!Number.isFinite(amount)) return `${value} ${currency}/h`;
   return `${amount.toFixed(2)} ${currency}/h`;
-}
-
-function normalizePhoneHref(phone: string): string {
-  return phone.replace(/[^\d+]/g, "");
 }
 
 function DetailBlock({
@@ -133,23 +117,6 @@ function SectionTitle({ children }: { children: string }) {
         {children}
       </p>
     </div>
-  );
-}
-
-function ContactAction({
-  href,
-  label,
-}: {
-  href: string;
-  label: string;
-}) {
-  return (
-    <a
-      href={href}
-      className="inline-flex min-h-[40px] items-center justify-center rounded-eb border border-eb-layout px-4 text-[14px] font-medium text-eb-text transition-colors hover:bg-eb-page"
-    >
-      {label}
-    </a>
   );
 }
 
@@ -306,7 +273,6 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
       })
     : null;
 
-  const publicAddressLines = buildAddressLines(profile);
   const ownerBusinessRate = formatHourlyRate(profile.hourly_rate, profile.currency || "EUR");
   const hasOwnerBusinessDetails = isOwner && Boolean(
     profile.siret
@@ -322,7 +288,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
 
   return (
     <div className="rounded-eb-card border border-eb-layout bg-white p-6">
-      <div className="flex items-start gap-5">
+      <div className="flex flex-col items-center gap-5 md:flex-row md:items-start">
         <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-eb-primary/10">
           {profile.avatar_url ? (
             <img
@@ -335,7 +301,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
           )}
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 self-stretch">
           {editing ? (
             <div className="space-y-5">
               <div className="grid gap-4 md:grid-cols-[150px,1fr]">
@@ -662,9 +628,9 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
             </div>
           ) : (
             <div className="space-y-5">
-              <div>
-                <div className="flex items-center justify-between gap-3">
-                  <h1 className="truncate text-[22px] font-semibold leading-tight text-eb-text">
+              <div className="text-center md:text-left">
+                <div className="flex flex-col items-center justify-between gap-3 md:flex-row md:items-center">
+                  <h1 className="text-[22px] font-semibold leading-tight text-eb-text md:truncate">
                     {profile.display_name || "-"}
                   </h1>
                   {isOwner && (
@@ -683,37 +649,6 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
                   </p>
                 )}
               </div>
-
-              {(profile.email || profile.phone || publicAddressLines.length > 0) && (
-                <div className="space-y-3">
-                  {(profile.phone || profile.email) && (
-                    <div className="flex flex-wrap gap-3">
-                      {profile.phone && (
-                        <ContactAction
-                          href={`tel:${normalizePhoneHref(profile.phone)}`}
-                          label="Appeler"
-                        />
-                      )}
-                      {profile.email && (
-                        <ContactAction
-                          href={`mailto:${profile.email}`}
-                          label="Envoyer un mail"
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    <DetailBlock label="Email" value={profile.email} />
-                    <DetailBlock label="Telephone" value={profile.phone} />
-                    <DetailBlock
-                      label="Adresse"
-                      value={publicAddressLines.length > 0 ? publicAddressLines.join("\n") : null}
-                      multiline
-                    />
-                  </div>
-                </div>
-              )}
 
               {hasOwnerBusinessDetails && (
                 <div className="space-y-3">

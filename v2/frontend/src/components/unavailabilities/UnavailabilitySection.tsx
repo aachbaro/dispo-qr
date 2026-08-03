@@ -2,30 +2,30 @@
  * src/components/unavailabilities/UnavailabilitySection.tsx
  * Layer  : Frontend — composant section
  * Role   : Section de gestion des indisponibilités (owner uniquement).
- *          Liste les règles récurrentes et ponctuelles, permet la création
- *          et l'édition via UnavailabilityForm.
+ *          Liste les règles récurrentes et ponctuelles, et remonte aussi
+ *          les prochains créneaux déjà posés dans le planning.
  * Parent : FreelancerProfilePage
  * Deps   : api.createUnavailability, api.updateUnavailability, api.deleteUnavailability
  */
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   createUnavailability,
   deleteUnavailability,
+  fetchSlots,
   updateUnavailability,
 } from "../../api";
 import {
-  formatUnavailabilityDateWithWeekday,
   formatUnavailabilityRuleLabel,
   formatUnavailabilityTimeRange,
-  listUpcomingUnavailabilityOccurrences,
 } from "../../lib/unavailability";
-import type { Unavailability } from "../../types";
+import type { Slot, Unavailability } from "../../types";
 import UnavailabilityForm from "./UnavailabilityForm";
 
 interface Props {
   slug: string;
   token: string;
+  planningSlots: Slot[];
   unavailabilities: Unavailability[];
   onUnavailabilitiesChange: Dispatch<SetStateAction<Unavailability[]>>;
 }
@@ -33,13 +33,35 @@ interface Props {
 export default function UnavailabilitySection({
   slug,
   token,
+  planningSlots,
   unavailabilities,
   onUnavailabilitiesChange,
 }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Unavailability | null>(null);
+  const [upcomingSlots, setUpcomingSlots] = useState<Slot[]>([]);
   const list = unavailabilities;
-  const upcoming = listUpcomingUnavailabilityOccurrences(list, { limit: 8, maxDays: 60 });
+
+  useEffect(() => {
+    const today = new Date();
+    const from = today.toLocaleDateString("fr-CA");
+    const toDate = new Date(today);
+    toDate.setDate(toDate.getDate() + 60);
+    const to = toDate.toLocaleDateString("fr-CA");
+
+    fetchSlots(slug, from, to, token)
+      .then((slots) => {
+        const now = new Date();
+        const nextSlots = slots
+          .filter((slot) => new Date(slot.end) >= now)
+          .sort((a, b) => a.start.localeCompare(b.start))
+          .slice(0, 8);
+        setUpcomingSlots(nextSlots);
+      })
+      .catch((err) => {
+        console.error("Erreur chargement des créneaux du planning :", err);
+      });
+  }, [slug, token, planningSlots]);
 
   async function handleCreate(data: Partial<Omit<Unavailability, "id" | "exceptions">>) {
     const created = await createUnavailability(slug, data, token);
@@ -85,40 +107,44 @@ export default function UnavailabilitySection({
         </button>
       </div>
 
-      {list.length === 0 ? (
+      {list.length === 0 && upcomingSlots.length === 0 ? (
         <p className="py-4 text-center text-[13px] text-eb-muted">
           Aucune indisponibilité définie.
         </p>
       ) : (
         <div className="space-y-4">
-          {upcoming.length > 0 && (
+          {upcomingSlots.length > 0 && (
             <div>
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-eb-muted">
-                À venir
+                Créneaux du planning à venir
               </p>
               <div className="space-y-2">
-                {upcoming.map((occurrence) => (
-                  <button
-                    key={`${occurrence.sourceId}-${occurrence.date}`}
-                    type="button"
-                    onClick={() => {
-                      setEditing(occurrence.source);
-                      setShowForm(true);
-                    }}
-                    className="group flex w-full flex-col items-center justify-between gap-2 rounded-eb border border-eb-layout bg-[#FBFDFF] px-4 py-3 text-center transition-colors hover:border-[#93c5fd] sm:flex-row sm:text-left"
+                {upcomingSlots.map((slot) => (
+                  <div
+                    key={slot.id}
+                    className="flex w-full flex-col items-center justify-between gap-2 rounded-eb border border-eb-layout bg-[#FBFDFF] px-4 py-3 text-center sm:flex-row sm:text-left"
                   >
                     <div className="min-w-0">
                       <p className="text-[13px] font-medium text-eb-text">
-                        {formatUnavailabilityDateWithWeekday(occurrence.date)}
+                        {new Date(slot.start).toLocaleDateString("fr-FR", {
+                          weekday: "short",
+                          day: "2-digit",
+                          month: "2-digit",
+                        })}
                       </p>
                       <p className="mt-1 text-[12px] text-eb-muted">
-                        {formatUnavailabilityTimeRange(occurrence.source)}
+                        {slot.start.slice(11, 16)} → {slot.end.slice(11, 16)}
+                        {slot.title
+                          ? ` · ${slot.title}`
+                          : slot.mission_title
+                            ? ` · ${slot.mission_title}`
+                            : " · Créneau du planning"}
                       </p>
                     </div>
-                    <span className="text-[12px] text-eb-muted group-hover:text-eb-text">
-                      Modifier la règle
+                    <span className="text-[12px] text-eb-muted">
+                      Visible dans le planning
                     </span>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
