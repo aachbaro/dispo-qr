@@ -9,7 +9,7 @@ import {
   monday,
   preferences,
   qualified,
-  shiftKey,
+  availabilityState,
   skillNames,
   states,
 } from "./types";
@@ -70,7 +70,7 @@ export default function EmployeeAvailabilityDialog({
       (s) => !s.fixed && qualified({ ...person, active: true }, s),
     ) || [];
   const status = (s: (typeof shifts)[number]): AvailabilityState =>
-    values[shiftKey(s)] || (saved?.allAvailable ? "available" : "unknown");
+    availabilityState({ values, allAvailable: saved?.allAvailable }, s);
   const counts = shifts.reduce<Record<AvailabilityState, number>>(
     (acc, s) => {
       acc[status(s)]++;
@@ -194,7 +194,7 @@ export default function EmployeeAvailabilityDialog({
                       );
                       return (
                         <div className="lulu-dispos-service" key={service}>
-                          <h4>{service === "midi" ? "☀ Midi" : "☾ Soir"}</h4>
+                          <h4>{service === "midi" ? "Midi" : "Soir"}</h4>
                           {cook ? (
                             fixed.length ? (
                               fixed.map((s, i) => (

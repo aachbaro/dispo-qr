@@ -152,7 +152,7 @@ function EmployeeEditor({
         <form onSubmit={submit}>
           <div className="lulu-panel-head">
             <h2 id="employee-title">
-              {employee.id ? employee.name : "Une nouvelle personne"}
+              {employee.id ? employee.name : "Ajouter un employé"}
             </h2>
             <button type="button" aria-label="Fermer la fiche" onClick={close}>
               ×

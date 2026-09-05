@@ -46,7 +46,7 @@ export default function NeedsPage({ week, board, act }: PageProps) {
       <div className="lulu-panel">
         <div className="lulu-panel-head">
           <div>
-            <h2>Une base, puis les ajustements</h2>
+            <h2>Modèles de semaine</h2>
             <p>
               Les modèles A, B, C… enregistrent les besoins, sans imposer
               d’affectations.

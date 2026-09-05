@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { type Board, addDays, dateLabel, monday, request } from "./types";
-import { Brand } from "./ui";
 import Login from "./Login";
 import PlanningPage from "./pages/PlanningPage";
 import AvailabilityPage from "./pages/AvailabilityPage";
@@ -91,6 +90,8 @@ export default function LuluApp() {
         sessionStorage.removeItem("lulu-token");
         setToken("");
         setBoard(null);
+      } else if (status === 409) {
+        setReload((r) => r + 1);
       }
       return false;
     } finally {
@@ -120,8 +121,8 @@ export default function LuluApp() {
   if (!board || !board.weeks[weekStart])
     return (
       <div className="lulu lulu-loading">
-        <Brand />
-        <p>{error || "On prépare votre espace…"}</p>
+        <p className="lulu-site-name">Lulu la Nantaise</p>
+        <p>{error || "Chargement…"}</p>
         <button onClick={() => setReload((r) => r + 1)}>Réessayer</button>
         <button onClick={signOut}>Se déconnecter</button>
       </div>
@@ -131,47 +132,43 @@ export default function LuluApp() {
   const unread = board.notifications.filter((n) => !n.read).length;
   const titles: Record<string, [string, string]> = {
     planning: [
-      "Une belle semaine, ensemble.",
+      "Planning",
       "Le planning de toute l’équipe, service par service.",
     ],
     disponibilites: [
-      "Votre semaine, à votre rythme.",
-      "Choisissez vos disponibilités et ce qui compte pour vous.",
+      "Mes disponibilités",
+      "Disponibilités par service et préférences hebdomadaires.",
     ],
     besoins: [
-      "Le bon monde, au bon service.",
+      "Besoins des services",
       "Préparez les postes à couvrir, les horaires et les compétences.",
     ],
     equipe: [
-      "Les visages de Lulu.",
+      "Équipe",
       "Contrats, compétences et horaires fixes de la cuisine.",
     ],
     heures: [
-      "Gardons le bon équilibre.",
-      "Les heures prévues, semaine après semaine, face aux contrats.",
+      "Suivi des heures",
+      "Heures planifiées par semaine et comparaison avec les contrats.",
     ],
     notifications: [
-      "Quoi de neuf chez Lulu ?",
+      "Notifications",
       "Les confirmations, rappels et publications de votre équipe.",
     ],
     reglages: [
-      "Les règles du planning.",
+      "Règles de planification",
       "Les limites communes utilisées pour les propositions.",
     ],
-    compte: [
-      "Votre accès personnel.",
-      "Choisissez un PIN que vous seul connaissez.",
-    ],
+    compte: ["Mon compte", "Gestion du code PIN personnel."],
   };
   const title = titles[path] || titles.planning;
   const props = { board, week, act, busy };
   return (
     <div className="lulu lulu-shell">
       <aside className="lulu-sidebar">
-        <Brand />
         <div className="lulu-workspace">
-          LA MAISON <strong>Lulu la Nantaise</strong>
-          <span>Notre carnet d’équipe</span>
+          RESTAURANT <strong>Lulu la Nantaise</strong>
+          <span>Gestion du planning</span>
         </div>
         <nav aria-label="Espace Lulu">
           <NavLink aria-label="Planning" to="/lulu/planning">
@@ -189,8 +186,8 @@ export default function LuluApp() {
               <NavLink aria-label="Équipe" to="/lulu/equipe">
                 ♧ <span>Équipe</span>
               </NavLink>
-              <NavLink aria-label="Équilibre des heures" to="/lulu/heures">
-                ◴ <span>Équilibre des heures</span>
+              <NavLink aria-label="Suivi des heures" to="/lulu/heures">
+                ◴ <span>Suivi des heures</span>
               </NavLink>
               <NavLink aria-label="Règles" to="/lulu/reglages">
                 ⚙ <span>Règles</span>
@@ -202,20 +199,13 @@ export default function LuluApp() {
             {unread > 0 && <b className="lulu-count">{unread}</b>}
           </NavLink>
         </nav>
-        <div className="lulu-sidebar-note">
-          Un peu d’organisation.
-          <br />
-          <em>Beaucoup d’esprit d’équipe.</em>
-        </div>
         <div className="lulu-user">
           <span className="lulu-avatar">{board.me.name.slice(0, 1)}</span>
           <div>
             <NavLink to="/lulu/compte">
               <strong>{board.me.name}</strong>
             </NavLink>
-            <small>
-              {manager ? "Responsable du planning" : "L’équipe de Lulu"}
-            </small>
+            <small>{manager ? "Responsable du planning" : "Employé"}</small>
           </div>
           <button
             title="Se déconnecter"
@@ -236,12 +226,8 @@ export default function LuluApp() {
         </div>
         <header className="lulu-heading">
           <div>
-            <p className="lulu-eyebrow">LE CARNET DE LULU</p>
             <h1>{title[0]}</h1>
             <p>{title[1]}</p>
-          </div>
-          <div className="lulu-flower" aria-hidden="true">
-            ✳
           </div>
         </header>
         {["planning", "disponibilites", "besoins"].includes(path) && (
@@ -337,7 +323,7 @@ export default function LuluApp() {
           )}
         </fieldset>
         <footer className="lulu-footer">
-          <span>Lulu la Nantaise · Le planning qui rassemble.</span>
+          <span>Lulu la Nantaise</span>
           <span>Heures prévisionnelles · 30 min de pause par service</span>
         </footer>
       </main>

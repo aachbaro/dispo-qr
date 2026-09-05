@@ -30,7 +30,7 @@ export default function NotificationsPage({ board, act }: PageProps) {
         </div>
       ) : (
         <Empty
-          title="Tout est calme pour le moment."
+          title="Aucune notification"
           text="Les rappels et les nouvelles publications apparaîtront ici."
         />
       )}

@@ -5,13 +5,14 @@ import {
   type Shift,
   type Availability,
   type Action,
+  type GenerationReport,
   addDays,
   dateLabel,
   days,
   hours,
   minutes,
   qualified,
-  shiftKey,
+  availabilityState,
   skillNames,
   states,
 } from "../types";
@@ -28,15 +29,22 @@ const ROLES = [
 ] as const;
 
 export default function PlanningPage({ board, week, act }: PageProps) {
-  const [personal, setPersonal] = useState(false);
+  const [employeeId, setEmployeeId] = useState<number | null>(null);
   const [genCount, setGenCount] = useState(4);
   const [addCtx, setAddCtx] = useState<AddCtx | null>(null);
   const [assignCtx, setAssignCtx] = useState<AssignCtx | null>(null);
+  const [showReport, setShowReport] = useState(false);
   const manager = board.me.manager;
   const shifts = manager ? week.shifts : week.published?.shifts || [];
-  const displayed = personal
+  const weeklyMinutes = new Map<number, number>();
+  for (const shift of shifts) {
+    for (const id of new Set(shift.assignments.map((a) => a.employeeId))) {
+      weeklyMinutes.set(id, (weeklyMinutes.get(id) ?? 0) + minutes(shift));
+    }
+  }
+  const displayed = employeeId !== null
     ? shifts.filter((s) =>
-        s.assignments.some((a) => a.employeeId === board.me.id),
+        s.assignments.some((a) => a.employeeId === employeeId),
       )
     : shifts;
   const slots = shifts.reduce((n, s) => n + s.count, 0);
@@ -122,7 +130,7 @@ export default function PlanningPage({ board, week, act }: PageProps) {
         <div className="lulu-panel-head">
           <div>
             <h2>
-              Au fil des services{" "}
+              Affectations par service{" "}
               {week.label && (
                 <span className="lulu-tag">Semaine {week.label}</span>
               )}
@@ -133,19 +141,37 @@ export default function PlanningPage({ board, week, act }: PageProps) {
                 : "La version publiée par Jean-Sébastien."}
             </p>
           </div>
-          <div className="lulu-toggle">
+          <div className="lulu-planning-filter">
+            <label>
+              Afficher un employé
+              <select
+                value={employeeId ?? ""}
+                onChange={(event) => setEmployeeId(event.target.value === "" ? null : Number(event.target.value))}
+              >
+                <option value="">Toute l'équipe</option>
+                {board.employees.filter((e) => e.active || shifts.some((s) => s.assignments.some((a) => a.employeeId === e.id)))
+                  .map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </label>
+            <div className="lulu-toggle">
             <button
-              className={!personal ? "selected" : ""}
-              onClick={() => setPersonal(false)}
+              className={employeeId === null ? "selected" : ""}
+              onClick={() => setEmployeeId(null)}
             >
               Toute l'équipe
             </button>
             <button
-              className={personal ? "selected" : ""}
-              onClick={() => setPersonal(true)}
+              className={employeeId === board.me.id ? "selected" : ""}
+              onClick={() => setEmployeeId(board.me.id)}
             >
               Mon planning
             </button>
+            </div>
+            {employeeId !== null && (
+              <span role="status" className="lulu-helper">
+                {displayed.length} service(s) · {hours(displayed.reduce((total, s) => total + minutes(s), 0))} · pauses déduites
+              </span>
+            )}
           </div>
         </div>
 
@@ -175,7 +201,7 @@ export default function PlanningPage({ board, week, act }: PageProps) {
                 )
               }
             >
-              ✳ Générer une proposition
+              Générer une proposition
             </button>
             <button
               onClick={() =>
@@ -208,6 +234,11 @@ export default function PlanningPage({ board, week, act }: PageProps) {
             >
               Publier cette semaine
             </button>
+            {board.generationReports?.length > 0 && (
+              <button onClick={() => setShowReport(true)}>
+                Rapport de génération
+              </button>
+            )}
           </div>
         )}
         {manager && (
@@ -219,7 +250,7 @@ export default function PlanningPage({ board, week, act }: PageProps) {
 
         {!manager && !week.published ? (
           <Empty
-            title="Le planning se prépare."
+            title="Planning non publié"
             text="Vous recevrez une notification dès sa publication."
           />
         ) : (
@@ -237,7 +268,7 @@ export default function PlanningPage({ board, week, act }: PageProps) {
                     </div>
                     {(["midi", "soir"] as const).map((service) => (
                       <section className="lulu-service" key={service}>
-                        <h3>{service === "midi" ? "☀ MIDI" : "☾ SOIR"}</h3>
+                        <h3>{service === "midi" ? "MIDI" : "SOIR"}</h3>
                         {ROLES.map(({ key: role, label }) => {
                           const rShifts = displayed.filter(
                             (s) =>
@@ -253,12 +284,13 @@ export default function PlanningPage({ board, week, act }: PageProps) {
                               {rShifts.map((s) =>
                                 Array.from(
                                   { length: s.count },
-                                  (_, posIdx) => (
+                                  (_, posIdx) => employeeId !== null && s.assignments[posIdx]?.employeeId !== employeeId ? null : (
                                     <PositionCard
                                       key={`${s.id}-${posIdx}`}
                                       shift={s}
                                       posIdx={posIdx}
                                       board={board}
+                                      weeklyMinutes={weeklyMinutes}
                                       editable={!!manager && !isCuisine}
                                       onOpen={() =>
                                         setAssignCtx({ shift: s, posIdx })
@@ -270,7 +302,7 @@ export default function PlanningPage({ board, week, act }: PageProps) {
                               {!hasPositions && (
                                 <span className="lulu-no-service">—</span>
                               )}
-                              {manager && !isCuisine && (
+                              {manager && !isCuisine && employeeId === null && (
                                 <button
                                   className="lulu-add-slot-btn"
                                   onClick={() =>
@@ -297,7 +329,7 @@ export default function PlanningPage({ board, week, act }: PageProps) {
         <div className="lulu-bottom-grid">
           <div className="lulu-panel">
             <div className="lulu-panel-head">
-              <h2>À regarder ensemble</h2>
+              <h2>Points à vérifier</h2>
               <span className="lulu-tag">{issues.length} signalement(s)</span>
             </div>
             {issues.length ? (
@@ -324,7 +356,7 @@ export default function PlanningPage({ board, week, act }: PageProps) {
           </div>
           <div className="lulu-panel">
             <div className="lulu-panel-head">
-              <h2>Les nouvelles de l'équipe</h2>
+              <h2>Notifications récentes</h2>
             </div>
             <div className="padded">
               {board.notifications
@@ -348,6 +380,12 @@ export default function PlanningPage({ board, week, act }: PageProps) {
         </div>
       )}
 
+      {showReport && board.generationReports?.length > 0 && (
+        <GenerationReportModal
+          report={board.generationReports[0]}
+          onClose={() => setShowReport(false)}
+        />
+      )}
       {addCtx && (
         <SlotAddDialog
           ctx={addCtx}
@@ -375,12 +413,14 @@ function PositionCard({
   shift: s,
   posIdx,
   board,
+  weeklyMinutes,
   editable,
   onOpen,
 }: {
   shift: Shift;
   posIdx: number;
   board: Board;
+  weeklyMinutes: Map<number, number>;
   editable: boolean;
   onOpen: () => void;
 }) {
@@ -409,7 +449,16 @@ function PositionCard({
       )}
       {filled ? (
         <div className="lulu-assignee">
-          <span>{emp?.name ?? "Ancien membre"}</span>
+          <span
+            tabIndex={0}
+            className="lulu-employee-hours"
+            aria-label={`${emp?.name ?? "Ancien membre"} : ${hours(weeklyMinutes.get(a.employeeId) ?? 0)} cette semaine, pauses déduites`}
+          >
+            {emp?.name ?? "Ancien membre"}
+            <span className="lulu-hours-tooltip" aria-hidden="true">
+              {hours(weeklyMinutes.get(a.employeeId) ?? 0)} cette semaine · pauses déduites
+            </span>
+          </span>
           {a.locked && <span title="Verrouillé">🔒</span>}
         </div>
       ) : (
@@ -430,7 +479,9 @@ function SlotAddDialog({
   act: Action;
   onClose: () => void;
 }) {
-  const isWeekend = [0, 6].includes(new Date(`${ctx.date}T12:00`).getDay());
+  const jsDay = new Date(`${ctx.date}T12:00`).getDay();
+  const isWeekend = [0, 6].includes(jsDay);
+  const weekday = (jsDay + 6) % 7;
   const [start, setStart] = useState(
     ctx.service === "midi" ? "11:00" : "18:30",
   );
@@ -444,6 +495,7 @@ function SlotAddDialog({
         : "23:00",
   );
   const [withKeys, setWithKeys] = useState(false);
+  const [persist, setPersist] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function confirm() {
@@ -461,11 +513,9 @@ function SlotAddDialog({
       fixed: false,
     };
     const existing = weekShifts.filter((s) => !s.fixed);
-    const ok = await act(
-      "shifts",
-      { shifts: [...existing, newShift] },
-      "Poste ajouté.",
-    );
+    const payload: Record<string, unknown> = { shifts: [...existing, newShift] };
+    if (persist) { payload.persistWeekday = true; payload.weekday = weekday; }
+    const ok = await act("shifts", payload, "Poste ajouté.");
     setSaving(false);
     if (ok) onClose();
   }
@@ -532,6 +582,14 @@ function SlotAddDialog({
               Nécessite les clés (ouverture / fermeture)
             </label>
           )}
+          <label className="lulu-check" style={{ marginTop: 8 }}>
+            <input
+              type="checkbox"
+              checked={persist}
+              onChange={(e) => setPersist(e.target.checked)}
+            />
+            Retenir ce poste pour les prochains {days[weekday]}s
+          </label>
         </div>
         <div className="lulu-save-bar">
           <button type="button" onClick={onClose}>
@@ -570,8 +628,10 @@ function PositionDialog({
   const [empId, setEmpId] = useState<number | null>(
     currentA?.employeeId ?? null,
   );
-  const [locked, setLocked] = useState(currentA?.locked ?? false);
+  const [locked, setLocked] = useState(currentA?.locked ?? true);
+  const [persistDelete, setPersistDelete] = useState(false);
   const [saving, setSaving] = useState(false);
+  const weekday = (new Date(`${s.date}T12:00:00`).getDay() + 6) % 7;
 
   const origWithKeys = s.required.some((r) =>
     ["cles", "ouverture", "fermeture"].includes(r),
@@ -582,11 +642,7 @@ function PositionDialog({
     const tmpShift = { ...s, start, end, required };
     const av = weekAvailability[String(id)];
     if (!av?.confirmed) return "unknown";
-    return (
-      (av.values?.[shiftKey(tmpShift)] as keyof typeof states) ||
-      (av.values?.[shiftKey(s)] as keyof typeof states) ||
-      (av.allAvailable ? "available" : "unknown")
-    );
+    return availabilityState(av, tmpShift);
   }
 
   const required = s.role === "salle" && withKeys ? ["cles"] : [];
@@ -630,16 +686,19 @@ function PositionDialog({
     if (!window.confirm("Supprimer ce poste ?")) return;
     setSaving(true);
     let ok: boolean;
+    const extra: Record<string, unknown> = persistDelete
+      ? { persistWeekday: true, weekday }
+      : {};
     if (s.count === 1) {
       const updated = weekShifts.filter((sh) => !sh.fixed && sh.id !== s.id);
-      ok = await act("shifts", { shifts: updated }, "Poste supprimé.");
+      ok = await act("shifts", { shifts: updated, ...extra }, "Poste supprimé.");
     } else {
       const updated = weekShifts.filter((sh) => !sh.fixed).map((sh) => {
         if (sh.id !== s.id) return sh;
         const newA = sh.assignments.filter((_, i) => i !== posIdx);
         return { ...sh, count: sh.count - 1, assignments: newA };
       });
-      ok = await act("shifts", { shifts: updated }, "Poste supprimé.");
+      ok = await act("shifts", { shifts: updated, ...extra }, "Poste supprimé.");
     }
     setSaving(false);
     if (ok) onClose();
@@ -717,9 +776,10 @@ function PositionDialog({
             </span>
             <select
               value={empId ?? ""}
-              onChange={(e) =>
-                setEmpId(e.target.value === "" ? null : Number(e.target.value))
-              }
+              onChange={(e) => {
+                setEmpId(e.target.value === "" ? null : Number(e.target.value));
+                setLocked(true);
+              }}
               style={{ width: "100%" }}
             >
               <option value="">— Poste libre —</option>
@@ -748,9 +808,20 @@ function PositionDialog({
                 checked={locked}
                 onChange={(e) => setLocked(e.target.checked)}
               />
-              Verrouiller (ne sera pas remplacé lors d'une génération)
+              Maintenir cette affectation lors de la génération
             </label>
           )}
+        </div>
+
+        <div style={{ padding: "0 20px 12px" }}>
+          <label className="lulu-check" style={{ fontSize: 12, color: "#b96046" }}>
+            <input
+              type="checkbox"
+              checked={persistDelete}
+              onChange={(e) => setPersistDelete(e.target.checked)}
+            />
+            Supprimer aussi pour les prochains {days[weekday]}s
+          </label>
         </div>
 
         <div className="lulu-save-bar">
@@ -770,6 +841,145 @@ function PositionDialog({
               {saving ? "Enregistrement…" : "Enregistrer"}
             </button>
           </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function GenerationReportModal({ report, onClose }: { report: GenerationReport; onClose: () => void }) {
+  const overHours = Object.entries(report.hoursSummary)
+    .flatMap(([name, { contractH, weeks }]) =>
+      Object.entries(weeks)
+        .filter(([, h]) => h > contractH)
+        .map(([week, h]) => ({ name, contractH, assignedH: h, week, over: Math.round((h - contractH) * 10) / 10 }))
+    )
+    .sort((a, b) => b.over - a.over);
+
+  function download() {
+    navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+  }
+
+  return (
+    <div className="lulu-modal-backdrop" onClick={onClose}>
+      <section
+        className="lulu-modal lulu-assign-modal"
+        role="dialog"
+        aria-modal="true"
+        style={{ maxWidth: 620, maxHeight: "85vh", display: "flex", flexDirection: "column" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="lulu-panel-head" style={{ flexShrink: 0 }}>
+          <div>
+            <p className="lulu-eyebrow">RAPPORT DE GÉNÉRATION</p>
+            <h2>{new Date(report.at).toLocaleString("fr-FR")} · {report.weeks.length} semaine(s)</h2>
+          </div>
+          <button type="button" aria-label="Fermer" onClick={onClose}
+            style={{ padding: "8px 12px", fontSize: 18, background: "none", border: 0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY: "auto", flex: 1, padding: "0 20px 20px" }}>
+          <h3 style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: "#8a9b80", textTransform: "uppercase", margin: "16px 0 8px" }}>
+            Heures par employé
+          </h3>
+          <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ color: "#999", fontSize: 11 }}>
+                <th style={{ textAlign: "left", paddingBottom: 4 }}>Employé</th>
+                <th style={{ textAlign: "right", paddingBottom: 4 }}>Contrat</th>
+                {report.weeks.map(w => (
+                  <th key={w} style={{ textAlign: "right", paddingBottom: 4 }}>
+                    {new Date(`${w}T12:00:00`).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(report.hoursSummary).sort((a, b) => a[0].localeCompare(b[0])).map(([name, { contractH, weeks }]) => (
+                <tr key={name} style={{ borderTop: "1px solid #edf0e7" }}>
+                  <td style={{ padding: "5px 0" }}>{name}</td>
+                  <td style={{ textAlign: "right", color: "#888" }}>{contractH}h</td>
+                  {report.weeks.map(w => {
+                    const h = weeks[w] ?? 0;
+                    const over = h > contractH;
+                    return (
+                      <td key={w} style={{ textAlign: "right", fontWeight: over ? 600 : 400, color: over ? "#b96046" : "inherit" }}>
+                        {h ? `${h}h` : "—"}
+                        {over && ` (+${Math.round((h - contractH) * 10) / 10}h)`}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {overHours.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: "#b96046", textTransform: "uppercase", margin: "20px 0 8px" }}>
+                Dépassements de contrat
+              </h3>
+              {overHours.map((o, i) => (
+                <p key={i} style={{ fontSize: 13, margin: "3px 0" }}>
+                  <strong>{o.name}</strong> : {o.assignedH}h assignées vs {o.contractH}h contractuelles
+                  (sem. {new Date(`${o.week}T12:00:00`).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })})
+                  {" — "}<span style={{ color: "#b96046" }}>+{o.over}h</span>
+                </p>
+              ))}
+            </>
+          )}
+
+          {report.decisions.filter(d => !d.assigned).length > 0 && (
+            <>
+              <h3 style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: "#888", textTransform: "uppercase", margin: "20px 0 8px" }}>
+                Postes non pourvus
+              </h3>
+              {report.decisions.filter(d => !d.assigned).map((d, i) => (
+                <p key={i} style={{ fontSize: 13, margin: "3px 0" }}>
+                  {dateLabel(d.date, { weekday: "long", day: "numeric", month: "short" })} · {d.service} · {skillNames[d.role]} {d.start}–{d.end}
+                  {d.reason && <span style={{ color: "#888" }}> — {d.reason}</span>}
+                </p>
+              ))}
+            </>
+          )}
+
+          <h3 style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1, color: "#8a9b80", textTransform: "uppercase", margin: "20px 0 8px" }}>
+            Décisions ({report.decisions.filter(d => d.assigned).length} affectées)
+          </h3>
+          {report.decisions.filter(d => d.assigned).map((d, i) => {
+            const overContract = d.contractH && d.weekMinAfter && d.weekMinAfter / 60 > d.contractH;
+            return (
+              <details key={i} style={{ fontSize: 13, marginBottom: 6, borderBottom: "1px solid #edf0e7", paddingBottom: 6 }}>
+                <summary style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span>
+                    {dateLabel(d.date, { weekday: "short" })} · {d.service} · {skillNames[d.role]} {d.start}–{d.end}
+                    {" → "}<strong>{d.assigned}</strong>
+                    {overContract && <span style={{ color: "#b96046", marginLeft: 6 }}>⚠ {Math.round((d.weekMinAfter ?? 0) / 60 * 10) / 10}h/sem</span>}
+                  </span>
+                  <span style={{ color: "#999", fontSize: 11, flexShrink: 0 }}>{d.eligibleTotal} éligible(s)</span>
+                </summary>
+                {d.candidates && (
+                  <table style={{ marginTop: 6, width: "100%", fontSize: 12, color: "#555" }}>
+                    <tbody>
+                      {d.candidates.map((c, j) => (
+                        <tr key={j}>
+                          <td style={{ paddingRight: 12, fontWeight: j === 0 ? 600 : 400 }}>{c.name}</td>
+                          <td style={{ paddingRight: 12 }}>{c.weekH}h/{c.contractH}h</td>
+                          <td style={{ paddingRight: 12, color: c.state === "available" ? "#4a7a45" : c.state === "prefer_not" ? "#b07030" : "#888" }}>{c.state}</td>
+                          <td style={{ color: "#999" }}>score {c.score}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </details>
+            );
+          })}
+        </div>
+
+        <div className="lulu-save-bar" style={{ flexShrink: 0 }}>
+          <button onClick={download}>Copier JSON</button>
+          <button className="primary" onClick={onClose}>Fermer</button>
         </div>
       </section>
     </div>

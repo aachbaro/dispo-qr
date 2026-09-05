@@ -57,6 +57,19 @@ export type Week = {
   published: { shifts: Shift[]; at: string } | null;
   generationWarnings?: Issue[];
 };
+export type GenCandidate = { name: string; contractH: number; score: number; state: string; weekH: number };
+export type GenDecision = {
+  date: string; service: string; role: string; start: string; end: string; durationMin: number;
+  assigned: string | null; reason?: string; contractH?: number;
+  weekMinBefore?: number; weekMinAfter?: number; eligibleTotal?: number;
+  candidates?: GenCandidate[];
+};
+export type GenerationReport = {
+  at: string;
+  weeks: string[];
+  decisions: GenDecision[];
+  hoursSummary: Record<string, { contractH: number; weeks: Record<string, number> }>;
+};
 export type Board = {
   revision: number;
   me: Employee;
@@ -64,6 +77,7 @@ export type Board = {
   weeks: Record<string, Week>;
   templates: Record<string, Shift[]>;
   rules: Record<string, number>;
+  generationReports: GenerationReport[];
   notifications: {
     id: string;
     message: string;
@@ -147,17 +161,31 @@ export function qualified(e: Employee, s: Shift) {
     [s.role, ...s.required].every((skill) => e.skills.includes(skill))
   );
 }
+export function availabilityState(av: Partial<Availability> | undefined, s: Shift): AvailabilityState {
+  const values = av?.values || {};
+  const exact = shiftKey(s);
+  if (exact in values) return values[exact];
+  const prefix = exact.slice(0, exact.lastIndexOf("|"));
+  const matches = Object.entries(values)
+    .filter(([stored]) => stored.slice(0, stored.lastIndexOf("|")) === prefix)
+    .map(([, value]) => value);
+  for (const state of ["unavailable", "unknown", "prefer_not", "available"] as const) {
+    if (matches.includes(state)) return state;
+  }
+  return av?.allAvailable ? "available" : "unknown";
+}
 export const API = `${(import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8002/api").replace(/\/$/, "")}/lulu`;
 export async function request<T>(
   path: string,
   token: string,
   body?: unknown,
+  scheme = "Lulu",
 ): Promise<T> {
   const response = await fetch(`${API}/${path}`, {
     method: body ? "POST" : "GET",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Lulu ${token}` } : {}),
+      ...(token ? { Authorization: `${scheme} ${token}` } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });

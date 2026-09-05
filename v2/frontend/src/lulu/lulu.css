@@ -108,9 +108,9 @@
 }
 .lulu h1,
 .lulu h2 {
-  font-family: "DM Serif Display", Georgia, serif;
-  font-weight: 400;
-  letter-spacing: -0.025em;
+  font-family: "DM Sans", sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 .lulu h1 {
   font-size: clamp(30px, 3vw, 44px);
@@ -498,17 +498,56 @@
   scrollbar-width: thin;
   scrollbar-color: #c8d1bc transparent;
 }
+.lulu-planning-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.lulu-employee-hours {
+  position: relative;
+}
+.lulu-hours-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 5;
+  width: 170px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #213d35;
+  color: white;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 400;
+  pointer-events: none;
+  visibility: hidden;
+}
+.lulu-employee-hours:hover .lulu-hours-tooltip,
+.lulu-employee-hours:focus .lulu-hours-tooltip {
+  visibility: visible;
+}
+.lulu-planning-filter label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+}
+.lulu-planning-filter select {
+  max-width: 100%;
+  min-width: 180px;
+}
 .lulu-planning-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(139px, 1fr));
-  grid-template-rows: auto auto auto;
+  /* Heading, then service heading / salle / plonge / cuisine for each service. */
+  grid-template-rows: repeat(9, auto);
   min-width: 973px;
 }
 .lulu-day {
   border-right: 1px solid #e9ece3;
   display: grid;
   grid-template-rows: subgrid;
-  grid-row: span 3;
+  grid-row: span 9;
 }
 .lulu-day:last-child {
   border: 0;
@@ -536,7 +575,9 @@
 }
 .lulu-service {
   padding: 13px 9px;
-  flex: 1;
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
 }
 .lulu-service + .lulu-service {
   border-top: 1px dashed #dfe5d8;
@@ -1808,7 +1849,26 @@
   border-radius: 6px;
   padding: 4px 8px;
   margin-top: 3px;
-  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    color 0.2s,
+    opacity 0.15s;
+}
+.lulu-role-section:focus-within .lulu-add-slot-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: hover) and (pointer: fine) {
+  .lulu-add-slot-btn {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .lulu-role-section:hover .lulu-add-slot-btn,
+  .lulu-role-section:focus-within .lulu-add-slot-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .lulu-add-slot-btn:hover:not(:disabled) {
   background: #f0f5ec;
@@ -1883,6 +1943,118 @@
   .lulu-sidebar nav > a:hover {
     transform: none !important;
   }
+}
+/* Descriptive interface: plain restaurant name, compact headings, no decorative logo. */
+.lulu h1 {
+  font-size: clamp(26px, 2.5vw, 34px);
+}
+.lulu .lulu-workspace {
+  border-top: 0;
+  padding-top: 0;
+}
+.lulu .lulu-user {
+  margin-top: auto;
+}
+.lulu .lulu-site-name {
+  font-weight: 600;
+  font-size: 20px;
+}
+.lulu.lulu-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.lulu .lulu-login-form {
+  width: 100%;
+  max-width: 440px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  padding: 36px;
+}
+.lulu .lulu-login-form h2 {
+  font-size: 28px;
+}
+@media (max-width: 800px) {
+  .lulu .lulu-workspace {
+    display: block;
+    grid-column: 1;
+    grid-row: 1;
+    padding: 0;
+  }
+  .lulu .lulu-workspace > span {
+    display: none;
+  }
+  .lulu .lulu-user {
+    margin-top: 0;
+  }
+}
+@media (max-width: 480px) {
+  .lulu .lulu-heading h1 {
+    font-size: 26px;
+  }
+  .lulu .lulu-login-form {
+    padding: 24px;
+  }
+}
+.lulu-test-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+  padding: 20px 23px;
+}
+.lulu-developer {
+  padding: 24px;
+}
+.lulu-developer-main {
+  max-width: 1800px;
+  margin: auto;
+}
+.lulu-developer-login {
+  max-width: 450px;
+  margin: 40px auto;
+  display: grid;
+  gap: 20px;
+}
+@media (max-width: 600px) {
+  .lulu-developer {
+    padding: 12px;
+  }
+  .lulu-developer .lulu-panel-head {
+    padding: 15px 0;
+  }
+}
+.lulu-tests-table th {
+  white-space: normal;
+  min-width: 116px;
+}
+.lulu-tests-table th:first-child {
+  min-width: 42px;
+}
+.lulu-tests-table th:nth-child(2) {
+  min-width: 160px;
+}
+.lulu-tests-table td {
+  padding: 12px 10px;
+}
+.lulu-tests-table select {
+  min-width: 102px;
+  font-size: 11px;
+}
+.lulu-tests-table input[type="number"] {
+  width: 80px;
+}
+.lulu-tests-table tr.modified {
+  background: #faf3e4;
+}
+.lulu-tests-table th:nth-child(2),
+.lulu-tests-table td:nth-child(2) {
+  position: sticky;
+  left: 0;
+  background: #f7f8f1;
+  z-index: 1;
 }
 @media print {
   .lulu-sidebar,

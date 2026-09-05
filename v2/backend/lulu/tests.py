@@ -1,23 +1,95 @@
 from copy import deepcopy
 from datetime import timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
+from django.test import override_settings
 from rest_framework.test import APITestCase
 
-from .domain import audit, duration, generate, key, new_week
+from .domain import audit, duration, generate, key, new_week, state_for
 from .models import Board, Employee, Session
 from .views import DEFAULT_RULES, employee_data
 
 
 class LuluTests(APITestCase):
+    def test_availability_matches_hours_across_required_skills(self):
+        week, shift, staff = self.minimal_week()
+        person = staff[0]
+        av = {"confirmed": True, "values": {key(shift): "available"}}
+        week["availability"][str(person["id"])] = av
+        shift["required"] = ["cles"]
+        self.assertEqual(state_for(week, person, shift), "available")
+        generate([week], [week], staff, DEFAULT_RULES)
+        self.assertEqual(shift["assignments"][0]["employeeId"], person["id"])
+        av["values"][key(shift)] = "unavailable"
+        self.assertEqual(state_for(week, person, shift), "unavailable")
+        shift["required"] = ["ouverture"]
+        self.assertEqual(state_for(week, person, shift), "unavailable")
+        shift["start"] = "10:00"
+        self.assertEqual(state_for(week, person, shift), "unknown")
+
+    def test_availability_does_not_grant_required_skills(self):
+        week, shift, staff = self.minimal_week()
+        week["availability"][str(self.employee.id)] = {"confirmed": True, "values": {key(shift): "available"}}
+        shift["required"] = ["cles"]
+        generate([week], [week], staff, DEFAULT_RULES)
+        self.assertEqual(shift["assignments"], [])
+
+    def test_bulk_test_preferences_preserves_availability_and_planning(self):
+        self.minimal_week()
+        self.login_as(self.employee)
+        self.action("availability", availability={"values": {}, "allAvailable": True, "confirmed": True}, saveDefaults=True)
+        self.board.refresh_from_db()
+        before = deepcopy(self.board.data)
+        self.login_as_developer()
+        response = self.action("test_preferences", scope="week", employees=[{"employeeId": self.employee.id, "preferences": {"compact": 2, "hoursDelta": -4}}])
+        self.assertEqual(response.status_code, 200)
+        self.board.refresh_from_db()
+        av = self.board.data["weeks"][self.start]["availability"][str(self.employee.id)]
+        old = before["weeks"][self.start]["availability"][str(self.employee.id)]
+        self.assertEqual({k:v for k,v in av.items() if k != "preferences"}, {k:v for k,v in old.items() if k != "preferences"})
+        self.assertEqual(av["preferences"], {"compact": 2, "hoursDelta": -4})
+        self.assertEqual(self.board.data["weeks"][self.start]["shifts"], before["weeks"][self.start]["shifts"])
+        self.assertEqual(self.board.data["notifications"], before["notifications"])
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.defaults["preferences"], {})
+
+    def test_bulk_defaults_does_not_change_weekly_preferences(self):
+        self.minimal_week()
+        self.employee.defaults = {"values": {"test": "unavailable"}, "preferences": {"split": 2}}
+        self.employee.save()
+        self.login_as_developer()
+        response = self.action("test_preferences", scope="defaults", employees=[{"employeeId": self.employee.id, "preferences": {"stable": 2}}])
+        self.assertEqual(response.status_code, 200)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.defaults, {"values": {"test": "unavailable"}, "preferences": {"stable": 2}})
+        self.board.refresh_from_db()
+        self.assertEqual(self.board.data["weeks"][self.start]["availability"], {})
+
+    def test_bulk_preferences_permissions_and_atomic_validation(self):
+        self.login_as(self.employee)
+        rows = [{"employeeId": self.employee.id, "preferences": {"compact": 2}}]
+        self.assertEqual(self.action("test_preferences", scope="week", employees=rows).status_code, 403)
+        self.login_as(self.manager)
+        self.assertEqual(self.action("test_preferences", scope="week", employees=rows).status_code, 403)
+        self.assertEqual(self.client.get("/api/lulu/admin/").status_code, 403)
+        self.login_as_developer()
+        rows.append({"employeeId": self.manager.id, "preferences": {"compact": 9}})
+        self.assertEqual(self.action("test_preferences", scope="defaults", employees=rows).status_code, 400)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.defaults, {})
+
     def setUp(self):
+        self.developer = False
         self.manager = Employee.objects.create(name="Jean-Sébastien", manager=True, pin_hash=make_password("937461"), skills=["salle", "ouverture", "fermeture", "cles"])
         self.employee = Employee.objects.create(name="Adam", pin_hash=make_password("182736"), skills=["salle"])
         self.board = Board.objects.create(pk=1)
         self.start = "2026-09-07"
 
     def login_as(self, employee):
+        self.developer = False
         pin = "937461" if employee == self.manager else "182736"
         response = self.client.post("/api/lulu/login/", {"employeeId": employee.id, "pin": pin}, format="json")
         self.assertEqual(response.status_code, 200)
@@ -25,7 +97,27 @@ class LuluTests(APITestCase):
 
     def action(self, action, **values):
         self.board.refresh_from_db()
-        return self.client.post(f"/api/lulu/board/?week={self.start}", {"action": action, "week": self.start, "revision": self.board.revision, **values}, format="json")
+        route = "admin" if self.developer else "board"
+        return self.client.post(f"/api/lulu/{route}/?week={self.start}", {"action": action, "week": self.start, "revision": self.board.revision, **values}, format="json")
+
+    def login_as_developer(self):
+        temp = TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        key_file = Path(temp.name) / "admin-key"
+        key_file.write_text(make_password("developer-test-secret"), encoding="utf-8")
+        settings_override = override_settings(LULU_ADMIN_KEY_FILE=key_file)
+        settings_override.enable()
+        self.addCleanup(settings_override.disable)
+        self.client.credentials(HTTP_AUTHORIZATION="LuluAdmin developer-test-secret")
+        self.developer = True
+
+    def test_developer_access_is_separate_and_cannot_publish(self):
+        self.login_as_developer()
+        result = self.client.get(f"/api/lulu/admin/?week={self.start}")
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.data["me"]["id"], 0)
+        self.assertEqual(self.action("publish").status_code, 403)
+        self.assertEqual(self.client.get("/api/lulu/board/").status_code, 403)
 
     def minimal_week(self):
         staff = [employee_data(self.manager), employee_data(self.employee)]
@@ -104,6 +196,40 @@ class LuluTests(APITestCase):
         generate([week], [week], staff, DEFAULT_RULES)
         self.assertEqual(week["shifts"][-1], fixed)
         self.assertEqual(row["assignments"], [{"employeeId": self.manager.id, "locked": True}])
+
+    def test_manual_weekend_keys_assignments_survive_regeneration(self):
+        staff = [employee_data(self.manager), employee_data(self.employee)]
+        week = new_week(self.start, staff)
+        week["shifts"] = [s for s in week["shifts"] if s["date"] in {"2026-09-12", "2026-09-13"}
+                          and s["service"] == "midi" and s["role"] == "salle" and s["end"] == "19:00"]
+        for person in staff:
+            week["availability"][str(person["id"])] = {"confirmed": True, "allAvailable": True}
+        self.board.data = {"weeks": {self.start: week}}
+        self.board.save()
+        self.login_as(self.manager)
+        opening_ids = [s["id"] for s in week["shifts"] if s["start"] == "10:00"]
+        for shift_id in opening_ids:
+            response = self.action("assign", shiftId=shift_id, required=["cles"],
+                                   assignments=[{"employeeId": self.manager.id}])
+            self.assertEqual(response.status_code, 200)
+        for _ in range(2):
+            self.assertEqual(self.action("generate", count=1).status_code, 200)
+            self.board.refresh_from_db()
+            for shift in self.board.data["weeks"][self.start]["shifts"]:
+                if shift["id"] in opening_ids:
+                    self.assertEqual(shift["assignments"], [{"employeeId": self.manager.id, "locked": True}])
+                    self.assertEqual((shift["start"], shift["end"], shift["required"]), ("10:00", "19:00", ["cles"]))
+                else:
+                    self.assertFalse(any(a["employeeId"] == self.manager.id for a in shift["assignments"]))
+
+    def test_manual_assignment_can_explicitly_remain_unlocked(self):
+        _, shift, _ = self.minimal_week()
+        self.login_as(self.manager)
+        self.assertEqual(self.action("assign", shiftId=shift["id"], assignments=[
+            {"employeeId": self.manager.id, "locked": False}]).status_code, 200)
+        self.assertEqual(self.action("generate", count=1).status_code, 200)
+        self.board.refresh_from_db()
+        self.assertEqual(self.board.data["weeks"][self.start]["shifts"][0]["assignments"], [])
 
     def test_no_overlap_double_service_or_daily_excess(self):
         week, shift, staff = self.minimal_week()

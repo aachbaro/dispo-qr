@@ -1,12 +1,3 @@
-export function Brand() {
-  return (
-    <div className="lulu-brand">
-      <strong>LULU</strong>
-      <span>la nantaise</span>
-    </div>
-  );
-}
-
 export function Stat({
   label,
   value,
@@ -28,7 +19,6 @@ export function Stat({
 export function Empty({ title, text }: { title: string; text: string }) {
   return (
     <div className="lulu-empty">
-      <span>✳</span>
       <h2>{title}</h2>
       <p>{text}</p>
     </div>

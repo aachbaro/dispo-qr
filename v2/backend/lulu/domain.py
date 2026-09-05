@@ -85,7 +85,18 @@ def availability(week, employee):
 
 def state_for(week, employee, shift):
     av = availability(week, employee)
-    return av.get("values", {}).get(key(shift), "available" if av.get("allAvailable") else "unknown")
+    values = av.get("values", {})
+    exact = key(shift)
+    if exact in values:
+        return values[exact]
+    # Existing availability keys contain required skills. Reuse the same hours
+    # across skill variants; qualification is checked independently.
+    prefix = exact.rsplit("|", 1)[0]
+    matches = [value for stored, value in values.items() if stored.rsplit("|", 1)[0] == prefix]
+    for state in ("unavailable", "unknown", "prefer_not", "available"):
+        if state in matches:
+            return state
+    return "available" if av.get("allAvailable") else "unknown"
 
 
 def conflicts(employee, shift, existing, rules):
@@ -163,6 +174,7 @@ def generate(selected, all_weeks, employees, rules):
 
     This is a heuristic, not a proof that an unfilled slot cannot be filled.
     Published versions are immutable snapshots until the next explicit publication.
+    Returns (compromises, report) where report contains per-decision details and hours summary.
     """
     for week in selected:
         for shift in week["shifts"]:
@@ -190,10 +202,17 @@ def generate(selected, all_weeks, employees, rules):
     tasks = [(week, shift) for week in selected for shift in week["shifts"] if not shift.get("fixed")]
     tasks.sort(key=lambda pair: (len(eligible(*pair)) - pair[1]["count"], pair[1]["date"], pair[1]["start"]))
     compromises = []
+    decisions = []
     for week, shift in tasks:
         for _ in range(shift["count"] - len(shift["assignments"])):
             candidates = [e for e in eligible(week, shift) if not conflicts(e, shift, booked[e["id"]], rules)]
             if not candidates:
+                decisions.append({
+                    "date": shift["date"], "service": shift["service"], "role": shift["role"],
+                    "start": shift["start"], "end": shift["end"], "durationMin": duration(shift),
+                    "assigned": None, "reason": "Aucun candidat sans conflit horaire",
+                    "eligibleTotal": len(eligible(week, shift)),
+                })
                 break
             coworkers = {a["employeeId"] for s in week["shifts"] if s["date"] == shift["date"] and s["service"] == shift["service"] for a in s["assignments"]}
 
@@ -201,6 +220,7 @@ def generate(selected, all_weeks, employees, rules):
                 av = availability(week, e)
                 pref = av.get("preferences", {})
                 eid = e["id"]
+                # Target total hours across all selected weeks — allows heavy/light week distribution
                 target = max(e["weeklyHours"] * len(selected) * 60, 60)
                 cost = (totals[eid] + duration(shift)) / target * 100
                 same_day = any(s["date"] == shift["date"] for s in booked[eid])
@@ -214,10 +234,32 @@ def generate(selected, all_weeks, employees, rules):
                 week_minutes = sum(duration(s) for s in booked[eid] if monday(s["date"]) == week["start"])
                 desired = max(1, e["weeklyHours"] + pref.get("hoursDelta", 0)) * 60
                 cost += week_minutes / desired * 30
-                return (state_for(week, e, shift) == "prefer_not", cost, eid)
+                # Strong penalty for exceeding contracted weekly hours (80 cost units per hour over)
+                over = max(0, week_minutes + duration(shift) - desired)
+                cost += over / 60 * 80
+                # prefer_not is a soft penalty, not a binary primary sort key
+                if state_for(week, e, shift) == "prefer_not":
+                    cost += 50
+                return (cost, eid)
 
-            chosen = min(candidates, key=score)
+            scored_list = sorted(((score(e), e) for e in candidates), key=lambda x: x[0])
+            chosen = scored_list[0][1]
             eid = chosen["id"]
+            week_min_before = sum(duration(s) for s in booked[eid] if monday(s["date"]) == week["start"])
+            decisions.append({
+                "date": shift["date"], "service": shift["service"], "role": shift["role"],
+                "start": shift["start"], "end": shift["end"], "durationMin": duration(shift),
+                "assigned": chosen["name"], "contractH": chosen.get("weeklyHours", 0),
+                "weekMinBefore": week_min_before,
+                "weekMinAfter": week_min_before + duration(shift),
+                "eligibleTotal": len(eligible(week, shift)),
+                "candidates": [
+                    {"name": e["name"], "contractH": e.get("weeklyHours", 0),
+                     "score": round(sc[0], 1), "state": state_for(week, e, shift),
+                     "weekH": round(sum(duration(s) for s in booked[e["id"]] if monday(s["date"]) == week["start"]) / 60, 1)}
+                    for sc, e in scored_list[:6]
+                ],
+            })
             shift["assignments"].append({"employeeId": eid, "locked": False})
             booked[eid].append(shift)
             totals[eid] += duration(shift)
@@ -228,4 +270,18 @@ def generate(selected, all_weeks, employees, rules):
                     or pref.get("evenings" if shift["service"] == "soir" else "lunches", 0)
                     or pref.get("split", 0) and any(s is not shift and s["date"] == shift["date"] for s in booked[eid])):
                 compromises.append({"week": week["start"], "shiftId": shift["id"], "date": shift["date"], "service": shift["service"], "severity": "warning", "message": f'{staff[eid]["name"]} : préférence de répartition non respectée'})
-    return compromises
+
+    # Hours summary: contract vs assigned, per week
+    hours_by_emp = {}
+    for week in selected:
+        for shift in week["shifts"]:
+            if shift.get("fixed"):
+                continue
+            for a in shift["assignments"]:
+                emp = staff.get(a["employeeId"])
+                if not emp:
+                    continue
+                entry = hours_by_emp.setdefault(emp["name"], {"contractH": emp.get("weeklyHours", 0), "weeks": {}})
+                entry["weeks"][week["start"]] = round((entry["weeks"].get(week["start"], 0) * 60 + duration(shift)) / 60, 1)
+
+    return compromises, {"decisions": decisions, "hoursSummary": hours_by_emp}

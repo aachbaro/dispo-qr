@@ -27,6 +27,7 @@ import LoginPage from "./pages/LoginPage";
 import ProfilePage from "./pages/ProfilePage";
 import RegisterPage from "./pages/RegisterPage";
 const LuluApp = lazy(() => import("./lulu/LuluApp"));
+const LuluDeveloperPage = lazy(() => import("./lulu/LuluDeveloperPage"));
 
 export default function App() {
   return (
@@ -38,6 +39,14 @@ export default function App() {
           future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
         >
           <Routes>
+            <Route
+              path="/lulu/admin"
+              element={
+                <Suspense fallback={<p role="status">Chargement…</p>}>
+                  <LuluDeveloperPage />
+                </Suspense>
+              }
+            />
             <Route
               path="/lulu/*"
               element={

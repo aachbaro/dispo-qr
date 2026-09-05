@@ -24,7 +24,17 @@ La publication est bloquée tant qu’un cuisinier actif n’a pas ses horaires 
 
 L’initialisation reprend les prénoms visibles sur le planning de référence. Tous les contrats sont proposés à **35 h**, faute de volumes individuels communiqués ; ils doivent être corrigés avant de générer. Seul Jean-Sébastien possède initialement les compétences d’ouverture, de fermeture et les clés. Les autres habilitations sont à renseigner, sans les déduire du prénom ou des horaires figurant sur la photo.
 
-### Chaque employé
+### Administration développeur
+
+La page `/lulu/admin` dispose d’un accès développeur distinct des comptes du restaurant. Aucun lien n’est ajouté au menu du responsable. Le PIN de Jean-Sébastien et les sessions des employés ne donnent pas accès à cette page. Elle permet de modifier les préférences des employés actifs de salle et de plonge dans un tableau. Choisir la semaine puis **Cette semaine** pour un réglage daté, ou **Habitudes** pour les préférences reprises par défaut. Les disponibilités, confirmations, contrats, affectations et publications sont conservés.
+
+Initialiser l’accès avec `python manage.py init_lulu_admin` depuis le dossier backend, dans l’environnement Python du projet. La commande affiche une clé privée aléatoire une seule fois et conserve uniquement son hachage dans `backend/.lulu-admin-key`, ignoré par Git. `--reset` remplace la clé et révoque l’ancienne. Le chemin du hachage peut être configuré via le réglage Django `LULU_ADMIN_KEY_FILE`. Le navigateur conserve la clé dans un `sessionStorage` séparé, supprimé à la déconnexion. Ne pas partager cette clé avec l’équipe.
+
+Chaque cellule utilise les niveaux 0 (aucun), 1 (léger) et 2 (fort). L’écart d’heures souhaité reste une préférence, pas une modification du contrat. La sélection de plusieurs employés permet d’appliquer les préréglages : jours regroupés, midis, soirs, sans coupures, horaires stables ou préférences à zéro. Seuls les critères du préréglage choisi sont remplacés. Les modifications restent locales jusqu’à **Enregistrer les préférences**, qui envoie uniquement les lignes modifiées en une transaction. **Annuler les modifications** revient au dernier état enregistré ; ce n’est pas une restauration d’anciens réglages après sauvegarde.
+
+L’endpoint `/api/lulu/admin/` exige `Authorization: LuluAdmin <clé>` en lecture comme en écriture. Il accepte uniquement l’action `test_preferences`, avec la révision actuelle, un périmètre `week` ou `defaults` et une liste `employees` contenant `employeeId` et `preferences`. L’API normale du restaurant refuse cette action, même pour le responsable. Toutes les lignes sont validées avant écriture. Les profils de cuisine fixe sont exclus. Aucune génération, publication ni notification n’est déclenchée automatiquement ; tester ensuite une proposition depuis le planning du restaurant.
+
+### Disponibilités de chaque employé
 
 Depuis **Équipe**, le responsable peut ouvrir **Voir les dispos**, à côté de **Gérer la fiche**. Une fenêtre en lecture seule présente les variantes midi/soir, les quatre états de disponibilité, les préférences et la confirmation pour la semaine choisie. Les habitudes héritées et les données préremplies pour les tests sont distinguées des confirmations personnelles. Le changement de semaine dans cette fenêtre ne modifie pas la semaine du planning et n’enregistre aucune donnée. Pour la cuisine, **Voir les horaires** affiche les shifts fixes récurrents. La fenêtre se ferme avec son bouton ou Échap, garde le focus clavier et s’adapte au mobile.
 
@@ -45,7 +55,7 @@ L’option de disponibilité générale ne remplace pas les exceptions déjà re
 
 La génération porte sur **1 à 6 semaines consécutives**, à partir de la semaine sélectionnée. Elle remplace les affectations non verrouillées des brouillons de cette période. Les affectations verrouillées et les shifts de cuisine sont conservés, même s’ils présentent un conflit ; le responsable doit alors corriger ce conflit.
 
-Jean-Sébastien peut ajouter ou retirer une personne sur un shift, puis verrouiller l’affectation. Les compétences, les chevauchements et les limites de travail sont contrôlés aussi lors d’une affectation manuelle. Une affectation à quelqu’un dont les disponibilités sont non confirmées ou incompatibles apparaît en alerte et bloque la publication.
+Une nouvelle affectation manuelle est verrouillée par défaut : la génération conserve la personne sur ce poste précis, avec ses horaires et ses exigences (clés, ouverture, fermeture). Le responsable peut décocher « Maintenir cette affectation lors de la génération » pour autoriser son remplacement. Les anciens postes non verrouillés restent modifiables par le générateur. Les compétences, les chevauchements et les limites de travail sont contrôlés aussi lors d’une affectation manuelle. Une affectation à quelqu’un dont les disponibilités sont non confirmées ou incompatibles apparaît en alerte et bloque la publication.
 
 La publication est explicite, semaine par semaine. Les postes non couverts, indisponibilités fermes, réponses inconnues et autres conflits bloquants doivent être corrigés. Les compromis sur les préférences restent des avertissements. Une notification interne est créée pour chaque membre actif lors de la publication ou republication.
 
@@ -69,6 +79,8 @@ Objectif de génération : **contrat hebdomadaire × nombre de semaines sélecti
 Le carnet physique conserve les heures réelles. Aucun pointage ni calcul de salaire n’est introduit.
 
 ## Fonctionnement du générateur
+
+Les disponibilités existantes restent compatibles après un changement d’exigence (clés, ouverture, fermeture) : en l’absence de réponse exacte, le système recherche les réponses du même jour, service, rôle et des mêmes horaires, indépendamment des compétences requises. Une réponse exacte reste prioritaire ; plusieurs réponses de repli contradictoires sont départagées de façon conservatrice (indisponible, inconnu, préférence négative, disponible). Les compétences sont vérifiées séparément. Des horaires différents sans réponse correspondante restent à confirmer. Cette règle est partagée par le générateur et les écrans de disponibilité et d’affectation.
 
 Implémentation indépendante des vues HTTP : `backend/lulu/domain.py`.
 
@@ -124,9 +136,9 @@ Une semaine demandée en lecture mais encore absente est présentée avec des be
 
 Les écrans sont séparés dans `frontend/src/lulu/pages/`. `LuluApp.tsx` porte la session, les appels et la navigation, `Login.tsx` la connexion et `ui.tsx` les petits composants partagés. Le module est chargé à la demande pour ne pas ajouter son interface aux autres pages d’ExtraBeam.
 
-La direction visuelle reprend un carnet de maison : papier crème, vert profond, accents terre cuite, titres sérif et cartes par service. Les écrans s’adaptent au mobile ; le planning conserve un défilement horizontal pour préserver la comparaison des sept jours.
+L’interface utilise des intitulés descriptifs : Planning, Équipe, Suivi des heures, Préférences de planification. Le nom du restaurant est affiché en texte simple, sans logo, slogan ni motif décoratif. Les titres sans sérif sont compacts ; les fonds crème, accents verts et couleurs des disponibilités facilitent la lecture. Les écrans s’adaptent au mobile ; le planning conserve un défilement horizontal pour préserver la comparaison des sept jours.
 
-Animations : entrée douce des sections, apparition des confirmations, ouverture de fiche, rotation d’entrée du motif, retours au survol et à la pression. Les transformations et l’opacité évitent de déplacer la mise en page. Aucune animation ne tourne indéfiniment. `prefers-reduced-motion: reduce` retire les animations et transitions ; le contenu reste immédiatement accessible. Les champs possèdent des libellés, les contrôles un focus visible et les erreurs des annonces accessibles.
+Animations : entrée douce des sections, apparition des confirmations, ouverture de fiche, retours au survol et à la pression. Les transformations et l’opacité évitent de déplacer la mise en page. Aucune animation ne tourne indéfiniment. `prefers-reduced-motion: reduce` retire les animations et transitions ; le contenu reste immédiatement accessible. Les champs possèdent des libellés, les contrôles un focus visible et les erreurs des annonces accessibles.
 
 ## Installation et accès
 

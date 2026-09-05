@@ -10,6 +10,7 @@ import {
   preferences,
   qualified,
   shiftKey,
+  availabilityState,
   skillNames,
   states,
 } from "../types";
@@ -49,13 +50,12 @@ export default function AvailabilityPage({ board, week, act }: PageProps) {
                 ? "Modifications non enregistrées"
                 : "Semaine à confirmer"}
           </span>
-          <h2>Bonjour {board.me.name}, on s’organise ?</h2>
+          <h2>Disponibilités de {board.me.name}</h2>
           <p>
             Indiquez vos possibilités pour chaque horaire. Jean-Sébastien fera
             ensuite les affectations.
           </p>
         </div>
-        <span aria-hidden="true">☀</span>
       </div>
       {!shifts.length ? (
         <Empty
@@ -104,7 +104,7 @@ export default function AvailabilityPage({ board, week, act }: PageProps) {
                   </h3>
                   {["midi", "soir"].map((service) => (
                     <div key={service} className="lulu-availability-service">
-                      <h4>{service === "midi" ? "☀ Midi" : "☾ Soir"}</h4>
+                      <h4>{service === "midi" ? "Midi" : "Soir"}</h4>
                       {shifts
                         .filter(
                           (s) =>
@@ -112,9 +112,7 @@ export default function AvailabilityPage({ board, week, act }: PageProps) {
                             s.service === service,
                         )
                         .map((s) => {
-                          const status =
-                            av.values[shiftKey(s)] ||
-                            (av.allAvailable ? "available" : "unknown");
+                          const status = availabilityState(av, s);
                           return (
                             <label
                               className={`lulu-availability-row ${status}`}
@@ -158,9 +156,9 @@ export default function AvailabilityPage({ board, week, act }: PageProps) {
           <div className="lulu-panel">
             <div className="lulu-panel-head">
               <div>
-                <h2>Ce qui compte pour ma semaine</h2>
+                <h2>Préférences de planification</h2>
                 <p>
-                  Des souhaits souples, que le planning essaiera de respecter.
+                  Préférences prises en compte lors de la génération du planning.
                 </p>
               </div>
             </div>

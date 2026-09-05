@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { type Employee, request } from "./types";
-import { Brand } from "./ui";
 
 export default function Login({
   onLogin,
@@ -43,33 +42,11 @@ export default function Login({
   }
   return (
     <div className="lulu lulu-login">
-      <section className="lulu-login-story">
-        <Brand />
-        <div>
-          <p className="lulu-eyebrow">BIENVENUE DANS LE CARNET D’ÉQUIPE</p>
-          <h1>
-            Les bons moments
-            <br />
-            commencent par
-            <br />
-            <em>une bonne équipe.</em>
-          </h1>
-          <p>
-            Nos services, nos envies, notre équilibre.
-            <br />
-            Tout le monde a sa place chez Lulu.
-          </p>
-        </div>
-        <span>LA CRÊPERIE · L’ÉQUIPE · LE PLANNING</span>
-        <div className="lulu-login-flower" aria-hidden="true">
-          ✳
-        </div>
-      </section>
       <section className="lulu-login-form">
         <div>
           <span className="lulu-tag">Espace privé · Lulu la Nantaise</span>
-          <h2>Bonjour, vous !</h2>
-          <p>Retrouvez votre planning et préparez vos prochaines semaines.</p>
+          <h2>Connexion</h2>
+          <p>Sélectionnez votre nom et saisissez votre code PIN.</p>
           <form onSubmit={submit}>
             <label>
               Votre prénom
@@ -113,11 +90,11 @@ export default function Login({
               </p>
             )}
             <button className="primary" disabled={busy || !people.length}>
-              {busy ? "Connexion…" : "Entrer dans mon espace →"}
+              {busy ? "Connexion…" : "Se connecter"}
             </button>
           </form>
           <small>
-            Un oubli de PIN ? Demandez à Jean-Sébastien de le réinitialiser.
+            Pour réinitialiser votre PIN, contactez Jean-Sébastien.
           </small>
         </div>
       </section>

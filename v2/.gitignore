@@ -3,6 +3,7 @@
 !**/.env.example
 !**/.env.prod.example
 .venv/
+backend/.lulu-admin-key
 node_modules/
 dist/
 build/

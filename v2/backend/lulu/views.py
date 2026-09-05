@@ -2,7 +2,10 @@ import copy
 import hashlib
 import secrets
 from datetime import date, timedelta
+from pathlib import Path
+from types import SimpleNamespace
 
+from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
 from django.utils import timezone
@@ -41,6 +44,26 @@ def init_data(board):
     for name, default in {"weeks": {}, "templates": {}, "notifications": [], "rules": DEFAULT_RULES}.items():
         data.setdefault(name, copy.deepcopy(default))
     return data
+
+
+def apply_weekday_defaults(week, weekday_shifts):
+    """Replace non-fixed shifts with stored weekday templates when a new week is generated."""
+    if not weekday_shifts:
+        return
+    for offset in range(7):
+        wd = str(offset)
+        if wd not in weekday_shifts:
+            continue
+        day = (date.fromisoformat(week["start"]) + timedelta(days=offset)).isoformat()
+        week["shifts"] = [s for s in week["shifts"] if s["date"] != day or s.get("fixed")]
+        for tmpl in weekday_shifts[wd]:
+            week["shifts"].append({
+                "id": uid(), "date": day,
+                "service": tmpl["service"], "role": tmpl["role"],
+                "start": tmpl["start"], "end": tmpl["end"],
+                "count": 1, "required": list(tmpl.get("required", [])),
+                "assignments": [], "fixed": False,
+            })
 
 
 def notify(data, ids, message):
@@ -106,10 +129,13 @@ def validated_av(value):
 def snapshot(board, viewer, requested):
     data = init_data(board)
     employees = [employee_data(e) for e in Employee.objects.all().order_by("id")]
-    me = next(e for e in employees if e["id"] == viewer.id)
+    me = next((e for e in employees if e["id"] == viewer.id), {"id": 0, "name": "Administrateur", "manager": True, "active": True, "weeklyHours": 0, "skills": [], "defaults": {}, "fixedShifts": []})
+    weekday_shifts = data.get("weekday_shifts", {})
     for value in requested:
         if value not in data["weeks"]:
-            data["weeks"][value] = new_week(value, employees)
+            w = new_week(value, employees)
+            apply_weekday_defaults(w, weekday_shifts)
+            data["weeks"][value] = w
     weeks = copy.deepcopy(data["weeks"])
     for week in weeks.values():
         week["prepared"] = week["start"] in board.data.get("weeks", {})
@@ -126,7 +152,8 @@ def snapshot(board, viewer, requested):
                 {k: e[k] for k in ("id", "name", "skills", "active")} for e in employees],
             "weeks": weeks, "rules": data["rules"], "templates": data["templates"] if viewer.manager else {},
             "notifications": [n for n in data["notifications"] if n["employeeId"] == viewer.id],
-            "issues": audit(list(data["weeks"].values()), employees, data["rules"]) if viewer.manager else []}
+            "issues": audit(list(data["weeks"].values()), employees, data["rules"]) if viewer.manager else [],
+            "generationReports": data.get("generationReports", []) if viewer.manager else []}
 
 
 @api_view(["GET"])
@@ -180,7 +207,23 @@ def logout(request):
 @authentication_classes([])
 @permission_classes([])
 def board_view(request):
-    viewer = current(request)
+    return handle_board(request, current(request))
+
+
+@api_view(["GET", "POST"])
+@authentication_classes([])
+@permission_classes([])
+def developer_board(request):
+    auth = request.headers.get("Authorization", "")
+    key = auth.removeprefix("LuluAdmin ")
+    path = Path(getattr(settings, "LULU_ADMIN_KEY_FILE", settings.BASE_DIR / ".lulu-admin-key"))
+    digest = path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+    if not auth.startswith("LuluAdmin ") or len(key) > 128 or not digest or not check_password(key, digest):
+        raise AuthenticationFailed("Clé d’accès développeur incorrecte ou accès non initialisé.")
+    return handle_board(request, SimpleNamespace(id=0, name="Administrateur", manager=True), developer=True)
+
+
+def handle_board(request, viewer, developer=False):
     requested = week_date(request.query_params.get("week", monday(date.today().isoformat())))
     board, _ = Board.objects.get_or_create(pk=1)
     if request.method == "GET":
@@ -189,6 +232,10 @@ def board_view(request):
     if not isinstance(payload, dict) or not isinstance(payload.get("action"), str):
         raise ValidationError("Action invalide.")
     action = payload.get("action")
+    if developer and action != "test_preferences":
+        raise PermissionDenied("Cette page admin est réservée aux préférences de test.")
+    if action == "test_preferences" and not developer:
+        raise PermissionDenied("Un accès développeur est requis.")
     if action not in {"availability", "read", "pin"} and not viewer.manager:
         raise PermissionDenied("Cette action est réservée à Jean-Sébastien.")
     with transaction.atomic():
@@ -200,7 +247,11 @@ def board_view(request):
         staff = {e["id"]: e for e in employees}
         managers = [e["id"] for e in employees if e["manager"] and e["active"]]
         week_start = week_date(payload.get("week", requested))
-        week = data["weeks"].setdefault(week_start, new_week(week_start, employees))
+        if week_start not in data["weeks"]:
+            w = new_week(week_start, employees)
+            apply_weekday_defaults(w, data.get("weekday_shifts", {}))
+            data["weeks"][week_start] = w
+        week = data["weeks"][week_start]
 
         if action == "availability":
             av = validated_av(payload.get("availability"))
@@ -221,6 +272,42 @@ def board_view(request):
                 viewer.save(update_fields=["defaults"])
             if av["confirmed"] or previous.get("confirmed"):
                 notify(data, managers, f'{viewer.name} a {"confirmé" if av["confirmed"] else "modifié (à reconfirmer)"} ses disponibilités · semaine du {week_start}.')
+
+        elif action == "test_preferences":
+            scope = payload.get("scope")
+            if scope not in ("week", "defaults"):
+                raise ValidationError("Choisissez la semaine ou les préférences habituelles.")
+            rows = payload.get("employees")
+            if not isinstance(rows, list) or not 1 <= len(rows) <= 100:
+                raise ValidationError("Sélectionnez entre 1 et 100 employés.")
+            validated = []
+            seen = set()
+            for row in rows:
+                if not isinstance(row, dict):
+                    raise ValidationError("Employé invalide.")
+                eid = row.get("employeeId")
+                if type(eid) is not int or eid not in staff or eid in seen:
+                    raise ValidationError("Employé inconnu ou dupliqué.")
+                if not staff[eid]["active"] or "cuisine" in staff[eid]["skills"]:
+                    raise ValidationError("Les tests concernent les employés actifs hors cuisine fixe.")
+                if not isinstance(row.get("preferences"), dict):
+                    raise ValidationError("Préférences manquantes.")
+                prefs = validated_av({"preferences": row["preferences"]})["preferences"]
+                seen.add(eid)
+                validated.append((eid, prefs))
+            # Validate the whole batch first; no availability, confirmation or
+            # assignment is changed by this manager-only preference editor.
+            for eid, prefs in validated:
+                if scope == "week":
+                    av = copy.deepcopy(availability(week, staff[eid]))
+                    av["preferences"] = prefs
+                    week["availability"][str(eid)] = av
+                else:
+                    defaults = copy.deepcopy(staff[eid]["defaults"])
+                    defaults["preferences"] = prefs
+                    Employee.objects.filter(pk=eid).update(defaults=defaults)
+            if scope == "defaults" and week_start not in board.data.get("weeks", {}):
+                data["weeks"].pop(week_start, None)
 
         elif action == "read":
             for notification in data["notifications"]:
@@ -315,6 +402,15 @@ def board_view(request):
                     av["confirmed"] = False
                 notify(data, [e["id"] for e in employees if e["active"] and {"salle", "plonge"}.intersection(e["skills"])], f'Horaires modifiés · semaine du {week_start}. Merci de reconfirmer vos disponibilités.')
             week["status"] = "draft"
+            if payload.get("persistWeekday") is True:
+                weekday = payload.get("weekday")
+                if isinstance(weekday, int) and 0 <= weekday <= 6:
+                    day_date = (date.fromisoformat(week_start) + timedelta(days=weekday)).isoformat()
+                    day_shifts = [s for s in week["shifts"] if s["date"] == day_date and not s.get("fixed")]
+                    data.setdefault("weekday_shifts", {})[str(weekday)] = [
+                        {"service": s["service"], "role": s["role"], "start": s["start"], "end": s["end"], "required": list(s["required"])}
+                        for s in day_shifts
+                    ]
 
         elif action in {"saveTemplate", "applyTemplate", "copyWeek"}:
             if action == "saveTemplate":
@@ -342,12 +438,22 @@ def board_view(request):
         elif action == "generate":
             count = number(payload.get("count", 4), 1, 6, True)
             selected = []
+            wd_shifts = data.get("weekday_shifts", {})
             for offset in range(count):
                 start = (date.fromisoformat(week_start) + timedelta(weeks=offset)).isoformat()
-                selected.append(data["weeks"].setdefault(start, new_week(start, employees)))
-            warnings = generate(selected, list(data["weeks"].values()), employees, data["rules"])
+                if start not in data["weeks"]:
+                    w = new_week(start, employees)
+                    apply_weekday_defaults(w, wd_shifts)
+                    data["weeks"][start] = w
+                selected.append(data["weeks"][start])
+            warnings, gen_report = generate(selected, list(data["weeks"].values()), employees, data["rules"])
             for saved in selected:
                 saved["generationWarnings"] = [w for w in warnings if w["week"] == saved["start"]]
+            gen_report["at"] = timezone.now().isoformat()
+            gen_report["weeks"] = [w["start"] for w in selected]
+            reports = data.setdefault("generationReports", [])
+            reports.insert(0, gen_report)
+            data["generationReports"] = reports[:5]
 
         elif action == "assign":
             shift = next((s for s in week["shifts"] if s["id"] == payload.get("shiftId") and not s.get("fixed")), None)
@@ -378,7 +484,7 @@ def board_view(request):
                 if reasons:
                     raise ValidationError(f'{staff[eid]["name"]} : {", ".join(reasons)}.')
                 ids.append(eid)
-                cleaned.append({"employeeId": eid, "locked": item.get("locked") is True})
+                cleaned.append({"employeeId": eid, "locked": item.get("locked", True) is True})
             shift["assignments"] = cleaned
             week["status"] = "draft"
 
