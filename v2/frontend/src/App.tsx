@@ -12,6 +12,7 @@
  */
 
 import { GoogleOAuthProvider } from "@react-oauth/google";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import AdminAccountPage from "./pages/AdminAccountPage";
@@ -25,13 +26,26 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import ProfilePage from "./pages/ProfilePage";
 import RegisterPage from "./pages/RegisterPage";
+const LuluApp = lazy(() => import("./lulu/LuluApp"));
 
 export default function App() {
   return (
-    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "dev-google-client"}>
+    <GoogleOAuthProvider
+      clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || "dev-google-client"}
+    >
       <UserProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <BrowserRouter
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
           <Routes>
+            <Route
+              path="/lulu/*"
+              element={
+                <Suspense fallback={<p role="status">Chargement de Lulu…</p>}>
+                  <LuluApp />
+                </Suspense>
+              }
+            />
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -39,7 +53,10 @@ export default function App() {
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/client" element={<ClientDashboardPage />} />
             <Route path="/admin" element={<AdminDashboardPage />} />
-            <Route path="/admin/accounts/:accountId" element={<AdminAccountPage />} />
+            <Route
+              path="/admin/accounts/:accountId"
+              element={<AdminAccountPage />}
+            />
             <Route path="/p/:slug" element={<FreelancerProfilePage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="*" element={<Navigate to="/login" replace />} />

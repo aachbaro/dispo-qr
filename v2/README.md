@@ -2,6 +2,11 @@
 
 `extrabeam/v2/` est la base active de reconstruction d'ExtraBeam.
 
+Le prototype indépendant **Lulu la Nantaise** est accessible à `/lulu` : comptes PIN,
+disponibilités, génération de planning, cuisine fixe et suivi des heures.
+Voir [la documentation Lulu](docs/LULU.md) pour l’installation, les accès initiaux,
+les parcours, l’architecture, les animations et les limites du générateur.
+
 ## Ce Qui Existe Deja
 
 - backend Django sur `8002`

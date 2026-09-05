@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "social_django",
     "api",
+    "lulu",
 ]
 
 MIDDLEWARE = [
