@@ -14,6 +14,7 @@ interface Props {
   isOwner: boolean;
   token?: string | null;
   initialExperiences: Experience[];
+  noCard?: boolean;
 }
 
 function formatMonth(date: string | null): string | null {
@@ -35,6 +36,7 @@ export default function ExperiencesSection({
   isOwner,
   token,
   initialExperiences,
+  noCard = false,
 }: Props) {
   const [experiences, setExperiences] = useState<Experience[]>(initialExperiences);
   const [collapsed, setCollapsed] = useState(false);
@@ -83,8 +85,11 @@ export default function ExperiencesSection({
     );
   }
 
+  const Tag = noCard ? "div" : "section";
+  const cardClass = noCard ? "p-4" : "rounded-eb-card border border-eb-layout bg-white p-4";
+
   return (
-    <section className="rounded-eb-card border border-eb-layout bg-white p-4">
+    <Tag className={cardClass}>
       <div
         className={`flex items-center justify-between gap-3 ${canToggle ? "cursor-pointer select-none" : ""}`}
         onClick={canToggle ? () => setCollapsed((c) => !c) : undefined}
@@ -213,6 +218,6 @@ export default function ExperiencesSection({
           }}
         />
       )}
-    </section>
+    </Tag>
   );
 }

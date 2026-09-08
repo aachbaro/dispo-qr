@@ -35,6 +35,7 @@ interface Props {
   onCreateSlot: (range: PendingRange) => void;
   onDeleteSlot: (slot: AgendaDisplaySlot) => void;
   onSlotClick: (slot: AgendaDisplaySlot) => void;
+  onPublicClick?: (date: string, start: string, end: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,7 +76,7 @@ function computeSlotStyle(start: string, end: string): CSSProperties {
 // Composant
 // ---------------------------------------------------------------------------
 
-export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onDeleteSlot, onSlotClick }: Props) {
+export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onDeleteSlot, onSlotClick, onPublicClick }: Props) {
   const gridRef = useRef<HTMLDivElement>(null);
 
   const ghostRef    = useRef<{ start: string; end: string } | null>(null);
@@ -90,6 +91,22 @@ export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onD
     const y = Math.min(Math.max(clientY - rect.top, 0), rect.height);
     return DAY_START_HOUR * 60 + (y / rect.height) * TOTAL_HOURS * 60;
   }, []);
+
+  const onGridClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (isOwner) return;
+      if (!onPublicClick) return;
+      const target = e.target as HTMLElement;
+      if (target.closest(".slot")) return;
+
+      const startMin = snapToQuarter(toMinutes(e.clientY));
+      const endMin = Math.min(startMin + 120, (DAY_START_HOUR + TOTAL_HOURS) * 60);
+      const start = `${String(Math.floor(startMin / 60)).padStart(2, "0")}:${String(startMin % 60).padStart(2, "0")}`;
+      const end = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+      onPublicClick(day.fullDate, start, end);
+    },
+    [isOwner, onPublicClick, toMinutes, day.fullDate]
+  );
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -168,8 +185,9 @@ export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onD
       <div
         ref={gridRef}
         className="flex-1 relative"
-        style={{ cursor: isOwner ? "crosshair" : "default" }}
+        style={{ cursor: isOwner ? "crosshair" : onPublicClick ? "pointer" : "default" }}
         onMouseDown={onMouseDown}
+        onClick={onGridClick}
       >
         {/* Lignes horaires */}
         {hourLines.map((i) => (

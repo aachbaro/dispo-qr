@@ -31,12 +31,16 @@ interface FormState {
   instructions: string;
   mode: MissionTemplateMode;
   slots: ProposalSlotState[];
+  rate_type: "none" | "hourly" | "fixed";
+  rate_value: string;
 }
 
 interface Props {
   slug: string;
   unavailabilities?: Unavailability[];
   extraName?: string;
+  hourlyRate?: string | null;
+  externalSlot?: { date: string; start: string; end: string } | null;
 }
 
 function toMinutes(time: string): number {
@@ -104,10 +108,12 @@ function buildInitialForm(): FormState {
     instructions: "",
     mode: "freelance",
     slots: [emptySlot()],
+    rate_type: "none",
+    rate_value: "",
   };
 }
 
-export default function PublicMissionProposalCard({ slug, unavailabilities = [], extraName }: Props) {
+export default function PublicMissionProposalCard({ slug, unavailabilities = [], extraName, hourlyRate, externalSlot }: Props) {
   const { user } = useUserContext();
   const [expanded, setExpanded] = useState(false);
   const [templates, setTemplates] = useState<MissionTemplate[]>([]);
@@ -131,6 +137,24 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
       })
       .finally(() => setLoadingTemplates(false));
   }, [expanded, templates.length, user?.role, user?.token]);
+
+  useEffect(() => {
+    if (!externalSlot) return;
+    setExpanded(true);
+    setForm((prev) => ({
+      ...prev,
+      slots: [
+        {
+          title: "",
+          start_date: externalSlot.date,
+          start_time: externalSlot.start,
+          end_date: externalSlot.date,
+          end_time: externalSlot.end,
+        },
+        ...prev.slots.slice(1),
+      ],
+    }));
+  }, [externalSlot]);
 
   const canUseTemplates = user?.role === "client" && Boolean(user.token);
   const introLabel = useMemo(() => {
@@ -227,6 +251,11 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
       throw new Error("Ajoute au moins un créneau.");
     }
 
+    const rateNotes =
+      form.rate_type === "hourly" && form.rate_value.trim()
+        ? `Proposition taux horaire : ${form.rate_value.trim()} €/h`
+        : undefined;
+
     return {
       title: form.title.trim() || form.establishment.trim(),
       establishment: form.establishment.trim(),
@@ -241,6 +270,7 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
       instructions: [
         form.dress_code.trim() ? `Tenue : ${form.dress_code.trim()}` : "",
         form.instructions.trim(),
+        rateNotes,
       ].filter(Boolean).join("\n\n"),
       mode: form.mode,
       client_name: form.contact_name.trim(),
@@ -248,6 +278,9 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
       client_phone: form.contact_phone.trim(),
       client_company: form.establishment.trim(),
       slots: slots as NonNullable<MissionPayload["slots"]>,
+      ...(form.rate_type === "fixed" && form.rate_value.trim()
+        ? { total_amount: form.rate_value.trim() }
+        : {}),
     };
   }
 
@@ -280,6 +313,12 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
           <p className="mt-1 max-w-2xl text-[13px] leading-6 text-eb-secondary">
             {introLabel}
           </p>
+          {hourlyRate && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-eb-page px-2.5 py-0.5 text-[11px] font-medium text-eb-text">
+              <span className="text-eb-muted">Taux affiché</span>
+              <span>{hourlyRate} €/h</span>
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -296,6 +335,7 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
 
       {success ? <p className="mt-3 text-[13px] text-eb-success">{success}</p> : null}
 
+      <div style={{ maxHeight: expanded ? "9999px" : "0px", overflow: "hidden", transition: "max-height 0.35s ease" }}>
       {expanded ? (
         <form onSubmit={(event) => void handleSubmit(event)} className="mt-4 space-y-4">
           {canUseTemplates ? (
@@ -528,6 +568,40 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
             </div>
           </div>
 
+          <div className="rounded-eb border border-eb-layout bg-[#FBFDFF] p-4">
+            <p className="mb-3 text-[12px] font-medium text-eb-text">Proposition de tarif</p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {(["none", "hourly", "fixed"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setField("rate_type", type)}
+                  className={`eb-chip cursor-pointer transition-all ${
+                    form.rate_type === type ? "bg-eb-primary text-white" : "hover:bg-[#e5e7eb]"
+                  }`}
+                >
+                  {type === "none" ? "Sans proposition" : type === "hourly" ? "Taux horaire" : "Tarif fixe"}
+                </button>
+              ))}
+            </div>
+            {form.rate_type !== "none" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  className="eb-input w-36"
+                  value={form.rate_value}
+                  onChange={(event) => setField("rate_value", event.target.value)}
+                  placeholder={form.rate_type === "hourly" ? "Ex : 25" : "Montant total"}
+                />
+                <span className="text-[13px] text-eb-secondary">
+                  {form.rate_type === "hourly" ? "€/h" : "€ (total)"}
+                </span>
+              </div>
+            )}
+          </div>
+
           {error ? <p className="text-[13px] text-eb-google">{error}</p> : null}
 
           <div className="flex justify-end">
@@ -537,6 +611,7 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
           </div>
         </form>
       ) : null}
+      </div>
     </section>
   );
 }

@@ -40,6 +40,7 @@ interface Props {
   onUnavailabilitiesChange?: Dispatch<SetStateAction<Unavailability[]>>;
   onSlotsChange?: Dispatch<SetStateAction<Slot[]>>;
   missions: Mission[];
+  onPublicCellClick?: (date: string, start: string, end: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +102,7 @@ export default function Agenda({
   onUnavailabilitiesChange,
   onSlotsChange,
   missions,
+  onPublicCellClick,
 }: Props) {
   const { user } = useUserContext();
   const todayMonday = useRef(getMonday()).current;
@@ -291,6 +293,7 @@ export default function Agenda({
             onCreateSlot={setPendingRange}
             onDeleteSlot={handleDeleteAgendaItem}
             onSlotClick={handleSlotClick}
+            onPublicClick={onPublicCellClick}
           />
         ))}
       </div>

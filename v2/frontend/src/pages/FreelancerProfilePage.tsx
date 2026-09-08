@@ -43,6 +43,8 @@ export default function FreelancerProfilePage() {
   const [previewPublic, setPreviewPublic] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingSlot, setPendingSlot] = useState<{ date: string; start: string; end: string } | null>(null);
+  const [experiencesOpen, setExperiencesOpen] = useState(false);
 
   // Évite la boucle 404 → OIDC → 404 si le backend échoue quand même.
   const alreadyTriedRefresh = useRef(sessionStorage.getItem(REFRESH_KEY) === slug);
@@ -237,21 +239,69 @@ export default function FreelancerProfilePage() {
           />
         )}
 
-        <ProfileCard
-          key={`profile-${displayAsOwner ? "owner" : "public"}`}
-          profile={profile}
-          isOwner={displayAsOwner}
-          onProfileUpdated={handleProfileUpdated}
-        />
+        {/* Bloc profil + expériences fusionnés */}
+        {(() => {
+          const hasExp = profile.experiences.length > 0 || displayAsOwner;
+          return (
+            <section className="rounded-eb-card border border-eb-layout bg-white overflow-hidden">
+              <ProfileCard
+                key={`profile-${displayAsOwner ? "owner" : "public"}`}
+                profile={profile}
+                isOwner={displayAsOwner}
+                onProfileUpdated={handleProfileUpdated}
+                noCard
+              />
+              {hasExp && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setExperiencesOpen((o) => !o)}
+                    className="flex w-full cursor-pointer items-center justify-between border-t border-eb-layout px-6 py-3 text-left transition-colors hover:bg-eb-page"
+                  >
+                    <span className="text-[12px] font-medium text-eb-secondary">
+                      {experiencesOpen
+                        ? "Masquer les expériences"
+                        : `Expériences${profile.experiences.length > 0 ? ` (${profile.experiences.length})` : ""}`}
+                    </span>
+                    <svg
+                      viewBox="0 0 12 12"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3 w-3 shrink-0 text-eb-muted transition-transform duration-300"
+                      style={{ transform: experiencesOpen ? "rotate(0deg)" : "rotate(180deg)" }}
+                    >
+                      <polyline points="1,8 6,3 11,8" />
+                    </svg>
+                  </button>
+                  <div style={{ maxHeight: experiencesOpen ? "4000px" : "0px", overflow: "hidden", transition: "max-height 0.35s ease" }}>
+                    <ExperiencesSection
+                      key={`experiences-${displayAsOwner ? "owner" : "public"}`}
+                      slug={slug}
+                      isOwner={displayAsOwner}
+                      token={user?.token}
+                      initialExperiences={profile.experiences}
+                      noCard
+                    />
+                  </div>
+                </>
+              )}
+            </section>
+          );
+        })()}
 
         <ProfileContactSection profile={profile} />
 
         {canReceivePublicMission && (
-          <PublicMissionProposalCard
+          <div className="eb-proposal-anchor"><PublicMissionProposalCard
             slug={slug}
             unavailabilities={unavailabilities}
             extraName={profile.display_name || slug}
-          />
+            hourlyRate={profile.hourly_rate ?? undefined}
+            externalSlot={pendingSlot}
+          /></div>
         )}
 
         {/* Agenda : hauteur fixe, passe les missions pour colorier les slots */}
@@ -264,18 +314,14 @@ export default function FreelancerProfilePage() {
             onUnavailabilitiesChange={setUnavailabilities}
             onSlotsChange={setPlanningSlots}
             missions={agendaMissions}
+            onPublicCellClick={canReceivePublicMission ? (date, start, end) => {
+              setPendingSlot({ date, start, end });
+              setTimeout(() => {
+                document.querySelector(".eb-proposal-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 50);
+            } : undefined}
           />
         </section>
-
-        {(profile.experiences.length > 0 || displayAsOwner) && (
-          <ExperiencesSection
-            key={`experiences-${displayAsOwner ? "owner" : "public"}`}
-            slug={slug}
-            isOwner={displayAsOwner}
-            token={user?.token}
-            initialExperiences={profile.experiences}
-          />
-        )}
 
         {/* Sections owner uniquement */}
         {displayAsOwner && user?.token && (

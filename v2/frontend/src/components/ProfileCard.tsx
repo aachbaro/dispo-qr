@@ -23,6 +23,7 @@ interface Props {
   profile: FreelancerProfile;
   isOwner: boolean;
   onProfileUpdated: (updated: FreelancerProfile) => void;
+  noCard?: boolean;
 }
 
 interface ProfileFormState {
@@ -120,7 +121,7 @@ function SectionTitle({ children }: { children: string }) {
   );
 }
 
-export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Props) {
+export default function ProfileCard({ profile, isOwner, onProfileUpdated, noCard = false }: Props) {
   const { user, setUser } = useUserContext();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -286,8 +287,10 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated }: Prop
       || profile.late_penalties
   );
 
+  const cardClass = noCard ? "p-6" : "rounded-eb-card border border-eb-layout bg-white p-6";
+
   return (
-    <div className="rounded-eb-card border border-eb-layout bg-white p-6">
+    <div className={cardClass}>
       <div className="flex flex-col items-center gap-5 md:flex-row md:items-start">
         <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-eb-primary/10">
           {profile.avatar_url ? (
