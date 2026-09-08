@@ -523,7 +523,8 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
 
