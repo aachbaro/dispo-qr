@@ -90,6 +90,13 @@ export default function FacturesSection({ slug, token, missions, profile }: Prop
     setFactures((previous) => previous.filter((facture) => facture.id !== factureId));
   }
 
+  async function handleMarkPaid(factureId: number) {
+    const updated = await updateFacture(slug, factureId, { status: "paid" }, token);
+    setFactures((previous) =>
+      previous.map((facture) => (facture.id === factureId ? updated : facture))
+    );
+  }
+
   const counts = factures.reduce<Record<string, number>>((accumulator, facture) => {
     accumulator[facture.status] = (accumulator[facture.status] ?? 0) + 1;
     return accumulator;
@@ -168,6 +175,7 @@ export default function FacturesSection({ slug, token, missions, profile }: Prop
               }}
               onDelete={() => handleDelete(facture.id)}
               onDownload={() => downloadFacturePdf(facture, profile)}
+              onMarkPaid={() => handleMarkPaid(facture.id)}
             />
           ))}
         </div>

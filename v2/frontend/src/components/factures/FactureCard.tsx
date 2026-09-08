@@ -28,9 +28,10 @@ interface Props {
   onClick: () => void;
   onDelete: () => void;
   onDownload: () => void;
+  onMarkPaid?: () => void;
 }
 
-export default function FactureCard({ facture, onClick, onDelete, onDownload }: Props) {
+export default function FactureCard({ facture, onClick, onDelete, onDownload, onMarkPaid }: Props) {
   const style = STATUS_STYLE[facture.status];
 
   return (
@@ -79,6 +80,18 @@ export default function FactureCard({ facture, onClick, onDelete, onDownload }: 
         >
           Télécharger le PDF
         </button>
+        {facture.status === "pending_payment" && onMarkPaid && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onMarkPaid();
+            }}
+            className="inline-flex min-h-[32px] items-center justify-center rounded-eb border border-green-200 bg-green-50 px-3 text-[12px] font-medium text-green-700 transition-colors hover:bg-green-100"
+          >
+            ✓ Marquer réglée
+          </button>
+        )}
       </div>
 
       <button

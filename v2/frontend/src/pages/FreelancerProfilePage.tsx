@@ -172,7 +172,18 @@ export default function FreelancerProfilePage() {
 
   // --- Page profil ---
   return (
-    <main className="min-h-screen bg-eb-page">
+    <main className="min-h-screen bg-eb-page" style={{ animation: "ebFadeUp 0.4s ease both" }}>
+      <style>{`
+        @keyframes ebFadeUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes ebFadeIn {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        .eb-section-appear { animation: ebFadeUp 0.35s ease both; }
+      `}</style>
       <div className="mx-auto max-w-[1200px] px-4 py-6 space-y-4">
 
         <Topbar currentSlug={slug} />
@@ -235,7 +246,13 @@ export default function FreelancerProfilePage() {
 
         <ProfileContactSection profile={profile} />
 
-        {canReceivePublicMission && <PublicMissionProposalCard slug={slug} />}
+        {canReceivePublicMission && (
+          <PublicMissionProposalCard
+            slug={slug}
+            unavailabilities={unavailabilities}
+            extraName={profile.display_name || slug}
+          />
+        )}
 
         {/* Agenda : hauteur fixe, passe les missions pour colorier les slots */}
         <section className="rounded-eb-card border border-eb-layout bg-white p-4" style={{ height: "70vh" }}>

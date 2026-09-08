@@ -85,27 +85,27 @@ export default function ExperiencesSection({
 
   return (
     <section className="rounded-eb-card border border-eb-layout bg-white p-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div
+        className={`flex items-center justify-between gap-3 ${canToggle ? "cursor-pointer select-none" : ""}`}
+        onClick={canToggle ? () => setCollapsed((c) => !c) : undefined}
+      >
         <div>
           <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-eb-muted">
             Expériences
+            {collapsed && sortedExperiences.length > 0 && (
+              <span className="ml-2 font-normal normal-case tracking-normal text-eb-muted">
+                ({sortedExperiences.length})
+              </span>
+            )}
           </p>
-          <p className="mt-1 text-[13px] text-eb-secondary">
-            Parcours, postes et établissements de restauration.
-          </p>
+          {!collapsed && (
+            <p className="mt-1 text-[13px] text-eb-secondary">
+              Parcours, postes et établissements de restauration.
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {canToggle && (
-            <button
-              type="button"
-              onClick={() => setCollapsed((current) => !current)}
-              className="inline-flex min-h-[34px] items-center justify-center rounded-eb border border-eb-layout px-3 text-[12px] font-medium text-eb-secondary transition-colors hover:bg-eb-page hover:text-eb-text"
-            >
-              {collapsed ? `Afficher (${sortedExperiences.length})` : "Réduire"}
-            </button>
-          )}
-
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           {isOwner && (
             <button
               type="button"
@@ -118,14 +118,39 @@ export default function ExperiencesSection({
               + Ajouter
             </button>
           )}
+          {canToggle && (
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              className="flex h-7 w-7 items-center justify-center rounded text-eb-secondary transition-colors hover:bg-eb-page hover:text-eb-text"
+              aria-label={collapsed ? "Développer" : "Réduire"}
+            >
+              <svg
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3 w-3 transition-transform duration-300"
+                style={{ transform: collapsed ? "rotate(180deg)" : "rotate(0deg)" }}
+              >
+                <polyline points="1,8 6,3 11,8" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
-      {collapsed ? (
-        <p className="py-2 text-[13px] text-eb-muted">
-          Section réduite. Rouvre-la pour revoir le parcours complet.
-        </p>
-      ) : sortedExperiences.length > 0 ? (
+      <div
+        style={{
+          maxHeight: collapsed ? "0px" : "4000px",
+          overflow: "hidden",
+          transition: "max-height 0.35s ease",
+        }}
+      >
+        <div className="mt-4">
+        {sortedExperiences.length > 0 ? (
         <div className="space-y-3">
           {sortedExperiences.map((experience) => (
             <article
@@ -169,11 +194,13 @@ export default function ExperiencesSection({
             </article>
           ))}
         </div>
-      ) : (
-        <p className="py-4 text-center text-[13px] text-eb-muted">
-          Aucune expérience renseignée.
-        </p>
-      )}
+        ) : (
+          <p className="py-4 text-center text-[13px] text-eb-muted">
+            Aucune expérience renseignée.
+          </p>
+        )}
+        </div>
+      </div>
 
       {showForm && (
         <ExperienceForm

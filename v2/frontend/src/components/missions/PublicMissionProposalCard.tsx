@@ -6,7 +6,7 @@ import {
   type MissionPayload,
 } from "../../api";
 import { useUserContext } from "../../context/UserContext";
-import type { MissionTemplate, MissionTemplateMode } from "../../types";
+import type { MissionTemplate, MissionTemplateMode, Unavailability } from "../../types";
 
 interface ProposalSlotState {
   title: string;
@@ -27,6 +27,7 @@ interface FormState {
   contact_name: string;
   contact_email: string;
   contact_phone: string;
+  dress_code: string;
   instructions: string;
   mode: MissionTemplateMode;
   slots: ProposalSlotState[];
@@ -34,6 +35,47 @@ interface FormState {
 
 interface Props {
   slug: string;
+  unavailabilities?: Unavailability[];
+  extraName?: string;
+}
+
+function toMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function slotOverlapsUnavailability(slot: ProposalSlotState, u: Unavailability): boolean {
+  if (!slot.start_date || !slot.start_time || !slot.end_date || !slot.end_time) return false;
+
+  const slotStart = toMinutes(slot.start_time);
+  const slotEnd = toMinutes(slot.end_time);
+  const uStart = toMinutes(u.start_time);
+  const uEnd = toMinutes(u.end_time);
+
+  const timesOverlap = slotStart < uEnd && slotEnd > uStart;
+  if (!timesOverlap) return false;
+
+  if (u.recurrence_type === "weekly") {
+    const d = new Date(slot.start_date);
+    const weekday = d.getDay() === 0 ? 7 : d.getDay();
+    if (weekday !== u.weekday) return false;
+    if (u.start_date && slot.start_date < u.start_date) return false;
+    if (u.recurrence_end && slot.start_date > u.recurrence_end) return false;
+    return !u.exceptions.includes(slot.start_date);
+  }
+
+  const rangeStart = u.start_date ?? "";
+  const rangeEnd = u.recurrence_end ?? rangeStart;
+  return slot.start_date >= rangeStart && slot.start_date <= rangeEnd;
+}
+
+function checkSlotAvailability(
+  slot: ProposalSlotState,
+  unavailabilities: Unavailability[]
+): "unknown" | "available" | "conflict" {
+  if (!slot.start_date || !slot.start_time) return "unknown";
+  const conflict = unavailabilities.some((u) => slotOverlapsUnavailability(slot, u));
+  return conflict ? "conflict" : "available";
 }
 
 function emptySlot(): ProposalSlotState {
@@ -58,13 +100,14 @@ function buildInitialForm(): FormState {
     contact_name: "",
     contact_email: "",
     contact_phone: "",
+    dress_code: "",
     instructions: "",
     mode: "freelance",
     slots: [emptySlot()],
   };
 }
 
-export default function PublicMissionProposalCard({ slug }: Props) {
+export default function PublicMissionProposalCard({ slug, unavailabilities = [], extraName }: Props) {
   const { user } = useUserContext();
   const [expanded, setExpanded] = useState(false);
   const [templates, setTemplates] = useState<MissionTemplate[]>([]);
@@ -195,7 +238,10 @@ export default function PublicMissionProposalCard({ slug }: Props) {
       contact_name: form.contact_name.trim(),
       contact_email: form.contact_email.trim(),
       contact_phone: form.contact_phone.trim(),
-      instructions: form.instructions.trim(),
+      instructions: [
+        form.dress_code.trim() ? `Tenue : ${form.dress_code.trim()}` : "",
+        form.instructions.trim(),
+      ].filter(Boolean).join("\n\n"),
       mode: form.mode,
       client_name: form.contact_name.trim(),
       client_email: form.contact_email.trim(),
@@ -369,14 +415,31 @@ export default function PublicMissionProposalCard({ slug }: Props) {
             </div>
           </div>
 
-          <div>
-            <textarea
-              className="eb-input resize-none"
-              rows={4}
-              value={form.instructions}
-              onChange={(event) => setField("instructions", event.target.value)}
-              placeholder="Instructions, brief, tenue, contexte..."
-            />
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-[12px] font-medium text-eb-secondary">
+                Tenue demandée
+              </label>
+              <textarea
+                className="eb-input resize-none"
+                rows={3}
+                value={form.dress_code}
+                onChange={(event) => setField("dress_code", event.target.value)}
+                placeholder="Ex : tablier noir, tenue sombre, uniforme fourni..."
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-[12px] font-medium text-eb-secondary">
+                Autres instructions
+              </label>
+              <textarea
+                className="eb-input resize-none"
+                rows={3}
+                value={form.instructions}
+                onChange={(event) => setField("instructions", event.target.value)}
+                placeholder="Brief, contexte de service, consignes particulières..."
+              />
+            </div>
           </div>
 
           <div className="rounded-eb border border-eb-layout bg-[#FBFDFF] p-4">
@@ -393,7 +456,9 @@ export default function PublicMissionProposalCard({ slug }: Props) {
             </div>
 
             <div className="space-y-3">
-              {form.slots.map((slot, index) => (
+              {form.slots.map((slot, index) => {
+                const avail = checkSlotAvailability(slot, unavailabilities);
+                return (
                 <div key={`${index}-${slot.start_date}-${slot.start_time}`} className="rounded-eb border border-eb-layout bg-white p-3">
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <input
@@ -412,6 +477,19 @@ export default function PublicMissionProposalCard({ slug }: Props) {
                       </button>
                     ) : null}
                   </div>
+                  {avail !== "unknown" && (
+                    <div className={`mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                      avail === "available"
+                        ? "bg-green-50 text-green-700"
+                        : "bg-amber-50 text-amber-700"
+                    }`}>
+                      {avail === "available" ? (
+                        <>✓ {extraName ?? "L'extra"} est disponible sur ce créneau</>
+                      ) : (
+                        <>⚠ Créneau potentiellement indisponible — à confirmer</>
+                      )}
+                    </div>
+                  )}
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <input
