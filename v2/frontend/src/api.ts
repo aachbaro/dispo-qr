@@ -279,6 +279,7 @@ export async function updateProfile(
       | "iban"
       | "bic"
       | "hourly_rate"
+      | "hourly_rate_public"
       | "currency"
       | "payment_terms"
       | "late_penalties"

@@ -44,6 +44,7 @@ interface ProfileFormState {
   iban: string;
   bic: string;
   hourly_rate: string;
+  hourly_rate_public: boolean;
   currency: string;
   payment_terms: string;
   late_penalties: string;
@@ -71,6 +72,7 @@ function buildInitialForm(profile: FreelancerProfile): ProfileFormState {
     iban: profile.iban,
     bic: profile.bic,
     hourly_rate: profile.hourly_rate ?? "",
+    hourly_rate_public: profile.hourly_rate_public,
     currency: profile.currency,
     payment_terms: profile.payment_terms,
     late_penalties: profile.late_penalties,
@@ -208,6 +210,7 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated, noCard
         iban: form.iban.trim(),
         bic: form.bic.trim(),
         hourly_rate: form.hourly_rate.trim() ? form.hourly_rate.trim() : null,
+        hourly_rate_public: form.hourly_rate_public,
         currency: form.currency.trim(),
         payment_terms: form.payment_terms.trim(),
         late_penalties: form.late_penalties.trim(),
@@ -585,16 +588,29 @@ export default function ProfileCard({ profile, isOwner, onProfileUpdated, noCard
                       }
                       placeholder="BIC"
                     />
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="eb-input"
-                      value={form.hourly_rate}
-                      onChange={(event) =>
-                        setForm((current) => ({ ...current, hourly_rate: event.target.value }))
-                      }
-                      placeholder="Taux horaire"
-                    />
+                    <div className="space-y-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="eb-input"
+                        value={form.hourly_rate}
+                        onChange={(event) =>
+                          setForm((current) => ({ ...current, hourly_rate: event.target.value }))
+                        }
+                        placeholder="Taux horaire (€/h)"
+                      />
+                      <label className="flex cursor-pointer items-center gap-2 text-[13px] text-eb-secondary select-none">
+                        <input
+                          type="checkbox"
+                          checked={form.hourly_rate_public}
+                          onChange={(event) =>
+                            setForm((current) => ({ ...current, hourly_rate_public: event.target.checked }))
+                          }
+                          className="h-4 w-4 rounded accent-eb-primary"
+                        />
+                        Afficher mon taux horaire sur mon profil public
+                      </label>
+                    </div>
                     <div className="rounded-eb border border-eb-layout bg-[#F8FAFF] px-4 py-3 text-[13px] leading-6 text-eb-secondary">
                       Ces informations restent privees et servent de base pour ton profil entreprise.
                     </div>

@@ -254,7 +254,9 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
     const rateNotes =
       form.rate_type === "hourly" && form.rate_value.trim()
         ? `Proposition taux horaire : ${form.rate_value.trim()} €/h`
-        : undefined;
+        : form.rate_type === "none" && hourlyRate
+          ? `Taux accepté : ${hourlyRate} €/h`
+          : undefined;
 
     return {
       title: form.title.trim() || form.establishment.trim(),
@@ -335,8 +337,7 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
 
       {success ? <p className="mt-3 text-[13px] text-eb-success">{success}</p> : null}
 
-      <div style={{ maxHeight: expanded ? "9999px" : "0px", overflow: "hidden", transition: "max-height 0.35s ease" }}>
-      {expanded ? (
+      <div style={{ maxHeight: expanded ? "9999px" : "0px", overflow: "hidden", transition: "max-height 0.4s ease" }}>
         <form onSubmit={(event) => void handleSubmit(event)} className="mt-4 space-y-4">
           {canUseTemplates ? (
             <div className="rounded-eb border border-eb-layout bg-[#F8FAFF] p-4">
@@ -571,21 +572,36 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
           <div className="rounded-eb border border-eb-layout bg-[#FBFDFF] p-4">
             <p className="mb-3 text-[12px] font-medium text-eb-text">Proposition de tarif</p>
             <div className="flex flex-wrap gap-2 mb-3">
-              {(["none", "hourly", "fixed"] as const).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setField("rate_type", type)}
-                  className={`eb-chip cursor-pointer transition-all ${
-                    form.rate_type === type ? "bg-eb-primary text-white" : "hover:bg-[#e5e7eb]"
-                  }`}
-                >
-                  {type === "none" ? "Sans proposition" : type === "hourly" ? "Taux horaire" : "Tarif fixe"}
-                </button>
-              ))}
+              <button
+                type="button"
+                onClick={() => setField("rate_type", "none")}
+                className={`eb-chip cursor-pointer transition-all ${
+                  form.rate_type === "none" ? "bg-eb-primary text-white" : "hover:bg-[#e5e7eb]"
+                }`}
+              >
+                {hourlyRate ? `Taux affiché (${hourlyRate} €/h)` : "Sans proposition"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setField("rate_type", "hourly")}
+                className={`eb-chip cursor-pointer transition-all ${
+                  form.rate_type === "hourly" ? "bg-eb-primary text-white" : "hover:bg-[#e5e7eb]"
+                }`}
+              >
+                Contre-proposer un taux horaire
+              </button>
+              <button
+                type="button"
+                onClick={() => setField("rate_type", "fixed")}
+                className={`eb-chip cursor-pointer transition-all ${
+                  form.rate_type === "fixed" ? "bg-eb-primary text-white" : "hover:bg-[#e5e7eb]"
+                }`}
+              >
+                Proposer un tarif fixe
+              </button>
             </div>
-            {form.rate_type !== "none" && (
-              <div className="flex items-center gap-2">
+            <div style={{ maxHeight: form.rate_type !== "none" ? "80px" : "0px", overflow: "hidden", transition: "max-height 0.25s ease" }}>
+              <div className="flex items-center gap-2 pt-1">
                 <input
                   type="number"
                   min="0"
@@ -599,6 +615,11 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
                   {form.rate_type === "hourly" ? "€/h" : "€ (total)"}
                 </span>
               </div>
+            </div>
+            {form.rate_type === "none" && hourlyRate && (
+              <p className="mt-1 text-[11px] text-eb-muted">
+                En acceptant, vous confirmez le taux affiché de {hourlyRate} €/h.
+              </p>
             )}
           </div>
 
@@ -610,7 +631,6 @@ export default function PublicMissionProposalCard({ slug, unavailabilities = [],
             </button>
           </div>
         </form>
-      ) : null}
       </div>
     </section>
   );

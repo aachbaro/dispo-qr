@@ -93,6 +93,7 @@ class AccountProfile(models.Model):
     hourly_rate = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
     )
+    hourly_rate_public = models.BooleanField(default=False)
     currency = models.CharField(max_length=8, blank=True, default="EUR")
     payment_terms = models.TextField(
         blank=True, default="Paiement comptant a reception"

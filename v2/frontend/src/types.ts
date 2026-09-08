@@ -71,6 +71,7 @@ export interface FreelancerProfile {
   iban: string;
   bic: string;
   hourly_rate: string | null;
+  hourly_rate_public: boolean;
   currency: string;
   payment_terms: string;
   late_penalties: string;

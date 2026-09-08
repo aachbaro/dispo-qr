@@ -92,27 +92,26 @@ export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onD
     return DAY_START_HOUR * 60 + (y / rect.height) * TOTAL_HOURS * 60;
   }, []);
 
-  const onGridClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (isOwner) return;
-      if (!onPublicClick) return;
-      const target = e.target as HTMLElement;
-      if (target.closest(".slot")) return;
-
-      const startMin = snapToQuarter(toMinutes(e.clientY));
-      const endMin = Math.min(startMin + 120, (DAY_START_HOUR + TOTAL_HOURS) * 60);
-      const start = `${String(Math.floor(startMin / 60)).padStart(2, "0")}:${String(startMin % 60).padStart(2, "0")}`;
-      const end = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
-      onPublicClick(day.fullDate, start, end);
-    },
-    [isOwner, onPublicClick, toMinutes, day.fullDate]
-  );
+  const publicDragging = useRef(false);
+  const publicDragStartMin = useRef(0);
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (!isOwner) return;
       const target = e.target as HTMLElement;
-      if (target.closest(".slot")) return; // ne pas interférer avec un slot
+      if (target.closest(".slot")) return;
+
+      if (!isOwner && onPublicClick) {
+        const startMin = snapToQuarter(toMinutes(e.clientY));
+        publicDragStartMin.current = startMin;
+        publicDragging.current = true;
+
+        const iso = minutesToIso(startMin, day.fullDate);
+        ghostRef.current = { start: iso, end: iso };
+        setGhost({ start: iso, end: iso });
+        return;
+      }
+
+      if (!isOwner) return;
 
       const startMin = snapToQuarter(toMinutes(e.clientY));
       dragStartMin.current = startMin;
@@ -122,11 +121,25 @@ export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onD
       ghostRef.current = { start: iso, end: iso };
       setGhost({ start: iso, end: iso });
     },
-    [isOwner, toMinutes, day.fullDate]
+    [isOwner, onPublicClick, toMinutes, day.fullDate]
   );
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
+      if (publicDragging.current) {
+        const currentMin = snapToQuarter(toMinutes(e.clientY));
+        const startMin   = Math.min(publicDragStartMin.current, currentMin);
+        const endMin     = Math.max(publicDragStartMin.current, currentMin);
+        if (endMin - startMin < 15) return;
+        const next = {
+          start: minutesToIso(Math.max(startMin, DAY_START_HOUR * 60), day.fullDate),
+          end:   minutesToIso(Math.min(endMin, (DAY_START_HOUR + TOTAL_HOURS) * 60), day.fullDate),
+        };
+        ghostRef.current = next;
+        setGhost({ ...next });
+        return;
+      }
+
       if (!dragging.current) return;
 
       const currentMin = snapToQuarter(toMinutes(e.clientY));
@@ -143,6 +156,25 @@ export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onD
     };
 
     const onUp = () => {
+      if (publicDragging.current) {
+        publicDragging.current = false;
+        const current = ghostRef.current;
+        ghostRef.current = null;
+        setGhost(null);
+        if (current) {
+          const startMinutes = localIsoToMinutes(current.start);
+          const endMinutes = localIsoToMinutes(current.end);
+          if (endMinutes - startMinutes >= 15) {
+            onPublicClick?.(
+              day.fullDate,
+              localIsoToTime(current.start),
+              localIsoToTime(current.end),
+            );
+          }
+        }
+        return;
+      }
+
       if (!dragging.current) return;
       dragging.current = false;
 
@@ -185,9 +217,8 @@ export default function AgendaDayColumn({ day, slots, isOwner, onCreateSlot, onD
       <div
         ref={gridRef}
         className="flex-1 relative"
-        style={{ cursor: isOwner ? "crosshair" : onPublicClick ? "pointer" : "default" }}
+        style={{ cursor: isOwner || onPublicClick ? "crosshair" : "default" }}
         onMouseDown={onMouseDown}
-        onClick={onGridClick}
       >
         {/* Lignes horaires */}
         {hourLines.map((i) => (

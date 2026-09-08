@@ -241,6 +241,7 @@ class ProfilePublicSerializer(serializers.ModelSerializer):
         "late_penalties",
         "subscription_status",
         "subscription_plan",
+        "hourly_rate_public",
     }
 
     email = serializers.SerializerMethodField()
@@ -272,6 +273,7 @@ class ProfilePublicSerializer(serializers.ModelSerializer):
             "iban",
             "bic",
             "hourly_rate",
+            "hourly_rate_public",
             "currency",
             "payment_terms",
             "late_penalties",
@@ -296,7 +298,12 @@ class ProfilePublicSerializer(serializers.ModelSerializer):
             return data
 
         for field_name in self.PRIVATE_OWNER_FIELDS:
-            data[field_name] = None if field_name == "hourly_rate" else ""
+            if field_name == "hourly_rate":
+                data[field_name] = str(instance.hourly_rate) if instance.hourly_rate_public and instance.hourly_rate else None
+            elif field_name == "hourly_rate_public":
+                data[field_name] = instance.hourly_rate_public
+            else:
+                data[field_name] = ""
         data["subscription_period_end"] = None
         data["subscription_cancel_at_period_end"] = False
         return data
@@ -416,6 +423,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             "iban",
             "bic",
             "hourly_rate",
+            "hourly_rate_public",
             "currency",
             "payment_terms",
             "late_penalties",
